@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0
+
+- Added a local file browser for the selected SAF download directory with folder navigation, search, MIME-category filters, size/date metadata and Android file opening.
+- Kept bottom navigation available on the sniffing result screen and added a dedicated Files tab.
+- Replaced the promotional-style home header with a compact URL-first workflow and reduced preview height to give discovered resources more room.
+- Increased app version to 0.9.0 (versionCode 18).
+
 ## 0.8.6
 
 - Expanded Java resource classification to documents, archives, application packages/installers, fonts, code/data files and generic binary downloads while preserving existing media and playlist types.

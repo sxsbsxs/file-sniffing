@@ -280,8 +280,8 @@ fun SniffingResultScreen(
                     AndroidView(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(128.dp)
-                            .clip(RoundedCornerShape(10.dp)),
+                            .height(104.dp)
+                            .clip(RoundedCornerShape(9.dp)),
                         factory = { context ->
                             WebView(context).apply {
                                 webViewHolder.view = this

@@ -296,12 +296,10 @@ private fun FileSniffingApp(sharedLink: String) {
             )
         },
         bottomBar = {
-            if (selectedTab == 1 || sniffingState.activePageUrl == null) {
-                MainNavigationBar(
-                    selectedTab = selectedTab,
-                    onSelect = { selectedTab = it }
-                )
-            }
+            MainNavigationBar(
+                selectedTab = selectedTab,
+                onSelect = { selectedTab = it }
+            )
         }
     ) { innerPadding ->
         Box(
@@ -369,7 +367,7 @@ private fun FileSniffingApp(sharedLink: String) {
                         }
                     }
                 )
-            } else {
+            } else if (selectedTab == 1) {
                 DownloadsScreen(
                     folderLabel = folderLabel,
                     hasFolder = selectedFolderUri != null,
@@ -401,27 +399,21 @@ private fun FileSniffingApp(sharedLink: String) {
                         DownloadEngine.cancel(context.applicationContext, task.id)
                     },
                     onOpenTask = { task ->
-                        val uri = task.fileUri?.let(Uri::parse)
-                        if (uri != null) {
-                            val mime = context.contentResolver.getType(uri) ?: "*/*"
-                            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, mime)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            runCatching {
-                                context.startActivity(Intent.createChooser(viewIntent, "打开文件"))
-                            }.onFailure {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("没有找到可以打开此文件的应用")
-                                }
-                            }
-                        }
+                        task.fileUri?.let(Uri::parse)?.let { openLocalDocument(context, it) }
+                    }
+                )
+            } else {
+                LocalFilesScreen(
+                    treeUri = selectedFolderUri?.let(Uri::parse),
+                    folderLabel = folderLabel,
+                    onChooseFolder = { folderPicker.launch(null) },
+                    onOpenFile = { uri, mimeType ->
+                        openLocalDocument(context, uri, mimeType)
                     }
                 )
             }
         }
     }
-
 }
 
 @Composable
@@ -438,16 +430,8 @@ private fun MainNavigationBar(
         NavigationBarItem(
             selected = selectedTab == 0,
             onClick = { onSelect(0) },
-            icon = {
-                Icon(
-                    imageVector = Icons.Rounded.Search,
-                    contentDescription = "嗅探",
-                    modifier = Modifier.size(22.dp)
-                )
-            },
-            label = {
-                Text("嗅探", fontSize = 11.sp, fontWeight = FontWeight.Medium)
-            },
+            icon = { Icon(Icons.Rounded.Search, contentDescription = "嗅探", modifier = Modifier.size(21.dp)) },
+            label = { Text("嗅探", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = MaterialTheme.colorScheme.primary,
                 selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -459,16 +443,21 @@ private fun MainNavigationBar(
         NavigationBarItem(
             selected = selectedTab == 1,
             onClick = { onSelect(1) },
-            icon = {
-                Icon(
-                    imageVector = Icons.Rounded.Download,
-                    contentDescription = "下载",
-                    modifier = Modifier.size(22.dp)
-                )
-            },
-            label = {
-                Text("下载", fontSize = 11.sp, fontWeight = FontWeight.Medium)
-            },
+            icon = { Icon(Icons.Rounded.Download, contentDescription = "下载", modifier = Modifier.size(21.dp)) },
+            label = { Text("下载", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                indicatorColor = MaterialTheme.colorScheme.surface
+            )
+        )
+        NavigationBarItem(
+            selected = selectedTab == 2,
+            onClick = { onSelect(2) },
+            icon = { Icon(Icons.Rounded.FolderOpen, contentDescription = "文件", modifier = Modifier.size(21.dp)) },
+            label = { Text("文件", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = MaterialTheme.colorScheme.primary,
                 selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -495,61 +484,50 @@ private fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
-            .padding(top = 24.dp, bottom = 24.dp)
+            .padding(horizontal = 20.dp)
+            .padding(top = 22.dp, bottom = 16.dp)
     ) {
-        Text(
-            "FILE SNIFFING",
-            color = MaterialTheme.colorScheme.primary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp
-        )
-        Spacer(Modifier.height(42.dp))
-        Text(
-            "网页资源下载",
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 27.sp,
-            lineHeight = 34.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "粘贴网页链接，查找可下载的视频、音频和文件",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp,
-            lineHeight = 19.sp
-        )
-        Spacer(Modifier.height(26.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "嗅探",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                if (hasFolder) folderLabel else "未设置保存位置",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.height(25.dp))
         UrlInputCard(
             value = pageUrl,
             onValueChange = onUrlChange,
             onPaste = onPaste,
             onClear = onClear
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
         Button(
             onClick = onStartSniffing,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp),
-            shape = RoundedCornerShape(10.dp),
+                .height(50.dp),
+            shape = RoundedCornerShape(9.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ),
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
         ) {
-            Icon(
-                Icons.Rounded.Search,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
+            Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("解析资源", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("开始嗅探", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(18.dp))
         Box(
             Modifier
                 .fillMaxWidth()
@@ -580,8 +558,8 @@ private fun UrlInputCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(62.dp)
-                .padding(start = 16.dp, end = 6.dp),
+                .height(58.dp)
+                .padding(start = 14.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -1112,6 +1090,29 @@ private fun formatDownloadDuration(seconds: Long): String {
         safeSeconds < 60L -> "$safeSeconds 秒"
         safeSeconds < 3600L -> "${safeSeconds / 60} 分"
         else -> "${safeSeconds / 3600} 小时 ${(safeSeconds % 3600) / 60} 分"
+    }
+}
+
+private fun openLocalDocument(
+    context: android.content.Context,
+    uri: Uri,
+    mimeType: String? = null
+) {
+    val resolvedMime = mimeType
+        ?: context.contentResolver.getType(uri)
+        ?: "*/*"
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, resolvedMime)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    runCatching {
+        context.startActivity(Intent.createChooser(intent, "打开文件"))
+    }.onFailure {
+        android.widget.Toast.makeText(
+            context,
+            "没有找到可以打开此文件的应用",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
 }
 

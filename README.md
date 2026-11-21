@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.8.6
+**Current app version:** 0.9.0
 
 ## Technology architecture
 
@@ -44,6 +44,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Live direct-transfer byte counts, total size and speed; remaining time is shown only when the server provides a usable total length and a speed estimate exists.
 - [x] MIME-aware SAF file creation and output-name inference for common document, archive, application, font, image, audio and video formats.
 - [x] Restore task list from WorkManager and Room after reopening the app.
+- [x] Browse the selected SAF download directory in-app, including subfolders, filename search, MIME filters, file sizes, modification dates and opening files with Android.
 - [x] Persist the original URL, Referer and SAF destination tree in Room so failed/cancelled jobs can be retried without relying on WorkInfo input data.
 - [x] Restore task filenames from durable WorkManager tags instead of trying to read unavailable inputData from WorkInfo.
 - [x] Verify direct-download payload signatures through a C++17/JNI probe before reporting completion; HTML error pages are reported as failures.
@@ -54,7 +55,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - This is a generic webpage sniffer, not a universal extractor for every site. Results are best-effort and depend on URLs exposed to WebView request callbacks, the DOM or the Performance API.
 - Blob-only URLs, service-worker-private responses, app-private media and sites that conceal media URLs may not be extractable as ordinary files.
 - Generic downloadable assets are best-effort: known file extensions and explicit HTML `download` links are captured, but WebView's request interception callback does not expose response headers such as `Content-Disposition`; opaque extensionless endpoints without a DOM filename or MIME hint may remain unidentified.
-- The app can open downloaded files from task history, but it does not yet include a standalone local-file browser.
+- The local file browser currently reads the selected SAF download directory only; it is not a full-device filesystem explorer and does not bypass Android storage permissions.
 - Media3 handles clear HLS/DASH streams that its supported extractors and muxer can decode. DRM/protected streams are not decrypted or bypassed. Some live, unusual, encrypted or malformed manifests may fail with a descriptive export error.
 - Adaptive exports use a temporary file in the app cache before copying to the SAF destination. Large exports therefore need sufficient temporary storage.
 - YouTube diagnostics only classify visible WebView request callbacks and Performance API entries. They do not parse `youtubei/v1/player` response bodies, resolve signed media formats, acquire PO Tokens or make Google Video URLs downloadable. WebView callback coverage is incomplete by platform design; a zero count is not proof that YouTube sent no such request.
