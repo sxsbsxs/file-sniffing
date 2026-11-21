@@ -284,11 +284,14 @@ class PersistentDownloadWorker @AssistedInject constructor(
         val plain = Regex("filename\\s*=\\s*\\\"?([^\\\";]+)", RegexOption.IGNORE_CASE)
             .find(header)?.groupValues?.getOrNull(1)
         val raw = encoded ?: plain ?: return null
-        return safeFileName(java.net.URLDecoder.decode(raw.trim(), Charsets.UTF_8.name()))
+        return FileNameSanitizer.sanitize(
+            java.net.URLDecoder.decode(raw.trim(), Charsets.UTF_8.name()),
+            "download.bin"
+        )
     }
 
     private fun ensureExtension(name: String, mime: String, kind: ResourceKind): String {
-        val safe = safeFileName(name)
+        val safe = FileNameSanitizer.sanitize(name, "download.bin")
         val ext = safe.substringAfterLast('.', "")
         if (ext.isNotBlank() && ext.length <= 8) return safe
         val inferred = when {
@@ -309,7 +312,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
     }
 
     private fun safeFileName(name: String): String =
-        name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "download.bin" }
+        FileNameSanitizer.sanitize(name, "download.bin")
 
     private fun defaultMimeType(kind: ResourceKind): String = when (kind) {
         ResourceKind.VIDEO -> "video/mp4"
