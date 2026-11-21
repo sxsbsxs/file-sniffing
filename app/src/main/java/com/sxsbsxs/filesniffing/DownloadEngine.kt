@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
+import android.webkit.WebSettings
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.net.HttpURLConnection
@@ -49,7 +50,7 @@ object DownloadEngine {
                     connectTimeout = 20_000
                     readTimeout = 30_000
                     instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36")
+                    setRequestProperty("User-Agent", WebSettings.getDefaultUserAgent(context))
                     setRequestProperty("Accept", "*/*")
                     if (resource.sourcePage.isNotBlank()) {
                         setRequestProperty("Referer", resource.sourcePage)
