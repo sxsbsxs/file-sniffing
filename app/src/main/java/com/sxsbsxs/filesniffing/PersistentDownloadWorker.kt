@@ -19,6 +19,7 @@ import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @HiltWorker
@@ -30,7 +31,6 @@ class PersistentDownloadWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, parameters) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val taskId = inputData.getString(KEY_TASK_ID).orEmpty()
         val url = inputData.getString(KEY_URL).orEmpty()
         val treeValue = inputData.getString(KEY_TREE).orEmpty()
         val fileName = inputData.getString(KEY_FILE_NAME).orEmpty()
@@ -240,12 +240,12 @@ class PersistentDownloadWorker @AssistedInject constructor(
         detail: String,
         documentUri: String?
     ) {
-        val id = id.toString()
-        val previous = downloadRepository.findById(id)
+        val recordId = this.id.toString()
+        val previous = downloadRepository.findById(recordId)
         val now = System.currentTimeMillis()
         downloadRepository.save(
             DownloadRecordEntity(
-                id = id,
+                id = recordId,
                 sourceUrl = sourceUrl,
                 fileName = fileName,
                 resourceKind = kind.name,
