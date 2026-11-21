@@ -42,7 +42,9 @@ object DownloadEngine {
                 fileName = resource.fileName,
                 progress = 0,
                 state = "queued",
-                detail = "已加入后台下载队列"
+                detail = "已加入后台下载队列",
+                resourceKind = resource.kind.name,
+                mimeType = resource.mimeType
             )
         )
 

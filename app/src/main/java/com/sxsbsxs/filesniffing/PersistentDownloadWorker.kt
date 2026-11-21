@@ -151,8 +151,17 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 url = url,
                 destinationDocument = destinationDocument,
                 headers = headers
-            ) { progress, detail ->
-                publishProgressAsync(progress, detail, targetName, destinationDocument.toString())
+            ) { snapshot ->
+                val detail = if (snapshot.totalBytes > 0L) "下载中" else "正在接收数据"
+                publishProgressAsync(
+                    progress = snapshot.progress,
+                    detail = detail,
+                    fileName = targetName,
+                    partialUri = destinationDocument.toString(),
+                    downloadedBytes = snapshot.downloadedBytes,
+                    totalBytes = snapshot.totalBytes,
+                    speedBytesPerSecond = snapshot.speedBytesPerSecond
+                )
             }
 
             val prefix = applicationContext.contentResolver
@@ -222,7 +231,10 @@ class PersistentDownloadWorker @AssistedInject constructor(
         progress: Int,
         detail: String,
         fileName: String,
-        partialUri: String? = null
+        partialUri: String? = null,
+        downloadedBytes: Long = -1L,
+        totalBytes: Long = -1L,
+        speedBytesPerSecond: Long = -1L
     ) {
         val data = androidx.work.Data.Builder()
             .putInt(KEY_PROGRESS, progress)
@@ -230,6 +242,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
             .putString(KEY_FILE_NAME, fileName)
             .apply {
                 if (!partialUri.isNullOrBlank()) putString(KEY_PARTIAL_URI, partialUri)
+                if (downloadedBytes >= 0L) putLong(KEY_DOWNLOADED_BYTES, downloadedBytes)
+                if (totalBytes >= 0L) putLong(KEY_TOTAL_BYTES, totalBytes)
+                if (speedBytesPerSecond >= 0L) putLong(KEY_SPEED_BYTES_PER_SECOND, speedBytesPerSecond)
             }
             .build()
         setProgressAsync(data)
@@ -457,6 +472,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
         const val KEY_DETAIL = "detail"
         const val KEY_FILE_URI = "file_uri"
         const val KEY_PARTIAL_URI = "partial_uri"
+        const val KEY_DOWNLOADED_BYTES = "downloaded_bytes"
+        const val KEY_TOTAL_BYTES = "total_bytes"
+        const val KEY_SPEED_BYTES_PER_SECOND = "speed_bytes_per_second"
         const val KEY_ERROR = "error"
         private const val CHANNEL_ID = "file_sniffing_downloads"
         private const val NOTIFICATION_ID = 4107
