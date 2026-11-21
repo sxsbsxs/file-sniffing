@@ -76,36 +76,6 @@ fun SniffingResultScreen(
     var pageTitle by remember { mutableStateOf("") }
     var pageError by remember { mutableStateOf<String?>(null) }
     val webViewHolder = remember { WebViewHolder() }
-    val diagnosticHandler = remember { Handler(Looper.getMainLooper()) }
-    var youtubeDiagnostics by remember(pageUrl) {
-        mutableStateOf(
-            YouTubeDiagnosticState(
-                isYouTubePage = YouTubeRequestDiagnostics.isYouTubePageUrl(pageUrl)
-            )
-        )
-    }
-
-    fun postYouTubeDiagnosticUpdate(
-        update: (YouTubeDiagnosticState) -> YouTubeDiagnosticState
-    ) {
-        diagnosticHandler.post { youtubeDiagnostics = update(youtubeDiagnostics) }
-    }
-
-    fun observeYouTubeRequest(rawUrl: String, headers: Map<String, String> = emptyMap()) {
-        val observation = YouTubeRequestDiagnostics.inspect(rawUrl, headers)
-        if (observation.isYouTubeRelated) {
-            postYouTubeDiagnosticUpdate { it.recordRequest(observation) }
-        }
-    }
-
-    fun observePerformanceResource(rawUrl: String, initiatorType: String, responseStatus: Int) {
-        val observation = YouTubeRequestDiagnostics.inspect(rawUrl, emptyMap())
-        if (observation.isYouTubeRelated) {
-            postYouTubeDiagnosticUpdate {
-                it.recordPerformance(observation, initiatorType, responseStatus)
-            }
-        }
-    }
     val filteredResources = resources.filter {
         when (currentFilter) {
             "视频" -> it.kind == ResourceKind.VIDEO || it.kind == ResourceKind.PLAYLIST || it.kind == ResourceKind.SEGMENT
@@ -208,8 +178,7 @@ fun SniffingResultScreen(
                             ResourceBridge(
                                 onFound = onResourceFound,
                                 sourcePage = pageUrl,
-                                mainHandler = diagnosticHandler,
-                                onPerformanceEntry = ::observePerformanceResource
+                                mainHandler = Handler(Looper.getMainLooper())
                             ),
                             "FileSniffBridge"
                         )
@@ -225,9 +194,6 @@ fun SniffingResultScreen(
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                 pageError = null
-                                if (YouTubeRequestDiagnostics.isYouTubePageUrl(url.orEmpty())) {
-                                    postYouTubeDiagnosticUpdate { it.copy(isYouTubePage = true) }
-                                }
                                 onLoadingChange(true)
                             }
 
@@ -241,12 +207,9 @@ fun SniffingResultScreen(
                                 request: WebResourceRequest?
                             ): android.webkit.WebResourceResponse? {
                                 val requested = request?.url?.toString().orEmpty()
-                                if (request != null) {
-                                    observeYouTubeRequest(requested, request.requestHeaders)
-                                }
                                 val found = ResourceSniffer.detect(
                                     rawUrl = requested,
-                                    sourcePage = view?.url ?: pageUrl
+                                    sourcePage = pageUrl
                                 )
                                 if (found != null) {
                                     Handler(Looper.getMainLooper()).post { onResourceFound(found) }
@@ -259,17 +222,6 @@ fun SniffingResultScreen(
                                 request: WebResourceRequest?,
                                 error: android.webkit.WebResourceError?
                             ) {
-                                if (request != null) {
-                                    val observation = YouTubeRequestDiagnostics.inspect(
-                                        request.url.toString(),
-                                        request.requestHeaders
-                                    )
-                                    if (observation.isYouTubeRelated) {
-                                        postYouTubeDiagnosticUpdate {
-                                            it.recordNetworkError(observation, error?.errorCode ?: 0)
-                                        }
-                                    }
-                                }
                                 if (request?.isForMainFrame == true) {
                                     pageError = error?.description
                                         ?.toString()
@@ -285,18 +237,6 @@ fun SniffingResultScreen(
                                 request: WebResourceRequest?,
                                 errorResponse: android.webkit.WebResourceResponse?
                             ) {
-                                if (request != null) {
-                                    val observation = YouTubeRequestDiagnostics.inspect(
-                                        request.url.toString(),
-                                        request.requestHeaders
-                                    )
-                                    if (observation.isYouTubeRelated) {
-                                        val status = errorResponse?.statusCode ?: 0
-                                        postYouTubeDiagnosticUpdate {
-                                            it.recordHttpError(observation, status)
-                                        }
-                                    }
-                                }
                                 if (request?.isForMainFrame == true) {
                                     val statusCode = errorResponse?.statusCode
                                     val reason = errorResponse?.reasonPhrase.orEmpty()
@@ -349,81 +289,6 @@ fun SniffingResultScreen(
                         text = "检查网络后，点击右上角刷新重试",
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         fontSize = 11.sp
-                    )
-                }
-            }
-        }
-
-        if (youtubeDiagnostics.isYouTubePage) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 9.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "YouTube 请求诊断",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Player API ${youtubeDiagnostics.playerApiRequests} · Google Video ${youtubeDiagnostics.googleVideoRequests} · 性能记录 ${youtubeDiagnostics.performanceEntries}",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 11.sp
-                    )
-                    Text(
-                        text = "HTTP 错误 ${youtubeDiagnostics.youtubeHttpErrors}（媒体域 ${youtubeDiagnostics.googleVideoHttpErrors}） · 网络错误 ${youtubeDiagnostics.networkErrors}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
-                    )
-                    Text(
-                        text = "请求回调可见 Cookie 头：${if (youtubeDiagnostics.cookieHeaderObserved) "是" else "未见"} · Authorization 头：${if (youtubeDiagnostics.authorizationHeaderObserved) "是" else "未见"}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
-                    )
-                    Text(
-                        text = when {
-                            youtubeDiagnostics.googleVideoRequests > 0 ->
-                                "已观察到媒体域请求；通用嗅探器不会把它直接当作完整视频地址。"
-                            youtubeDiagnostics.playerApiRequests > 0 ->
-                                "已观察到播放器信息请求，但尚未观察到 Google Video 媒体请求。"
-                            else ->
-                                "尚未观察到播放器请求；请等待页面加载并开始播放后再检查。"
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
-                    )
-                    if (youtubeDiagnostics.lastHttpStatus != null ||
-                        youtubeDiagnostics.lastNetworkErrorCode != null ||
-                        youtubeDiagnostics.lastInitiatorType.isNotBlank()
-                    ) {
-                        Text(
-                            text = buildString {
-                                youtubeDiagnostics.lastHttpStatus?.let { append("最近 HTTP：$it") }
-                                youtubeDiagnostics.lastNetworkErrorCode?.let {
-                                    if (isNotEmpty()) append(" · ")
-                                    append("最近网络错误码：$it")
-                                }
-                                youtubeDiagnostics.lastInitiatorType.takeIf { it.isNotBlank() }?.let {
-                                    if (isNotEmpty()) append(" · ")
-                                    append("发起类型：$it")
-                                }
-                            },
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 10.sp
-                        )
-                    }
-                    Text(
-                        text = "仅记录请求类别、计数和状态；不保存 URL 参数、Cookie 或 Token。",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp
                     )
                 }
             }
@@ -697,69 +562,10 @@ private class WebViewHolder {
     var view: WebView? = null
 }
 
-private data class YouTubeDiagnosticState(
-    val isYouTubePage: Boolean = false,
-    val playerApiRequests: Int = 0,
-    val googleVideoRequests: Int = 0,
-    val otherYouTubeRequests: Int = 0,
-    val performanceEntries: Int = 0,
-    val youtubeHttpErrors: Int = 0,
-    val googleVideoHttpErrors: Int = 0,
-    val networkErrors: Int = 0,
-    val cookieHeaderObserved: Boolean = false,
-    val authorizationHeaderObserved: Boolean = false,
-    val lastHttpStatus: Int? = null,
-    val lastNetworkErrorCode: Int? = null,
-    val lastInitiatorType: String = ""
-) {
-    fun recordRequest(
-        observation: YouTubeRequestDiagnostics.Observation
-    ): YouTubeDiagnosticState = copy(
-        isYouTubePage = true,
-        playerApiRequests = playerApiRequests + if (observation.isPlayerApi) 1 else 0,
-        googleVideoRequests = googleVideoRequests + if (observation.isGoogleVideo) 1 else 0,
-        otherYouTubeRequests = otherYouTubeRequests +
-            if (observation.requestType == YouTubeRequestDiagnostics.RequestType.YOUTUBE_PAGE) 1 else 0,
-        cookieHeaderObserved = cookieHeaderObserved || observation.isCookieHeaderPresent(),
-        authorizationHeaderObserved = authorizationHeaderObserved || observation.isAuthorizationHeaderPresent()
-    )
-
-    fun recordPerformance(
-        observation: YouTubeRequestDiagnostics.Observation,
-        initiatorType: String,
-        responseStatus: Int
-    ): YouTubeDiagnosticState = copy(
-        isYouTubePage = true,
-        performanceEntries = performanceEntries + 1,
-        lastInitiatorType = initiatorType.take(40),
-        lastHttpStatus = responseStatus.takeIf { it in 100..599 } ?: lastHttpStatus
-    )
-
-    fun recordHttpError(
-        observation: YouTubeRequestDiagnostics.Observation,
-        status: Int
-    ): YouTubeDiagnosticState = copy(
-        isYouTubePage = true,
-        youtubeHttpErrors = youtubeHttpErrors + 1,
-        googleVideoHttpErrors = googleVideoHttpErrors + if (observation.isGoogleVideo) 1 else 0,
-        lastHttpStatus = status.takeIf { it in 100..599 } ?: lastHttpStatus
-    )
-
-    fun recordNetworkError(
-        observation: YouTubeRequestDiagnostics.Observation,
-        errorCode: Int
-    ): YouTubeDiagnosticState = copy(
-        isYouTubePage = true,
-        networkErrors = networkErrors + 1,
-        lastNetworkErrorCode = errorCode.takeIf { it != 0 } ?: lastNetworkErrorCode
-    )
-}
-
 private class ResourceBridge(
     private val onFound: (SniffedResource) -> Unit,
     private val sourcePage: String,
-    private val mainHandler: Handler,
-    private val onPerformanceEntry: (String, String, Int) -> Unit
+    private val mainHandler: Handler
 ) {
     @JavascriptInterface
     fun onResource(url: String, kind: String, mime: String, title: String) {
@@ -771,13 +577,6 @@ private class ResourceBridge(
             sourcePage = sourcePage
         ) ?: return
         mainHandler.post { onFound(resource) }
-    }
-
-    @JavascriptInterface
-    fun onPerformanceResource(url: String, initiatorType: String, responseStatus: Int) {
-        mainHandler.post {
-            onPerformanceEntry(url, initiatorType, responseStatus)
-        }
     }
 }
 
@@ -806,19 +605,9 @@ private const val RESOURCE_CAPTURE_SCRIPT = """
   }
   inspect(document);
   try {
-    function reportPerformanceEntry(entry) {
-      report(entry.name, '', '');
-      try {
-        window.FileSniffBridge.onPerformanceResource(
-          String(entry.name),
-          String(entry.initiatorType || ''),
-          Number(entry.responseStatus || 0)
-        );
-      } catch (e) {}
-    }
-    performance.getEntriesByType('resource').forEach(reportPerformanceEntry);
+    performance.getEntriesByType('resource').forEach(function(entry) { report(entry.name, '', ''); });
     new PerformanceObserver(function(list) {
-      list.getEntries().forEach(reportPerformanceEntry);
+      list.getEntries().forEach(function(entry) { report(entry.name, '', ''); });
     }).observe({entryTypes: ['resource']});
   } catch (e) {}
   try {

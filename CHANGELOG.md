@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.3
+
+- Upgraded the Kotlin Android and Compose Gradle plugins to stable 2.4.21; kept KSP 2.3.12, which supports Kotlin 2.4.x.
+- Moved URL, extension, MIME and output-name resource classification into a platform-independent Java component called by the Kotlin capture pipeline.
+- Extended the native C++17/JNI probe to recognize fragmented MP4 `styp` and `moof` boxes separately from complete MP4 files.
+- Added Python-driven JDK/C++ regression cases for extensionless resources, HLS/DASH MIME types, path traversal, plus signs and fragmented MP4 signatures.
+- Increased app version to 0.8.3.
+
+
 ## 0.8.2
 
 - Added redacted YouTube WebView diagnostics for Player API, Google Video, Performance API entries, subresource HTTP errors and network errors.

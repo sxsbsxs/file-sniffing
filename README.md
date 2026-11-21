@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and local media download manager.
 
-**Current app version:** 0.8.2
+**Current app version:** 0.8.3
 
 ## Technology architecture
 
@@ -15,10 +15,11 @@ An Android-first webpage resource sniffer and local media download manager.
 | Architecture | MVVM, Kotlin Flow, Hilt | ViewModels, reactive state, dependency injection |
 | Local data | Room, DataStore | Sniff history, download history and selected output folder |
 | Background | WorkManager, foreground worker notification | Persistent download jobs, progress, cancel and retry |
+| Resource classification | Java | URL, extension, MIME and filename inference used by the Kotlin capture pipeline |
 | Filename policy | Java | Shared safe filename normalization for URL-derived and downloaded names |
 | YouTube request diagnostics | Java + Kotlin | Classify Player API and Google Video requests; show redacted request/error counters in the inspection screen |
-| Native inspection | C++17 + JNI | Identify downloaded byte signatures and reject HTML error pages saved as media |
-| Developer validation | Python 3 | Validate HLS/DASH fixtures, Android link intent filters, Java filename rules and the native signature detector |
+| Native inspection | C++17 + JNI | Identify downloaded media signatures, fragmented MP4 segments and HTML error pages |
+| Developer validation | Python 3 | Run offline HLS/DASH fixture checks, compile and test Java resource classification and validate C++ media signatures |
 
 OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it is an older upstream library, so the rest of the app depends on the adapter contract rather than on its API directly.
 
@@ -26,6 +27,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 - [x] Compose + Material 3 app shell, minimal link-entry home, share-sheet URL receiving and external HTTP/HTTPS link opening.
 - [x] WebView inspection using `shouldInterceptRequest`, DOM scanning, Performance API and a MutationObserver, with main-frame errors separated from empty results and YouTube subresource request diagnostics shown without retaining URLs or credential values.
+- [x] Java resource classifier for URL schemes, media extensions, MIME hints, extensionless media URLs and sanitized output names; Kotlin maps its result into app state.
 - [x] Resource types and filtering for video, audio, image, HLS and DASH manifest URLs.
 - [x] Multi-select resources and batch enqueue.
 - [x] OkHttp shared client, OkDownload adapter and SAF `content://` output.
@@ -41,7 +43,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Persist the original URL, Referer and SAF destination tree in Room so failed/cancelled jobs can be retried without relying on WorkInfo input data.
 - [x] Restore task filenames from durable WorkManager tags instead of trying to read unavailable inputData from WorkInfo.
 - [x] Verify direct-download payload signatures through a C++17/JNI probe before reporting completion; HTML error pages are reported as failures.
-- [x] Validate HLS/DASH fixtures and native signature cases with the Python CI tool.
+- [x] Validate HLS/DASH fixtures, Java URL/MIME classification, YouTube diagnostic redaction and native ISO BMFF/file signatures with the Python CI tool.
 
 ## Known limitations
 

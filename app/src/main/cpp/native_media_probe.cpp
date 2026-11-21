@@ -1,5 +1,6 @@
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -19,9 +20,36 @@ bool starts_with(const unsigned char* data, std::size_t size,
            std::memcmp(data, signature, signature_size) == 0;
 }
 
+bool has_valid_iso_bmff_box(const unsigned char* data, std::size_t size,
+                            const char* type) {
+    if (data == nullptr || size < 8) return false;
+    const std::uint32_t box_size =
+            (static_cast<std::uint32_t>(data[0]) << 24) |
+            (static_cast<std::uint32_t>(data[1]) << 16) |
+            (static_cast<std::uint32_t>(data[2]) << 8) |
+            static_cast<std::uint32_t>(data[3]);
+    if (box_size != 0 && box_size < 8) return false;
+    if (box_size == 1) {
+        if (size < 16) return false;
+        const std::uint64_t extended_size =
+                (static_cast<std::uint64_t>(data[8]) << 56) |
+                (static_cast<std::uint64_t>(data[9]) << 48) |
+                (static_cast<std::uint64_t>(data[10]) << 40) |
+                (static_cast<std::uint64_t>(data[11]) << 32) |
+                (static_cast<std::uint64_t>(data[12]) << 24) |
+                (static_cast<std::uint64_t>(data[13]) << 16) |
+                (static_cast<std::uint64_t>(data[14]) << 8) |
+                static_cast<std::uint64_t>(data[15]);
+        if (extended_size < 16) return false;
+    }
+    return std::memcmp(data + 4, type, 4) == 0;
+}
+
 std::string detect_container(const unsigned char* data, std::size_t size) {
     if (data == nullptr || size == 0) return "unknown";
-    if (size >= 8 && std::memcmp(data + 4, "ftyp", 4) == 0) return "mp4";
+    if (has_valid_iso_bmff_box(data, size, "styp") ||
+        has_valid_iso_bmff_box(data, size, "moof")) return "mp4-fragment";
+    if (has_valid_iso_bmff_box(data, size, "ftyp")) return "mp4";
 
     static const unsigned char ebml[] = {0x1A, 0x45, 0xDF, 0xA3};
     if (starts_with(data, size, ebml, sizeof(ebml))) return "webm";

@@ -201,6 +201,115 @@ public final class YouTubeRequestDiagnosticsTest {
         )
 
 
+def validate_java_resource_classifier() -> None:
+    javac = shutil.which("javac")
+    java = shutil.which("java")
+    if javac is None or java is None:
+        raise RuntimeError("A JDK is required for Java resource-classifier tests")
+
+    source_dir = ROOT / "app/src/main/java/com/sxsbsxs/filesniffing"
+    classifier_source = source_dir / "ResourceClassifier.java"
+    sanitizer_source = source_dir / "FileNameSanitizer.java"
+    harness = """
+import com.sxsbsxs.filesniffing.ResourceClassifier;
+
+public final class ResourceClassifierTest {
+    public static void main(String[] args) {
+        var video = ResourceClassifier.detect(
+            "https://cdn.example/video.mp4?token=private",
+            null,
+            null
+        );
+        check(ResourceClassifier.Kind.VIDEO, video.getKind());
+        check("video.mp4", video.getFileName());
+
+        var extensionlessVideo = ResourceClassifier.detect(
+            "https://r.example/videoplayback?range=0-100",
+            null,
+            "video/mp4; codecs=avc1"
+        );
+        check(ResourceClassifier.Kind.VIDEO, extensionlessVideo.getKind());
+        check("videoplayback.mp4", extensionlessVideo.getFileName());
+        check("video/mp4", extensionlessVideo.getMimeType());
+
+        var hls = ResourceClassifier.detect(
+            "https://cdn.example/master?token=private",
+            null,
+            "application/vnd.apple.mpegurl"
+        );
+        check(ResourceClassifier.Kind.PLAYLIST, hls.getKind());
+        check("master.m3u8", hls.getFileName());
+
+        var dash = ResourceClassifier.detect(
+            "https://cdn.example/manifest?token=private",
+            null,
+            "application/dash+xml"
+        );
+        check(ResourceClassifier.Kind.PLAYLIST, dash.getKind());
+        check("manifest.mpd", dash.getFileName());
+
+        var segment = ResourceClassifier.detect(
+            "https://cdn.example/chunk.m4s?range=0-500",
+            null,
+            "application/octet-stream"
+        );
+        check(ResourceClassifier.Kind.SEGMENT, segment.getKind());
+
+        var audio = ResourceClassifier.detect(
+            "https://cdn.example/audio-track",
+            "audio",
+            null
+        );
+        check(ResourceClassifier.Kind.AUDIO, audio.getKind());
+        check("audio-track.mp3", audio.getFileName());
+
+        var image = ResourceClassifier.detect(
+            "https://cdn.example/cover",
+            null,
+            "image/webp"
+        );
+        check(ResourceClassifier.Kind.IMAGE, image.getKind());
+        check("cover.webp", image.getFileName());
+
+        var plusName = ResourceClassifier.detect(
+            "https://cdn.example/clip+final.mp4",
+            null,
+            null
+        );
+        check("clip+final.mp4", plusName.getFileName());
+
+        var traversal = ResourceClassifier.detect(
+            "https://cdn.example/%2e%2e%2fmovie%3f.mp4",
+            null,
+            null
+        );
+        check("movie_.mp4", traversal.getFileName());
+
+        check(null, ResourceClassifier.detect("ftp://cdn.example/video.mp4", null, null));
+        check(null, ResourceClassifier.detect("https://cdn.example/page", null, null));
+    }
+
+    private static void check(Object expected, Object actual) {
+        if (expected == null ? actual != null : !expected.equals(actual)) {
+            throw new AssertionError("expected " + expected + ", got " + actual);
+        }
+    }
+}
+"""
+    with tempfile.TemporaryDirectory(prefix="file-sniffing-resource-classifier-") as temp_dir:
+        temp = pathlib.Path(temp_dir)
+        harness_file = temp / "ResourceClassifierTest.java"
+        harness_file.write_text(harness, encoding="utf-8")
+        subprocess.run(
+            [javac, "-d", str(temp), str(sanitizer_source), str(classifier_source), str(harness_file)],
+            check=True,
+        )
+        subprocess.run(
+            [java, "-cp", str(temp), "ResourceClassifierTest"],
+            check=True,
+        )
+
+
 def validate_java_filename_policy() -> None:
     javac = shutil.which("javac")
     java = shutil.which("java")
@@ -255,6 +364,7 @@ def validate_native_probe() -> None:
         transport_stream[376] = 0x47
         cases = {
             "mp4": bytes.fromhex("000000186674797069736f6d0000020069736f6d69736f32"),
+            "mp4-fragment": bytes.fromhex("00000018737479706d7364680000000069736f6d69736f36"),
             "webm": bytes.fromhex("1a45dfa39342868101"),
             "mp3": bytes([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00]),
             "mpeg-ts": bytes(transport_stream),
@@ -272,6 +382,17 @@ def validate_native_probe() -> None:
             if actual != expected:
                 raise AssertionError(f"native probe: expected {expected}, got {actual}")
 
+        moof_sample = temp / "sample-moof-fragment.bin"
+        moof_sample.write_bytes(bytes.fromhex("000000106d6f6f6600000000"))
+        moof_actual = subprocess.run(
+            [str(executable), str(moof_sample)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if moof_actual != "mp4-fragment":
+            raise AssertionError(f"native probe: expected mp4-fragment, got {moof_actual}")
+
 
 def main() -> None:
     validate_hls(FIXTURES / "sample_hls.m3u8")
@@ -282,6 +403,8 @@ def main() -> None:
     print("Android link intent filters: OK")
     validate_youtube_request_diagnostics()
     print("YouTube request diagnostics: OK")
+    validate_java_resource_classifier()
+    print("Java resource classifier: OK")
     validate_java_filename_policy()
     print("Java filename policy: OK")
     validate_native_probe()
