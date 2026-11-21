@@ -73,7 +73,8 @@ fun SniffingResultScreen(
     onLoadingChange: (Boolean) -> Unit,
     onResourceFound: (SniffedResource) -> Unit,
     onBack: () -> Unit,
-    onDownload: (SniffedResource) -> Unit
+    onDownload: (SniffedResource) -> Unit,
+    onDownloadBatch: (List<SniffedResource>) -> Unit
 ) {
     var currentFilter by remember { mutableStateOf("全部") }
     var selectedResourceIds by remember { mutableStateOf(emptySet<String>()) }
@@ -268,7 +269,7 @@ fun SniffingResultScreen(
             if (selectedResourceIds.isNotEmpty()) {
                 Button(
                     onClick = {
-                        resources.filter { it.id in selectedResourceIds }.forEach(onDownload)
+                        onDownloadBatch(resources.filter { it.id in selectedResourceIds })
                         selectedResourceIds = emptySet()
                     },
                     modifier = Modifier.fillMaxWidth().height(44.dp),
