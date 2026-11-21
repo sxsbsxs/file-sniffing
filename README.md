@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and local media download manager.
 
-**Current app version:** 0.7.0
+**Current app version:** 0.8.0
 
 ## Technology architecture
 
