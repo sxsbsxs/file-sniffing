@@ -5,6 +5,8 @@
 - Fixed download task filename restoration by storing the encoded filename in a durable WorkManager tag rather than reading a nonexistent `WorkInfo.inputData` property.
 - Added HTTP and HTTPS `ACTION_VIEW` filters so users can open a webpage link in File Sniffing from other apps.
 - Kept external URL handling separate from page cookies; this does not grant authenticated download access.
+- Added an explicit result-page error state for main-frame WebView network and HTTP failures.
+- Added Python CI checks for HTTP/HTTPS VIEW routing while retaining text/plain share intents.
 
 ## 0.8.0
 
