@@ -57,6 +57,59 @@ object DownloadEngine {
         liveData.observeForever(observer)
     }
 
+    fun retry(
+        context: Context,
+        taskId: String,
+        onUpdate: (DownloadTaskUi) -> Unit
+    ) {
+        val manager = WorkManager.getInstance(context.applicationContext)
+        val liveData = manager.getWorkInfoByIdLiveData(UUID.fromString(taskId))
+        val observer = object : Observer<WorkInfo> {
+            private var handled = false
+
+            override fun onChanged(info: WorkInfo?) {
+                if (info == null || handled || !info.state.isFinished) return
+                handled = true
+                liveData.removeObserver(this)
+                if (info.state != WorkInfo.State.FAILED && info.state != WorkInfo.State.CANCELLED) return
+
+                val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
+                    .setInputData(info.inputData)
+                    .addTag(DOWNLOAD_TAG)
+                    .build()
+                val originalName = info.inputData.getString(PersistentDownloadWorker.KEY_FILE_NAME) ?: "download"
+                onUpdate(
+                    DownloadTaskUi(
+                        id = request.id.toString(),
+                        fileName = originalName,
+                        progress = 0,
+                        state = "queued",
+                        detail = "正在重新加入后台队列"
+                    )
+                )
+                manager.enqueue(request)
+                observeRequest(manager, request.id, onUpdate)
+            }
+        }
+        liveData.observeForever(observer)
+    }
+
+    private fun observeRequest(
+        manager: WorkManager,
+        id: UUID,
+        onUpdate: (DownloadTaskUi) -> Unit
+    ) {
+        val liveData = manager.getWorkInfoByIdLiveData(id)
+        val observer = object : Observer<WorkInfo> {
+            override fun onChanged(info: WorkInfo?) {
+                if (info == null) return
+                onUpdate(toTask(info))
+                if (info.state.isFinished) liveData.removeObserver(this)
+            }
+        }
+        liveData.observeForever(observer)
+    }
+
     fun cancel(context: Context, taskId: String) {
         runCatching {
             WorkManager.getInstance(context.applicationContext)
