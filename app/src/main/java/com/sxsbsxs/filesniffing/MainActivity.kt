@@ -1,5 +1,6 @@
 package com.sxsbsxs.filesniffing
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -74,6 +74,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -131,7 +132,7 @@ private fun FileSniffingApp() {
     var showEngineNotice by rememberSaveable { mutableStateOf(false) }
     var selectedFolderUri by rememberSaveable {
         mutableStateOf(
-            context.getSharedPreferences("file_sniffing", ComponentActivity.MODE_PRIVATE)
+            context.getSharedPreferences("file_sniffing", Context.MODE_PRIVATE)
                 .getString("download_tree_uri", null)
         )
     }
@@ -146,7 +147,7 @@ private fun FileSniffingApp() {
                 context.contentResolver.takePersistableUriPermission(uri, permissionFlags)
             }
             selectedFolderUri = uri.toString()
-            context.getSharedPreferences("file_sniffing", ComponentActivity.MODE_PRIVATE)
+            context.getSharedPreferences("file_sniffing", Context.MODE_PRIVATE)
                 .edit()
                 .putString("download_tree_uri", uri.toString())
                 .apply()
@@ -197,7 +198,7 @@ private fun FileSniffingApp() {
                     onPickFolder = { folderPicker.launch(null) },
                     onStartSniffing = {
                         val candidate = Uri.parse(pageUrl.trim())
-                        val valid = candidate.scheme in listOf("http", "https") &&
+                        val valid = (candidate.scheme == "http" || candidate.scheme == "https") &&
                             !candidate.host.isNullOrBlank()
                         when {
                             pageUrl.isBlank() -> coroutineScope.launch {
@@ -624,17 +625,17 @@ private fun SupportedTypesRow() {
     ) {
         ResourceTypePill(
             modifier = Modifier.weight(1f),
-            icon = { Icon(Icons.Rounded.VideoLibrary, contentDescription = null) },
+            icon = Icons.Rounded.VideoLibrary,
             label = "视频"
         )
         ResourceTypePill(
             modifier = Modifier.weight(1f),
-            icon = { Icon(Icons.Rounded.MusicNote, contentDescription = null) },
+            icon = Icons.Rounded.MusicNote,
             label = "音频"
         )
         ResourceTypePill(
             modifier = Modifier.weight(1f),
-            icon = { Icon(Icons.Rounded.Image, contentDescription = null) },
+            icon = Icons.Rounded.Image,
             label = "图片"
         )
     }
@@ -643,7 +644,7 @@ private fun SupportedTypesRow() {
 @Composable
 private fun ResourceTypePill(
     modifier: Modifier = Modifier,
-    icon: @Composable () -> Unit,
+    icon: ImageVector,
     label: String
 ) {
     Surface(
@@ -660,7 +661,12 @@ private fun ResourceTypePill(
                 modifier = Modifier.size(16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                CompositionLocalProviderForIcon(content = icon)
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color(0xFF6B7280),
+                    modifier = Modifier.size(16.dp)
+                )
             }
             Spacer(modifier = Modifier.width(6.dp))
             Text(
@@ -671,11 +677,6 @@ private fun ResourceTypePill(
             )
         }
     }
-}
-
-@Composable
-private fun CompositionLocalProviderForIcon(content: @Composable () -> Unit) {
-    content()
 }
 
 @Composable
