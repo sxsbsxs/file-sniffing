@@ -1009,7 +1009,11 @@ private fun DownloadTaskCard(
                 failed || task.state == "cancelled" -> {
                     Spacer(modifier = Modifier.height(6.dp))
                     TextButton(onClick = onRetry) {
-                        Text("重新下载", color = Accent, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = if (task.fileUri != null) "继续断点下载" else "重新下载",
+                            color = Accent,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
                 task.state == "downloading" || task.state == "queued" -> {
