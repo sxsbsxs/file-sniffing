@@ -325,6 +325,9 @@ private fun FileSniffingApp(sharedLink: String) {
                     onRetryTask = { task ->
                         downloadResources[task.id]?.let { resource -> enqueueDownload(resource, true) }
                     },
+                    onCancelTask = { task ->
+                        DownloadEngine.cancel(context.applicationContext, task.id)
+                    },
                     onOpenTask = { task ->
                         val uri = task.fileUri?.let(Uri::parse)
                         if (uri != null) {
@@ -780,6 +783,7 @@ private fun DownloadsScreen(
     onChooseFolder: () -> Unit,
     onBackToSniff: () -> Unit,
     onRetryTask: (DownloadTaskUi) -> Unit,
+    onCancelTask: (DownloadTaskUi) -> Unit,
     onOpenTask: (DownloadTaskUi) -> Unit
 ) {
     Column(
@@ -879,7 +883,8 @@ private fun DownloadsScreen(
                 DownloadTaskCard(
                     task,
                     onOpen = { onOpenTask(task) },
-                    onRetry = { onRetryTask(task) }
+                    onRetry = { onRetryTask(task) },
+                    onCancel = { onCancelTask(task) }
                 )
                 Spacer(modifier = Modifier.height(10.dp))
             }
@@ -892,7 +897,8 @@ private fun DownloadsScreen(
 private fun DownloadTaskCard(
     task: DownloadTaskUi,
     onOpen: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onCancel: () -> Unit
 ) {
     val finished = task.state == "completed"
     val failed = task.state == "failed"
@@ -932,12 +938,14 @@ private fun DownloadTaskCard(
                         text = when {
                             finished -> "已完成"
                             failed -> "下载失败"
+                            task.state == "cancelled" -> "已取消"
                             task.state == "downloading" -> "正在下载"
                             else -> "等待下载"
                         },
                         color = when {
                             finished -> Color(0xFF299B68)
                             failed -> Color(0xFFD24B4B)
+                            task.state == "cancelled" -> SecondaryText
                             else -> SecondaryText
                         },
                         fontSize = 11.sp
@@ -973,14 +981,24 @@ private fun DownloadTaskCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            if ((finished && task.fileUri != null) || failed) {
-                Spacer(modifier = Modifier.height(6.dp))
-                TextButton(onClick = if (finished) onOpen else onRetry) {
-                    Text(
-                        text = if (finished) "打开文件" else "重新下载",
-                        color = Accent,
-                        fontWeight = FontWeight.SemiBold
-                    )
+            when {
+                finished && task.fileUri != null -> {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    TextButton(onClick = onOpen) {
+                        Text("打开文件", color = Accent, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                failed -> {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    TextButton(onClick = onRetry) {
+                        Text("重新下载", color = Accent, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                task.state == "downloading" || task.state == "queued" -> {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    TextButton(onClick = onCancel) {
+                        Text("取消任务", color = Color(0xFFD24B4B), fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
