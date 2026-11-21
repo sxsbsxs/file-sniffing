@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sxsbsxs.filesniffing.data.media.AdaptiveQualityOption
+import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
 
 private val RESOURCE_FILTER_GROUPS = listOf(
     "视频" to setOf(ResourceKind.VIDEO, ResourceKind.PLAYLIST),
@@ -161,6 +162,7 @@ fun SniffingResultScreen(
             }
         }
     }
+    val isRecognizedYouTubeVideo = YouTubeUrlParser.extractVideoId(pageUrl) != null
     // Media segments are implementation details of adaptive streams, not standalone files.
     val visibleResources = resources.filter { it.kind != ResourceKind.SEGMENT }
     val availableFilters = listOf("全部") + RESOURCE_FILTER_GROUPS
@@ -679,6 +681,7 @@ fun SniffingResultScreen(
                             isLoading -> "正在扫描网页资源…"
                             pageError != null -> "网页预览暂不可用"
                             resources.any { it.kind == ResourceKind.SEGMENT } -> "发现媒体分段，尚未发现完整媒体资源"
+                            isRecognizedYouTubeVideo -> "已识别 YouTube 视频，但尚未解析出可下载格式"
                             else -> "暂未发现可下载资源"
                         },
                         color = MaterialTheme.colorScheme.onSurface,
@@ -690,6 +693,7 @@ fun SniffingResultScreen(
                         when {
                             pageError != null -> "页面预览失败不代表资源解析失败，稍后可刷新重试"
                             resources.any { it.kind == ResourceKind.SEGMENT } -> "单个媒体分段不会作为完整视频列出"
+                            isRecognizedYouTubeVideo -> "YouTube 播放地址带有动态签名；普通 WebView 嗅探不能把网页 URL 当成视频文件。仍需接入专用签名 / EJS / PO Token 解析器。"
                             else -> "视频、音频、图片、文档和下载链接会显示在这里"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

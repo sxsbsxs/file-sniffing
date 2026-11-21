@@ -58,4 +58,4 @@ flowchart TD
 4. Room is the durable app-facing download history; OkDownload's breakpoint store is the transport-level resume metadata for direct downloads. Live WorkManager progress carries transferred bytes, total bytes and speed when known.
 5. All output files are created through the user-granted SAF tree URI.
 6. Adaptive streams are exported through Media3, not manually concatenated by app code.
-7. Credentials are not uploaded. WebView cookies are not currently bridged into downloader requests.
+7. Credentials are not uploaded. The shared OkHttp network interceptor asks Android CookieManager for cookies scoped to each exact request URL, including redirected requests; cookie values are never persisted or logged.

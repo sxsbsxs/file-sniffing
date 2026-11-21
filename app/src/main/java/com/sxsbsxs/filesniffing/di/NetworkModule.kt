@@ -30,6 +30,8 @@ object NetworkModule {
             .followRedirects(true)
             .followSslRedirects(true)
             .retryOnConnectionFailure(true)
+            // Apply the WebView session to every HTTP exchange, including redirects.
+            .addNetworkInterceptor(WebViewCookieInterceptor())
             .build()
 
     @Provides

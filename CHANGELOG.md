@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.3
+
+- Fixed a wiring bug: the existing URL-scoped WebView cookie interceptor is now installed on the shared OkHttp client used by OkDownload and Media3, including redirect exchanges.
+- Added strict YouTube video URL parsing for watch, short-link, Shorts, live and embed links, with spoofed-host and malformed-ID rejection tests.
+- The YouTube empty state now says when a video page is recognized but actual signed media formats have not been extracted; it no longer implies that a page URL is a downloadable video.
+- Increased app version to 0.9.3 (versionCode 21).
+
+
 ## 0.9.2
 
 - Added request-scoped WebView cookie reuse in OkHttp's network interceptor so authenticated resource URLs can use the existing WebView session where CookieManager permits it; cookies are not stored or logged.
