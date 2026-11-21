@@ -312,6 +312,24 @@ fun SniffingResultScreen(
                                         }
                                     }
                                     webViewClient = object : WebViewClient() {
+                                        override fun shouldOverrideUrlLoading(
+                                            view: WebView?,
+                                            request: WebResourceRequest?
+                                        ): Boolean {
+                                            val target = request?.url?.toString().orEmpty()
+                                            if (!target.startsWith("bilibili://", ignoreCase = true)) {
+                                                return false
+                                            }
+                                            val webUrl = SharedLinkNormalizer.normalize(target)
+                                            if (webUrl != null) {
+                                                view?.loadUrl(webUrl)
+                                            } else {
+                                                pageError = "无法解析 B 站 App 深链，请重新粘贴分享链接"
+                                                onLoadingChange(false)
+                                            }
+                                            return true
+                                        }
+
                                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                             pageError = null
                                             if (YouTubeRequestDiagnostics.isYouTubePageUrl(url.orEmpty())) {

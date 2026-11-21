@@ -123,12 +123,9 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_VIEW -> source.dataString.orEmpty()
             else -> ""
         }.trim()
-        val prefixes = listOf("https://", "http://")
-        val match = prefixes.mapNotNull { prefix ->
-            val index = sharedText.indexOf(prefix, ignoreCase = true)
-            if (index >= 0) sharedText.substring(index).takeWhile { !it.isWhitespace() } else null
-        }.firstOrNull()?.trimEnd(')', ']', '}', ',', '.', '!', '?', ';')
-        return match ?: sharedText
+        return SharedLinkNormalizer.normalize(sharedText)
+            ?: SharedLinkNormalizer.extractCandidate(sharedText)
+            ?: sharedText
     }
 }
 
@@ -349,11 +346,7 @@ private fun FileSniffingApp(sharedLink: String) {
                     onPickFolder = { folderPicker.launch(null) },
                     onStartSniffing = {
                         val trimmedUrl = pageUrl.trim()
-                        val candidate = runCatching { Uri.parse(trimmedUrl) }.getOrNull()
-                        val valid = candidate != null &&
-                            (candidate.scheme.equals("http", ignoreCase = true) ||
-                                candidate.scheme.equals("https", ignoreCase = true)) &&
-                            !candidate.host.isNullOrBlank()
+                        val normalizedUrl = SharedLinkNormalizer.normalize(trimmedUrl)
                         when {
                             trimmedUrl.isBlank() -> coroutineScope.launch {
                                 snackbarHostState.showSnackbar("先粘贴一个网页链接")
@@ -361,11 +354,12 @@ private fun FileSniffingApp(sharedLink: String) {
                             trimmedUrl.length > 4096 -> coroutineScope.launch {
                                 snackbarHostState.showSnackbar("链接过长，请检查后重试")
                             }
-                            !valid -> coroutineScope.launch {
-                                snackbarHostState.showSnackbar("请输入有效的 http 或 https 链接")
+                            normalizedUrl.isNullOrBlank() -> coroutineScope.launch {
+                                snackbarHostState.showSnackbar("请输入有效网页链接，或粘贴 B 站分享链接")
                             }
                             else -> runCatching {
-                                sniffingViewModel.beginInspection(trimmedUrl)
+                                pageUrl = normalizedUrl
+                                sniffingViewModel.beginInspection(normalizedUrl)
                             }.onFailure {
                                 coroutineScope.launch {
                                     snackbarHostState.showSnackbar("无法开始解析，请重试")

@@ -96,7 +96,9 @@ class OkDownloadTransferEngine @Inject constructor(
 
             val task = DownloadTask.Builder(url, destinationDocument)
                 .setHeaderMapFields(headers)
-                .setConnectionCount(3)
+                // More parallel byte ranges improve throughput on capable CDNs.
+                // OkDownload still uses a single stream when range support is unavailable.
+                .setConnectionCount(8)
                 .setAutoCallbackToUIThread(false)
                 .setMinIntervalMillisCallbackProcess(500)
                 .setPassIfAlreadyCompleted(false)

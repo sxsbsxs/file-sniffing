@@ -15,8 +15,8 @@ android {
         applicationId = "com.sxsbsxs.filesniffing"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.8.6"
+        versionCode = 15
+        versionName = "0.8.7"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
@@ -123,6 +123,8 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.12.0")
     implementation("androidx.hilt:hilt-work:1.4.0")
     ksp("androidx.hilt:hilt-compiler:1.4.0")
+
+    testImplementation("junit:junit:4.13.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
