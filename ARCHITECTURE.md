@@ -9,7 +9,8 @@ flowchart TD
     C --> D[shouldInterceptRequest]
     C --> E[Injected JavaScript]
     D --> F[ResourceSniffer]
-    E --> F
+    E --> E1[Media DOM + Performance + Download Links]
+    E1 --> F
     F --> G[SniffedResourceRepository]
     G --> H[Room]
     H --> B
@@ -44,6 +45,7 @@ flowchart TD
 - `data.preferences`: DataStore preferences.
 - `data.repository`: repository interfaces and implementations.
 - `di`: Hilt bindings for network, storage and repositories.
+- `ResourceClassifier.java`: platform-independent classification for media, playlists, documents, archives, application packages, fonts, code/data and generic files; Kotlin maps Java enum names into app state.
 - `FileNameSanitizer.java`: shared filename normalization used by resource discovery and download saving.
 - `NativeMediaProbe.kt` + `app/src/main/cpp`: C++17/JNI byte-signature inspection; it is not a decoder and does not replace Media3.
 - `tools/validate_media_fixtures.py`: Python validation of local HLS/DASH fixtures and the native signature detector.
@@ -53,7 +55,7 @@ flowchart TD
 1. UI code calls ViewModels; it does not own database/network work.
 2. ViewModels expose observable state with Kotlin Flow.
 3. WorkManager persists job scheduling and runs downloads in a foreground worker.
-4. Room is the durable app-facing download history; OkDownload's breakpoint store is the transport-level resume metadata for direct downloads.
+4. Room is the durable app-facing download history; OkDownload's breakpoint store is the transport-level resume metadata for direct downloads. Live WorkManager progress carries transferred bytes, total bytes and speed when known.
 5. All output files are created through the user-granted SAF tree URI.
 6. Adaptive streams are exported through Media3, not manually concatenated by app code.
 7. Credentials are not uploaded. WebView cookies are not currently bridged into downloader requests.

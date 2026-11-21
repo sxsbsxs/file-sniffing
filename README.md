@@ -1,8 +1,8 @@
 # File Sniffing
 
-An Android-first webpage resource sniffer and local media download manager.
+An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.8.3
+**Current app version:** 0.8.6
 
 ## Technology architecture
 
@@ -15,7 +15,7 @@ An Android-first webpage resource sniffer and local media download manager.
 | Architecture | MVVM, Kotlin Flow, Hilt | ViewModels, reactive state, dependency injection |
 | Local data | Room, DataStore | Sniff history, download history and selected output folder |
 | Background | WorkManager, foreground worker notification | Persistent download jobs, progress, cancel and retry |
-| Resource classification | Java | URL, extension, MIME and filename inference used by the Kotlin capture pipeline |
+| Resource classification | Java | URL, extension, MIME and sanitized download-filename inference for media, documents, archives, apps, fonts, code and data files |
 | Filename policy | Java | Shared safe filename normalization for URL-derived and downloaded names |
 | YouTube request diagnostics | Java + Kotlin | Classify Player API and Google Video requests; show redacted request/error counters in the inspection screen |
 | Native inspection | C++17 + JNI | Identify downloaded media signatures, fragmented MP4 segments and HTML error pages |
@@ -27,8 +27,9 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 - [x] Compose + Material 3 app shell, minimal link-entry home, share-sheet URL receiving and external HTTP/HTTPS link opening.
 - [x] WebView inspection using `shouldInterceptRequest`, DOM scanning, Performance API and a MutationObserver, with main-frame errors separated from empty results and YouTube subresource request diagnostics shown without retaining URLs or credential values.
-- [x] Java resource classifier for URL schemes, media extensions, MIME hints, extensionless media URLs and sanitized output names; Kotlin maps its result into app state.
-- [x] Resource types and filtering for video, audio, image, HLS and DASH manifest URLs.
+- [x] Java resource classifier for media, documents, archives, apps/installers, fonts, code/data and generic files, including MIME-based extensionless URLs and sanitized HTML download-name hints.
+- [x] Page scanning for media DOM elements, recognized file URLs and explicit `<a download>` links, including dynamically added links; standalone HLS/DASH segments are hidden from the normal results list.
+- [x] Result filters appear only for categories actually discovered on the current page.
 - [x] Multi-select resources and batch enqueue.
 - [x] OkHttp shared client, OkDownload adapter and SAF `content://` output.
 - [x] Preserve the same SAF destination URI for interrupted direct transfers so OkDownload can resume saved byte ranges on retry.
@@ -39,6 +40,9 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Room database for captured resources and persistent download records.
 - [x] DataStore for the selected output folder.
 - [x] WorkManager foreground download jobs with notifications, progress updates, cancellation and retry.
+- [x] Download-center filters for task status and discovered resource kind.
+- [x] Live direct-transfer byte counts, total size and speed; remaining time is shown only when the server provides a usable total length and a speed estimate exists.
+- [x] MIME-aware SAF file creation and output-name inference for common document, archive, application, font, image, audio and video formats.
 - [x] Restore task list from WorkManager and Room after reopening the app.
 - [x] Persist the original URL, Referer and SAF destination tree in Room so failed/cancelled jobs can be retried without relying on WorkInfo input data.
 - [x] Restore task filenames from durable WorkManager tags instead of trying to read unavailable inputData from WorkInfo.
@@ -49,6 +53,8 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 - This is a generic webpage sniffer, not a universal extractor for every site. Results are best-effort and depend on URLs exposed to WebView request callbacks, the DOM or the Performance API.
 - Blob-only URLs, service-worker-private responses, app-private media and sites that conceal media URLs may not be extractable as ordinary files.
+- Generic downloadable assets are best-effort: known file extensions and explicit HTML `download` links are captured, but WebView's request interception callback does not expose response headers such as `Content-Disposition`; opaque extensionless endpoints without a DOM filename or MIME hint may remain unidentified.
+- The app can open downloaded files from task history, but it does not yet include a standalone local-file browser.
 - Media3 handles clear HLS/DASH streams that its supported extractors and muxer can decode. DRM/protected streams are not decrypted or bypassed. Some live, unusual, encrypted or malformed manifests may fail with a descriptive export error.
 - Adaptive exports use a temporary file in the app cache before copying to the SAF destination. Large exports therefore need sufficient temporary storage.
 - YouTube diagnostics only classify visible WebView request callbacks and Performance API entries. They do not parse `youtubei/v1/player` response bodies, resolve signed media formats, acquire PO Tokens or make Google Video URLs downloadable. WebView callback coverage is incomplete by platform design; a zero count is not proof that YouTube sent no such request.

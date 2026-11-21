@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.6
+
+- Expanded Java resource classification to documents, archives, application packages/installers, fonts, code/data files and generic binary downloads while preserving existing media and playlist types.
+- Captured explicit HTML download links and recognized file links, respected sanitized download-attribute filenames and hid standalone HLS/DASH media segments from the normal resource list.
+- Added dynamic resource-category filters to the inspection results and status/type filters to the download center.
+- Passed resource kinds through WorkManager task state and displayed live transferred bytes, server-reported total size, transfer speed and ETA when those values are available.
+- Added extension-aware MIME selection for SAF output documents and avoided inventing a `.bin` suffix for unknown files.
+- Increased app version to 0.8.6 (versionCode 14).
+
 ## 0.8.3
 
 - Upgraded the Kotlin Android and Compose Gradle plugins to stable 2.4.21; kept KSP 2.3.12, which supports Kotlin 2.4.x.
