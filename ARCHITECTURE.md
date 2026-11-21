@@ -24,6 +24,8 @@ flowchart TD
     N --> O{Resource Type}
     O -->|Direct file| P[OkDownloadTransferEngine]
     P --> Q[OkHttp]
+    P --> V[NativeMediaProbe · C++ JNI]
+    V -->|Reject HTML error payload| P
     O -->|HLS / DASH| R[Media3 DownloadHelper]
     R --> S[Media3 Transformer]
     S --> T[Temporary MP4]
@@ -42,6 +44,9 @@ flowchart TD
 - `data.preferences`: DataStore preferences.
 - `data.repository`: repository interfaces and implementations.
 - `di`: Hilt bindings for network, storage and repositories.
+- `FileNameSanitizer.java`: shared filename normalization used by resource discovery and download saving.
+- `NativeMediaProbe.kt` + `app/src/main/cpp`: C++17/JNI byte-signature inspection; it is not a decoder and does not replace Media3.
+- `tools/validate_media_fixtures.py`: Python validation of local HLS/DASH fixtures and the native signature detector.
 
 ## Design constraints
 
