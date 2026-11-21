@@ -419,14 +419,22 @@ fun SniffingResultScreen(
                         }
                         Spacer(Modifier.height(16.dp))
                         Text(
-                            text = if (isLoading) "正在寻找媒体资源" else "暂未发现可识别的媒体资源",
+                            text = when {
+                            isLoading -> "正在寻找媒体资源"
+                            pageError != null -> "无法读取网页内容"
+                            else -> "暂未发现可识别的媒体资源"
+                        },
                             color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "捕获到的资源会显示在这里",
+                            text = if (pageError != null) {
+                            "请检查网络或链接后点击右上角刷新"
+                        } else {
+                            "捕获到的资源会显示在这里"
+                        },
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp
                         )
