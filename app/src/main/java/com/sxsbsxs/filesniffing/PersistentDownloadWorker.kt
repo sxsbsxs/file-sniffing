@@ -10,6 +10,7 @@ import dagger.assisted.AssistedInject
 import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 import com.sxsbsxs.filesniffing.data.repository.DownloadRepository
 import com.sxsbsxs.filesniffing.data.network.OkDownloadTransferEngine
+import com.sxsbsxs.filesniffing.data.media.Media3AdaptiveProcessor
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
@@ -27,6 +28,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted parameters: WorkerParameters,
     private val okDownloadTransferEngine: OkDownloadTransferEngine,
+    private val media3AdaptiveProcessor: Media3AdaptiveProcessor,
     private val downloadRepository: DownloadRepository
 ) : CoroutineWorker(appContext, parameters) {
 
@@ -68,11 +70,13 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 documentUri = null
             )
 
-            if (kind == ResourceKind.PLAYLIST && fileName.endsWith(".m3u8", ignoreCase = true)) {
-                val result = HlsDownloader.download(
-                    context = applicationContext,
-                    destinationTree = tree,
-                    resource = resource
+            val isAdaptiveManifest = kind == ResourceKind.PLAYLIST &&
+                (fileName.endsWith(".m3u8", ignoreCase = true) ||
+                    fileName.endsWith(".mpd", ignoreCase = true))
+            if (isAdaptiveManifest) {
+                val result = media3AdaptiveProcessor.exportAdaptiveStream(
+                    resource = resource,
+                    destinationTree = tree
                 ) { progress, detail ->
                     publishProgressAsync(progress, detail, fileName)
                 }
@@ -80,48 +84,20 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     fileName = result.fileName,
                     sourceUrl = url,
                     kind = kind,
-                    mimeType = mime,
+                    mimeType = "video/mp4",
                     state = "completed",
                     progress = 100,
-                    detail = "HLS 分段已合并保存",
+                    detail = "Media3 已导出 MP4",
                     documentUri = result.documentUri.toString()
                 )
                 return@withContext Result.success(
                     workDataOf(
                         KEY_FILE_NAME to result.fileName,
                         KEY_FILE_URI to result.documentUri.toString(),
-                        KEY_DETAIL to "HLS 分段已合并保存"
+                        KEY_DETAIL to "Media3 已导出 MP4"
                     )
                 )
             }
-
-            if (kind == ResourceKind.PLAYLIST && fileName.endsWith(".mpd", ignoreCase = true)) {
-                val result = DashDownloader.download(
-                    context = applicationContext,
-                    destinationTree = tree,
-                    resource = resource
-                ) { progress, detail ->
-                    publishProgressAsync(progress, detail, fileName)
-                }
-                persistRecord(
-                    fileName = result.fileName,
-                    sourceUrl = url,
-                    kind = kind,
-                    mimeType = mime,
-                    state = "completed",
-                    progress = 100,
-                    detail = "DASH 分段已合并保存",
-                    documentUri = result.documentUri.toString()
-                )
-                return@withContext Result.success(
-                    workDataOf(
-                        KEY_FILE_NAME to result.fileName,
-                        KEY_FILE_URI to result.documentUri.toString(),
-                        KEY_DETAIL to "DASH 分段已合并保存（${result.segmentCount} 段）"
-                    )
-                )
-            }
-
             val parsed = Uri.parse(url)
             require(parsed.scheme == "http" || parsed.scheme == "https") {
                 "只支持 HTTP 或 HTTPS 资源"
