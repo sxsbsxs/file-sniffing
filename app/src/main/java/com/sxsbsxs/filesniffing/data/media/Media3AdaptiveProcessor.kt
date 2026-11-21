@@ -11,6 +11,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.offline.DownloadHelper
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.transformer.DefaultDecoderFactory
 import androidx.media3.transformer.ExoPlayerAssetLoader
 import androidx.media3.transformer.ProgressHolder
@@ -90,7 +91,7 @@ class Media3AdaptiveProcessor @Inject constructor(
                 FileInputStream(tempFile).use { source ->
                     val output = context.contentResolver.openOutputStream(destination, "w")
                         ?: error("无法写入 MP4 文件")
-                    FileOutputStreamProxy(output).use { sink ->
+                    output.use { sink ->
                         val buffer = ByteArray(128 * 1024)
                         var copied = 0L
                         val total = tempFile.length()
@@ -124,8 +125,12 @@ class Media3AdaptiveProcessor @Inject constructor(
         mediaItem: MediaItem,
         dataSourceFactory: OkHttpDataSource.Factory
     ) = suspendCancellableCoroutine { continuation ->
+        val trackSelection = DefaultTrackSelector.Parameters.Builder(context)
+            .setForceHighestSupportedBitrate(true)
+            .build()
         val helper = DownloadHelper.Factory()
             .setDataSourceFactory(dataSourceFactory)
+            .setTrackSelectionParameters(trackSelection)
             .create(mediaItem)
 
         continuation.invokeOnCancellation {
@@ -237,13 +242,4 @@ class Media3AdaptiveProcessor @Inject constructor(
         return "$base.mp4"
     }
 
-    private class FileOutputStreamProxy(
-        private val delegate: java.io.OutputStream
-    ) : java.io.OutputStream() {
-        override fun write(value: Int) = delegate.write(value)
-        override fun write(buffer: ByteArray, offset: Int, length: Int) =
-            delegate.write(buffer, offset, length)
-        override fun flush() = delegate.flush()
-        override fun close() = delegate.close()
-    }
 }
