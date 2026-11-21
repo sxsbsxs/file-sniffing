@@ -74,7 +74,7 @@ fun SniffingResultScreen(
 ) {
     var currentFilter by remember { mutableStateOf("全部") }
     var pageTitle by remember { mutableStateOf("") }
-    var webView by remember { mutableStateOf<WebView?>(null) }
+    val webViewHolder = remember { WebViewHolder() }
     val filteredResources = resources.filter {
         when (currentFilter) {
             "视频" -> it.kind == ResourceKind.VIDEO || it.kind == ResourceKind.PLAYLIST
@@ -118,7 +118,7 @@ fun SniffingResultScreen(
             }
             IconButton(onClick = {
                 onLoadingChange(true)
-                webView?.reload()
+                webViewHolder.view?.reload()
             }) {
                 Icon(Icons.Rounded.Refresh, contentDescription = "刷新", tint = BrowserMuted)
             }
@@ -131,7 +131,7 @@ fun SniffingResultScreen(
                 .background(Color.White),
             factory = { context ->
                 WebView(context).apply {
-                    webView = this
+                    webViewHolder.view = this
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.allowFileAccess = false
@@ -196,20 +196,20 @@ fun SniffingResultScreen(
                 if (view.url != pageUrl) view.loadUrl(pageUrl)
             }
         )
-        DisposableEffect(webView) {
+        DisposableEffect(Unit) {
             onDispose {
-                webView?.apply {
+                webViewHolder.view?.apply {
                     stopLoading()
                     removeJavascriptInterface("FileSniffBridge")
                     destroy()
                 }
-                webView = null
+                webViewHolder.view = null
             }
         }
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
                 .background(Color(0xFFF6F7F9))
                 .padding(horizontal = 16.dp)
         ) {
@@ -363,6 +363,10 @@ private fun ResourceRow(
             }
         }
     }
+}
+
+private class WebViewHolder {
+    var view: WebView? = null
 }
 
 private class ResourceBridge(
