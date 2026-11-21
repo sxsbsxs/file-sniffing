@@ -98,7 +98,9 @@ object DownloadEngine {
                 fileName = record.fileName,
                 progress = 0,
                 state = "queued",
-                detail = "正在重新加入后台队列"
+                detail = "正在重新加入后台队列",
+                resourceKind = record.resourceKind,
+                mimeType = record.mimeType
             )
         )
 
@@ -181,7 +183,12 @@ object DownloadEngine {
             state = state,
             detail = detail,
             fileUri = info.outputData.getString(PersistentDownloadWorker.KEY_FILE_URI)
-                ?: info.progress.getString(PersistentDownloadWorker.KEY_PARTIAL_URI)
+                ?: info.progress.getString(PersistentDownloadWorker.KEY_PARTIAL_URI),
+            resourceKind = info.inputData.getString(PersistentDownloadWorker.KEY_KIND),
+            mimeType = info.inputData.getString(PersistentDownloadWorker.KEY_MIME),
+            downloadedBytes = info.progress.getLong(PersistentDownloadWorker.KEY_DOWNLOADED_BYTES, -1L),
+            totalBytes = info.progress.getLong(PersistentDownloadWorker.KEY_TOTAL_BYTES, -1L),
+            speedBytesPerSecond = info.progress.getLong(PersistentDownloadWorker.KEY_SPEED_BYTES_PER_SECOND, -1L)
         )
     }
 }

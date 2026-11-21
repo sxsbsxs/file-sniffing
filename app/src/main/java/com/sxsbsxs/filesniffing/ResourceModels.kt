@@ -56,5 +56,10 @@ data class DownloadTaskUi(
     val progress: Int,
     val state: String,
     val detail: String,
-    val fileUri: String? = null
+    val fileUri: String? = null,
+    val resourceKind: String? = null,
+    val mimeType: String? = null,
+    val downloadedBytes: Long = -1L,
+    val totalBytes: Long = -1L,
+    val speedBytesPerSecond: Long = -1L
 )

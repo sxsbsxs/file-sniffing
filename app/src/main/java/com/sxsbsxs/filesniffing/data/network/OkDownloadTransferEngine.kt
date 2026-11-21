@@ -15,6 +15,13 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
+data class DownloadTransferProgress(
+    val progress: Int,
+    val downloadedBytes: Long,
+    val totalBytes: Long,
+    val speedBytesPerSecond: Long
+)
+
 @Singleton
 class OkDownloadTransferEngine @Inject constructor(
     private val initializedEngine: OkDownload
@@ -24,11 +31,37 @@ class OkDownloadTransferEngine @Inject constructor(
         url: String,
         destinationDocument: Uri,
         headers: Map<String, List<String>>,
-        onProgress: (progress: Int, detail: String) -> Unit
+        onProgress: (DownloadTransferProgress) -> Unit
     ) {
         suspendCancellableCoroutine { continuation ->
             val receivedBytes = AtomicLong(0L)
             val totalBytes = AtomicLong(-1L)
+            val lastReportedBytes = AtomicLong(0L)
+            val lastReportedAtNanos = AtomicLong(System.nanoTime())
+
+            fun reportProgress(current: Long, total: Long) {
+                val now = System.nanoTime()
+                val previousBytes = lastReportedBytes.getAndSet(current)
+                val elapsedNanos = now - lastReportedAtNanos.getAndSet(now)
+                val speed = if (elapsedNanos > 0L && current >= previousBytes) {
+                    ((current - previousBytes) * 1_000_000_000.0 / elapsedNanos).toLong()
+                } else {
+                    -1L
+                }
+                val percent = if (total > 0L) {
+                    ((current * 100.0) / total).toInt().coerceIn(0, 99)
+                } else {
+                    -1
+                }
+                onProgress(
+                    DownloadTransferProgress(
+                        progress = percent,
+                        downloadedBytes = current,
+                        totalBytes = total,
+                        speedBytesPerSecond = speed
+                    )
+                )
+            }
 
             val task = DownloadTask.Builder(url, destinationDocument)
                 .setHeaderMapFields(headers)
@@ -44,7 +77,7 @@ class OkDownloadTransferEngine @Inject constructor(
 
             task.enqueue(object : DownloadListener {
                 override fun taskStart(task: DownloadTask) {
-                    onProgress(-1, "OkDownload 已开始传输")
+                    onProgress(DownloadTransferProgress(-1, 0L, -1L, -1L))
                 }
 
                 override fun connectTrialStart(
@@ -58,7 +91,8 @@ class OkDownloadTransferEngine @Inject constructor(
                     responseHeaderFields: Map<String, List<String>>
                 ) {
                     if (responseCode !in 200..299) {
-                        onProgress(-1, "服务器响应 HTTP $responseCode")
+                        reportProgress(receivedBytes.get(), totalBytes.get())
+
                     }
                     val length = responseHeaderFields.entries
                         .firstOrNull { it.key.equals("Content-Length", ignoreCase = true) }
@@ -77,6 +111,8 @@ class OkDownloadTransferEngine @Inject constructor(
                     val offset = info.totalOffset
                     if (total > 0L) totalBytes.set(total)
                     if (offset > 0L) receivedBytes.set(offset)
+                    lastReportedBytes.set(offset.coerceAtLeast(0L))
+                    lastReportedAtNanos.set(System.nanoTime())
                 }
 
                 override fun downloadFromBreakpoint(task: DownloadTask, info: BreakpointInfo) {
@@ -84,6 +120,8 @@ class OkDownloadTransferEngine @Inject constructor(
                     val offset = info.totalOffset
                     if (total > 0L) totalBytes.set(total)
                     if (offset > 0L) receivedBytes.set(offset)
+                    lastReportedBytes.set(offset.coerceAtLeast(0L))
+                    lastReportedAtNanos.set(System.nanoTime())
                 }
 
                 override fun connectStart(
@@ -99,7 +137,7 @@ class OkDownloadTransferEngine @Inject constructor(
                     responseHeaderFields: Map<String, List<String>>
                 ) {
                     if (responseCode !in 200..299) {
-                        onProgress(-1, "分段连接响应 HTTP $responseCode")
+                        reportProgress(receivedBytes.get(), totalBytes.get())
                     }
                 }
 
@@ -115,13 +153,7 @@ class OkDownloadTransferEngine @Inject constructor(
 
                 override fun fetchProgress(task: DownloadTask, blockIndex: Int, increaseBytes: Long) {
                     val current = receivedBytes.addAndGet(increaseBytes)
-                    val total = totalBytes.get()
-                    if (total > 0L) {
-                        val progress = ((current * 100.0) / total).toInt().coerceIn(0, 99)
-                        onProgress(progress, "已下载 $current / $total 字节")
-                    } else {
-                        onProgress(-1, "已下载 $current 字节")
-                    }
+                    reportProgress(current, totalBytes.get())
                 }
 
                 override fun fetchEnd(task: DownloadTask, blockIndex: Int, contentLength: Long) = Unit

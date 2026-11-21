@@ -16,6 +16,7 @@ import android.content.pm.PackageManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -175,7 +176,9 @@ private fun FileSniffingApp(sharedLink: String) {
                 progress = record.progress,
                 state = record.state,
                 detail = record.detail,
-                fileUri = record.destinationUri
+                fileUri = record.destinationUri,
+                resourceKind = record.resourceKind,
+                mimeType = record.mimeType
             )
         }
     ).distinctBy { it.id }
@@ -705,8 +708,28 @@ private fun DownloadsScreen(
     onCancelTask: (DownloadTaskUi) -> Unit,
     onOpenTask: (DownloadTaskUi) -> Unit
 ) {
+    var statusFilter by rememberSaveable { mutableStateOf("全部") }
+    var kindFilter by rememberSaveable { mutableStateOf("全部") }
     val activeCount = tasks.count { it.state == "downloading" || it.state == "queued" }
     val completedCount = tasks.count { it.state == "completed" }
+    val failedCount = tasks.count { it.state == "failed" || it.state == "cancelled" }
+    val availableKinds = tasks.mapNotNull { task ->
+        task.resourceKind?.let { raw -> runCatching { ResourceKind.valueOf(raw) }.getOrNull() }
+    }.distinctBy { it.name }.sortedBy { it.label }
+    val statusFilteredTasks = tasks.filter { task ->
+        when (statusFilter) {
+            "进行中" -> task.state == "downloading" || task.state == "queued"
+            "已完成" -> task.state == "completed"
+            "异常" -> task.state == "failed" || task.state == "cancelled"
+            else -> true
+        }
+    }
+    val filteredTasks = if (kindFilter == "全部") {
+        statusFilteredTasks
+    } else {
+        statusFilteredTasks.filter { it.resourceKind == kindFilter }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -730,7 +753,7 @@ private fun DownloadsScreen(
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "进行中 " + activeCount + "    已完成 " + completedCount,
+            "进行中 $activeCount    已完成 $completedCount    异常 $failedCount",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
@@ -741,43 +764,115 @@ private fun DownloadsScreen(
                 .height(1.dp)
                 .background(MaterialTheme.colorScheme.outlineVariant)
         )
-        if (tasks.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    "暂无下载任务",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "解析网页并下载资源后，会显示在这里",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                TextButton(onClick = onBackToSniff) {
-                    Text("开始嗅探", color = MaterialTheme.colorScheme.primary)
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            listOf("全部", "进行中", "已完成", "异常").forEach { filter ->
+                TextButton(onClick = { statusFilter = filter }) {
+                    Text(
+                        filter,
+                        color = if (statusFilter == filter) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
+        }
+        if (availableKinds.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(tasks, key = { it.id }) { task ->
-                    DownloadTaskCard(
-                        task = task,
-                        onOpen = { onOpenTask(task) },
-                        onRetry = { onRetryTask(task) },
-                        onCancel = { onCancelTask(task) }
+                TextButton(onClick = { kindFilter = "全部" }) {
+                    Text(
+                        "全部类型",
+                        color = if (kindFilter == "全部") MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
                     )
+                }
+                availableKinds.forEach { kind ->
+                    TextButton(onClick = { kindFilter = kind.name }) {
+                        Text(
+                            kind.label,
+                            color = if (kindFilter == kind.name) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        when {
+            tasks.isEmpty() -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        "暂无下载任务",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "解析网页并下载资源后，会显示在这里",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = onBackToSniff) {
+                        Text("开始嗅探", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            filteredTasks.isEmpty() -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        "没有符合条件的任务",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = {
+                        statusFilter = "全部"
+                        kindFilter = "全部"
+                    }) {
+                        Text("清除筛选", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    items(filteredTasks, key = { it.id }) { task ->
+                        DownloadTaskCard(
+                            task = task,
+                            onOpen = { onOpenTask(task) },
+                            onRetry = { onRetryTask(task) },
+                            onCancel = { onCancelTask(task) }
+                        )
+                    }
                 }
             }
         }
@@ -793,6 +888,8 @@ private fun DownloadTaskCard(
 ) {
     val finished = task.state == "completed"
     val failed = task.state == "failed"
+    val kindLabel = task.resourceKind
+        ?.let { raw -> runCatching { ResourceKind.valueOf(raw).label }.getOrNull() }
     val statusLabel = when {
         finished -> "已完成"
         failed -> "下载失败"
@@ -826,12 +923,41 @@ private fun DownloadTaskCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    statusLabel + " · " + task.detail,
+                    listOfNotNull(
+                        kindLabel,
+                        statusLabel,
+                        task.detail.takeIf { !it.startsWith("已下载 ") }
+                    ).joinToString(" · "),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                val transferSummary = buildList {
+                    if (task.downloadedBytes >= 0L && task.totalBytes > 0L) {
+                        add("${formatDownloadBytes(task.downloadedBytes)} / ${formatDownloadBytes(task.totalBytes)}")
+                    } else if (task.downloadedBytes > 0L) {
+                        add("已下载 ${formatDownloadBytes(task.downloadedBytes)}")
+                    }
+                    if (task.state == "downloading" && task.speedBytesPerSecond > 0L) {
+                        add("${formatDownloadBytes(task.speedBytesPerSecond)}/s")
+                    }
+                    if (task.state == "downloading" && task.totalBytes > task.downloadedBytes &&
+                        task.speedBytesPerSecond > 0L
+                    ) {
+                        val remaining = (task.totalBytes - task.downloadedBytes) / task.speedBytesPerSecond
+                        add("剩余 ${formatDownloadDuration(remaining)}")
+                    }
+                }
+                if (transferSummary.isNotEmpty()) {
+                    Text(
+                        transferSummary.joinToString(" · "),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Text(
                 if (finished) "100%" else if (task.state == "downloading" && task.progress >= 0) {
@@ -884,6 +1010,24 @@ private fun DownloadTaskCard(
                 .height(1.dp)
                 .background(MaterialTheme.colorScheme.outlineVariant)
         )
+    }
+}
+
+private fun formatDownloadBytes(value: Long): String {
+    if (value < 1024L) return "$value B"
+    val kb = value / 1024.0
+    if (kb < 1024.0) return String.format(java.util.Locale.ROOT, "%.1f KB", kb)
+    val mb = kb / 1024.0
+    if (mb < 1024.0) return String.format(java.util.Locale.ROOT, "%.1f MB", mb)
+    return String.format(java.util.Locale.ROOT, "%.2f GB", mb / 1024.0)
+}
+
+private fun formatDownloadDuration(seconds: Long): String {
+    val safeSeconds = seconds.coerceAtLeast(0L)
+    return when {
+        safeSeconds < 60L -> "$safeSeconds 秒"
+        safeSeconds < 3600L -> "${safeSeconds / 60} 分"
+        else -> "${safeSeconds / 3600} 小时 ${(safeSeconds % 3600) / 60} 分"
     }
 }
 
