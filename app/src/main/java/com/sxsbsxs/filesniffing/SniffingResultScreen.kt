@@ -850,7 +850,7 @@ fun SniffingResultScreen(
                     Text("观察到 Cookie 头：" + (if (youtubeDiagnostics.cookieHeaderObserved) "是" else "未见"))
                     Text("观察到 Authorization 头：" + (if (youtubeDiagnostics.authorizationHeaderObserved) "是" else "未见"))
                     youtubeDiagnostics.playerResponseSummary?.let { player ->
-                        Divider()
+                        Spacer(Modifier.height(4.dp))
                         Text("播放器状态：${player.status}")
                         Text(player.diagnosis)
                         player.reason?.let { reason ->
