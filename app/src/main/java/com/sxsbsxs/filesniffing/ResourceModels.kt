@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets
 
 enum class ResourceKind(val label: String) {
     VIDEO("视频"),
+    SEGMENT("媒体分段"),
     AUDIO("音频"),
     IMAGE("图片"),
     PLAYLIST("媒体清单"),
@@ -24,7 +25,8 @@ data class SniffedResource(
 }
 
 object ResourceSniffer {
-    private val videoExtensions = setOf("mp4", "webm", "mov", "m4v", "3gp", "mkv", "ts", "m4s")
+    private val videoExtensions = setOf("mp4", "webm", "mov", "m4v", "3gp", "mkv")
+    private val segmentExtensions = setOf("ts", "m4s")
     private val audioExtensions = setOf("mp3", "m4a", "aac", "ogg", "oga", "wav", "flac", "opus")
     private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "bmp")
     private val playlistExtensions = setOf("m3u8", "mpd")
@@ -46,6 +48,7 @@ object ResourceSniffer {
         val kind = when {
             extension in playlistExtensions || mime?.contains("mpegurl") == true ||
                 mime?.contains("dash+xml") == true -> ResourceKind.PLAYLIST
+            extension in segmentExtensions -> ResourceKind.SEGMENT
             extension in videoExtensions || mime?.startsWith("video/") == true ||
                 hintedKind.equals("video", ignoreCase = true) -> ResourceKind.VIDEO
             extension in audioExtensions || mime?.startsWith("audio/") == true ||
