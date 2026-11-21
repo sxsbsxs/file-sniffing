@@ -270,7 +270,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 detail = detail,
                 destinationUri = documentUri ?: previous?.destinationUri,
                 createdAtMillis = previous?.createdAtMillis ?: now,
-                updatedAtMillis = now
+                updatedAtMillis = now,
+                referer = inputData.getString(KEY_REFERER).orEmpty(),
+                destinationTreeUri = inputData.getString(KEY_TREE)
             )
         )
     }
