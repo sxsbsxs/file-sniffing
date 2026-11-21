@@ -106,6 +106,7 @@ fun SniffingResultScreen(
     var pageTitle by remember { mutableStateOf("") }
     var previewExpanded by remember(pageUrl) { mutableStateOf(false) }
     var pageError by remember { mutableStateOf<String?>(null) }
+    var pageAccessDiagnostic by remember(pageUrl) { mutableStateOf<PageAccessDiagnostics.Result?>(null) }
     var rendererCrashed by remember(pageUrl) { mutableStateOf(false) }
     var qualityResource by remember { mutableStateOf<SniffedResource?>(null) }
     var qualityOptions by remember { mutableStateOf<List<AdaptiveQualityOption>>(emptyList()) }
@@ -163,6 +164,31 @@ fun SniffingResultScreen(
                 it.recordPerformance(observation, initiatorType, responseStatus)
             }
         }
+    }
+
+    fun observePageAccessDiagnostic(rawUrl: String, encoded: String?) {
+        val payload = runCatching {
+            val wrapper = com.google.gson.JsonParser.parseString(encoded ?: return@runCatching null)
+            val json = if (wrapper.isJsonPrimitive && wrapper.asJsonPrimitive.isString) {
+                com.google.gson.JsonParser.parseString(wrapper.asString)
+            } else {
+                wrapper
+            }
+            json.takeIf { it.isJsonObject }?.asJsonObject
+        }.getOrNull()
+
+        fun flag(name: String): Boolean =
+            runCatching { payload?.get(name)?.asBoolean == true }.getOrDefault(false)
+
+        val result = PageAccessDiagnostics.classify(
+            pageUrl = rawUrl.ifBlank { pageUrl },
+            humanVerification = flag("humanVerification"),
+            regionRestricted = flag("regionRestricted"),
+            accessDenied = flag("accessDenied"),
+            nicovideodlServiceEnding = flag("nicovideodlServiceEnding"),
+            nicovideodlPremiumExpired = flag("nicovideodlPremiumExpired")
+        )
+        diagnosticHandler.post { pageAccessDiagnostic = result }
     }
     val isRecognizedYouTubeVideo = YouTubeUrlParser.extractVideoId(pageUrl) != null
     // Media segments are implementation details of adaptive streams, not standalone files.
@@ -252,7 +278,7 @@ fun SniffingResultScreen(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (youtubeDiagnostics.isYouTubePage) {
+            if (youtubeDiagnostics.isYouTubePage || pageAccessDiagnostic != null) {
                 IconButton(onClick = { showDiagnostics = true }) {
                     Icon(
                         Icons.Rounded.Info,
@@ -378,6 +404,7 @@ fun SniffingResultScreen(
 
                                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                             pageError = null
+                                            pageAccessDiagnostic = null
                                             if (YouTubeRequestDiagnostics.isYouTubePageUrl(url.orEmpty())) {
                                                 postYouTubeDiagnosticUpdate { it.copy(isYouTubePage = true) }
                                             }
@@ -388,6 +415,11 @@ fun SniffingResultScreen(
                                             onLoadingChange(false)
                                             runCatching {
                                                 view?.evaluateJavascript(RESOURCE_CAPTURE_SCRIPT, null)
+                                            }
+                                            runCatching {
+                                                view?.evaluateJavascript(PAGE_ACCESS_DIAGNOSTICS_SCRIPT) { encoded ->
+                                                    observePageAccessDiagnostic(pageUrl, encoded)
+                                                }
                                             }
                                             val isYouTubeWatchPage =
                                                 YouTubeUrlParser.extractVideoId(url.orEmpty()) != null ||
@@ -577,6 +609,39 @@ fun SniffingResultScreen(
             }
         }
 
+        pageAccessDiagnostic?.let { diagnostic ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        diagnostic.title,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        diagnostic.message,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        diagnostic.nextStep,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+
         if (!inspectionError.isNullOrBlank()) {
             Surface(
                 modifier = Modifier
@@ -705,6 +770,7 @@ fun SniffingResultScreen(
                         when {
                             isLoading -> "正在扫描网页资源…"
                             pageError != null -> "网页预览暂不可用"
+                            pageAccessDiagnostic != null -> "页面受到站点限制，暂未发现可用媒体"
                             resources.any { it.kind == ResourceKind.SEGMENT } -> "发现媒体分段，尚未发现完整媒体资源"
                             isRecognizedYouTubeVideo -> "已识别 YouTube 视频，但尚未解析出可下载格式"
                             else -> "暂未发现可下载资源"
@@ -717,6 +783,7 @@ fun SniffingResultScreen(
                     Text(
                         when {
                             pageError != null -> "页面预览失败不代表资源解析失败，稍后可刷新重试"
+                            pageAccessDiagnostic != null -> pageAccessDiagnostic?.message.orEmpty()
                             resources.any { it.kind == ResourceKind.SEGMENT } -> "单个媒体分段不会作为完整视频列出"
                             isRecognizedYouTubeVideo -> "YouTube 播放地址带有动态签名；普通 WebView 嗅探不能把网页 URL 当成视频文件。仍需接入专用签名 / EJS / PO Token 解析器。"
                             else -> "视频、音频、图片、文档和下载链接会显示在这里"
@@ -833,7 +900,7 @@ fun SniffingResultScreen(
         )
     }
 
-    if (showDiagnostics && youtubeDiagnostics.isYouTubePage) {
+    if (showDiagnostics && (youtubeDiagnostics.isYouTubePage || pageAccessDiagnostic != null)) {
         AlertDialog(
             onDismissRequest = { showDiagnostics = false },
             confirmButton = {
@@ -841,9 +908,15 @@ fun SniffingResultScreen(
                     Text("关闭", color = MaterialTheme.colorScheme.primary)
                 }
             },
-            title = { Text("网页请求诊断") },
+            title = { Text("网页诊断") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    pageAccessDiagnostic?.let { diagnostic ->
+                        Text(diagnostic.title, fontWeight = FontWeight.SemiBold)
+                        Text(diagnostic.message)
+                        Text(diagnostic.nextStep, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (youtubeDiagnostics.isYouTubePage) {
                     Text("Player API：" + youtubeDiagnostics.playerApiRequests + " · 视频请求：" + youtubeDiagnostics.googleVideoRequests)
                     Text("性能记录：" + youtubeDiagnostics.performanceEntries + " · HTTP 错误：" + youtubeDiagnostics.youtubeHttpErrors)
                     Text("网络错误：" + youtubeDiagnostics.networkErrors + " · 媒体域错误：" + youtubeDiagnostics.googleVideoHttpErrors)
@@ -862,6 +935,7 @@ fun SniffingResultScreen(
                     }
                     Text("诊断只保存播放器状态、格式数量和简短原因，不保存媒体 URL、Cookie 或 Token。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
                 }
             }
         )
@@ -1058,6 +1132,25 @@ private class ResourceBridge(
         }
     }
 }
+
+private const val PAGE_ACCESS_DIAGNOSTICS_SCRIPT = """
+(function() {
+  try {
+    var host = String(location.hostname || '').toLowerCase();
+    var text = ((document.title || '') + ' ' + ((document.body && document.body.innerText) || '')).slice(0, 16000).toLowerCase();
+    function matches(pattern) { return pattern.test(text); }
+    return JSON.stringify({
+      humanVerification: matches(/captcha|verify you are human|confirm (you are|you're) not a robot|checking your browser|security verification|human verification|人間であることを確認|ロボットではないこと|私はロボットではありません|人机验证|验证码/),
+      regionRestricted: matches(/not available in your (country|region)|unavailable in your (country|region)|not supported in your region|geo.?restricted|region.?blocked|お住まいの国や地域ではご利用いただけません|この国または地域では利用できません|地域制限/),
+      accessDenied: matches(/access denied|403 forbidden|request blocked|your request has been blocked|access to this page has been denied|アクセスが拒否されました/),
+      nicovideodlServiceEnding: matches(/ドメインが11月で期限|サ終/),
+      nicovideodlPremiumExpired: matches(/プレミアムが切れちゃったので720pまで|720pまでになります/)
+    });
+  } catch (error) {
+    return null;
+  }
+})()
+"""
 
 private const val YOUTUBE_PLAYER_RESPONSE_SUMMARY_SCRIPT = """
 (function() {

@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.9.4
+**Current app version:** 0.9.5
 
 ## Technology architecture
 

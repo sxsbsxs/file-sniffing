@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.5
+
+- Added privacy-safe WebView page diagnostics for human-verification screens, region restrictions and access-denied responses. The native app receives only boolean signals, never raw page text or credential values.
+- Added a targeted notice recognizer for nicovideodl.jp so its announced 720p limit and service-ending notice are not mistaken for a valid media stream.
+- Added unit tests for verification, region restriction, access-denied and nicovideodl page-state classification. The app reports the page state; it does not bypass verification or access restrictions.
+- Increased app version to 0.9.5 (versionCode 23).
+
 ## YouTube extraction research groundwork (post-0.9.4, not a released runtime)
 
 - Added a pure parser for actual yt-dlp `-J` JSON metadata. It exposes only formats reported by the extractor, separates muxed/video-only/audio-only tracks, filters DRM-marked formats, and can compose an explicit video+audio format selector.
