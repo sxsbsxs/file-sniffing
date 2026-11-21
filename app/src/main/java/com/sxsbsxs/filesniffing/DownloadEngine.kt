@@ -73,8 +73,16 @@ object DownloadEngine {
                 liveData.removeObserver(this)
                 if (info.state != WorkInfo.State.FAILED && info.state != WorkInfo.State.CANCELLED) return
 
+                val retryData = androidx.work.Data.Builder()
+                    .putAll(info.inputData)
+                    .apply {
+                        info.progress.getString(PersistentDownloadWorker.KEY_PARTIAL_URI)
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { putString(PersistentDownloadWorker.KEY_PARTIAL_URI, it) }
+                    }
+                    .build()
                 val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
-                    .setInputData(info.inputData)
+                    .setInputData(retryData)
                     .addTag(DOWNLOAD_TAG)
                     .build()
                 val originalName = info.inputData.getString(PersistentDownloadWorker.KEY_FILE_NAME) ?: "download"
@@ -162,6 +170,7 @@ object DownloadEngine {
             state = state,
             detail = detail,
             fileUri = info.outputData.getString(PersistentDownloadWorker.KEY_FILE_URI)
+                ?: info.progress.getString(PersistentDownloadWorker.KEY_PARTIAL_URI)
         )
     }
 }
