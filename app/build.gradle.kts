@@ -94,6 +94,9 @@ dependencies {
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     implementation("com.google.dagger:hilt-android:2.58")
     ksp("com.google.dagger:hilt-compiler:2.58")
+    // Hilt 2.58 bundles metadata reader 2.3.0; Kotlin 2.4 emits metadata 2.4.0.
+    // Put the matching reader on KSP's processor classpath to avoid Hilt metadata failures.
+    ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0")
 
     // Local persistence: Room + Preferences DataStore.
     implementation("androidx.room:room-runtime:2.8.5")
