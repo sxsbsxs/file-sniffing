@@ -138,6 +138,7 @@ fun SniffingResultScreen(
                     settings.allowContentAccess = false
                     settings.javaScriptCanOpenWindowsAutomatically = false
                     settings.setSupportMultipleWindows(false)
+                    settings.safeBrowsingEnabled = true
                     settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     addJavascriptInterface(
                         ResourceBridge(
@@ -429,11 +430,21 @@ private const val RESOURCE_CAPTURE_SCRIPT = """
   try {
     new MutationObserver(function(records) {
       records.forEach(function(record) {
+        if (record.type === 'attributes') {
+          var target = record.target;
+          if (target && target.tagName) {
+            var targetTag = target.tagName.toLowerCase();
+            var targetKind = targetTag === 'video' ? 'video' : (targetTag === 'audio' ? 'audio' : (targetTag === 'img' ? 'image' : ''));
+            report(target.currentSrc || target.src || target.getAttribute('src'), targetKind, target.getAttribute('type') || '');
+          }
+        }
         record.addedNodes.forEach(function(node) {
           if (node && node.querySelectorAll) {
             if (node.matches && node.matches('video,audio,source,img')) {
               var tag = node.tagName.toLowerCase();
-              report(node.currentSrc || node.src || node.getAttribute('src'), tag === 'img' ? 'image' : tag, node.getAttribute('type') || '');
+              var parent = node.closest ? node.closest('video,audio') : null;
+              var kind = tag === 'img' ? 'image' : (parent ? parent.tagName.toLowerCase() : tag);
+              report(node.currentSrc || node.src || node.getAttribute('src'), kind, node.getAttribute('type') || '');
             }
             inspect(node);
           }
