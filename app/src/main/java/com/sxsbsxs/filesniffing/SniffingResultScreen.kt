@@ -322,7 +322,7 @@ fun SniffingResultScreen(
                                                     sourcePage = pageUrl
                                                 )
                                             }.getOrNull()
-                                            if (found != null) {
+                                            if (found != null && found.kind != ResourceKind.SEGMENT) {
                                                 diagnosticHandler.post { onResourceFound(found) }
                                             }
                                             return null
@@ -777,17 +777,20 @@ private class ResourceBridge(
     private val onPerformanceEntry: (String, String, Int) -> Unit
 ) {
     @JavascriptInterface
-    fun onResource(url: String, kind: String, mime: String, title: String) {
+    fun onResource(url: String, kind: String, mime: String, title: String, fileName: String) {
         val resource = runCatching {
             ResourceSniffer.detect(
                 rawUrl = url,
                 hintedKind = kind,
                 hintedMime = mime,
+                hintedFileName = fileName,
                 pageTitle = title,
                 sourcePage = sourcePage
             )
         }.getOrNull() ?: return
-        mainHandler.post { onFound(resource) }
+        if (resource.kind != ResourceKind.SEGMENT) {
+            mainHandler.post { onFound(resource) }
+        }
     }
 
     @JavascriptInterface
@@ -802,9 +805,26 @@ private const val RESOURCE_CAPTURE_SCRIPT = """
 (function() {
   if (window.__fileSniffObserverReady) return;
   window.__fileSniffObserverReady = true;
-  function report(url, kind, mime) {
+  function report(url, kind, mime, fileName) {
     if (!url || !window.FileSniffBridge) return;
-    try { window.FileSniffBridge.onResource(String(url), String(kind || ''), String(mime || ''), document.title || ''); } catch (e) {}
+    try { window.FileSniffBridge.onResource(String(url), String(kind || ''), String(mime || ''), document.title || '', String(fileName || '')); } catch (e) {}
+  }
+  function inspectDownloadAnchor(anchor) {
+    try {
+      if (!anchor || !anchor.href) return;
+      var downloadAttribute = anchor.hasAttribute('download');
+      var fileName = anchor.getAttribute('download') || (downloadAttribute ? 'download' : '');
+      var type = anchor.getAttribute('type') || '';
+      var url = anchor.href;
+      var knownFile = /\\.(?:mp4|webm|mov|m4v|3gp|mkv|avi|mp3|m4a|aac|ogg|oga|wav|flac|opus|jpg|jpeg|png|webp|gif|avif|bmp|svg|pdf|epub|mobi|azw3|doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp|rtf|zip|rar|7z|tar|gz|tgz|bz2|xz|zst|apk|aab|apks|xapk|ipa|exe|msi|dmg|deb|rpm|appimage|jar|ttf|otf|woff|woff2|eot|txt|csv|tsv|json|xml|yaml|yml|toml|ini|md|log|properties|sql|py|java|kt|kts|cpp|hpp|rs|go|sh)(?:[?#]|$)/i.test(url);
+      if (!downloadAttribute && !knownFile && !type) return;
+      report(url, downloadAttribute ? 'file' : '', type, fileName);
+    } catch (e) {}
+  }
+  function inspectDownloadLinks(root) {
+    try {
+      root.querySelectorAll('a[href]').forEach(inspectDownloadAnchor);
+    } catch (e) {}
   }
   function inspect(root) {
     try {
@@ -812,13 +832,14 @@ private const val RESOURCE_CAPTURE_SCRIPT = """
         var url = el.currentSrc || el.src || el.getAttribute('src');
         var tag = el.tagName.toLowerCase();
         var kind = tag === 'video' ? 'video' : (tag === 'audio' ? 'audio' : (tag === 'img' ? 'image' : ''));
-        report(url, kind, el.getAttribute('type') || '');
+        report(url, kind, el.getAttribute('type') || '', '');
         if (el.querySelectorAll) {
           el.querySelectorAll('source').forEach(function(source) {
-            report(source.src || source.getAttribute('src'), kind, source.type || '');
+            report(source.src || source.getAttribute('src'), kind, source.type || '', '');
           });
         }
       });
+      inspectDownloadLinks(root);
     } catch (e) {}
   }
   inspect(document);
@@ -845,23 +866,25 @@ private const val RESOURCE_CAPTURE_SCRIPT = """
           var target = record.target;
           if (target && target.tagName) {
             var targetTag = target.tagName.toLowerCase();
+            if (targetTag === 'a') inspectDownloadAnchor(target);
             var targetKind = targetTag === 'video' ? 'video' : (targetTag === 'audio' ? 'audio' : (targetTag === 'img' ? 'image' : ''));
-            report(target.currentSrc || target.src || target.getAttribute('src'), targetKind, target.getAttribute('type') || '');
+            report(target.currentSrc || target.src || target.getAttribute('src'), targetKind, target.getAttribute('type') || '', '');
           }
         }
         record.addedNodes.forEach(function(node) {
           if (node && node.querySelectorAll) {
+            if (node.matches && node.matches('a[href]')) inspectDownloadAnchor(node);
             if (node.matches && node.matches('video,audio,source,img')) {
               var tag = node.tagName.toLowerCase();
               var parent = node.closest ? node.closest('video,audio') : null;
               var kind = tag === 'img' ? 'image' : (parent ? parent.tagName.toLowerCase() : tag);
-              report(node.currentSrc || node.src || node.getAttribute('src'), kind, node.getAttribute('type') || '');
+              report(node.currentSrc || node.src || node.getAttribute('src'), kind, node.getAttribute('type') || '', '');
             }
             inspect(node);
           }
         });
       });
-    }).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['src']});
+    }).observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'href', 'download', 'type']});
   } catch (e) {}
 })();
 """

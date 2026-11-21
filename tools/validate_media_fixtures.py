@@ -271,6 +271,101 @@ public final class ResourceClassifierTest {
         check(ResourceClassifier.Kind.IMAGE, image.getKind());
         check("cover.webp", image.getFileName());
 
+        var pdf = ResourceClassifier.detect(
+            "https://cdn.example/guide.pdf?signature=private",
+            null,
+            null
+        );
+        check(ResourceClassifier.Kind.DOCUMENT, pdf.getKind());
+        check("guide.pdf", pdf.getFileName());
+
+        var extensionlessPdf = ResourceClassifier.detect(
+            "https://cdn.example/download?id=42",
+            null,
+            "application/pdf; charset=binary"
+        );
+        check(ResourceClassifier.Kind.DOCUMENT, extensionlessPdf.getKind());
+        check("download.pdf", extensionlessPdf.getFileName());
+
+        var officeDocument = ResourceClassifier.detect(
+            "https://cdn.example/report.docx",
+            null,
+            "application/octet-stream"
+        );
+        check(ResourceClassifier.Kind.DOCUMENT, officeDocument.getKind());
+
+        var archive = ResourceClassifier.detect(
+            "https://cdn.example/backup.7z",
+            null,
+            null
+        );
+        check(ResourceClassifier.Kind.ARCHIVE, archive.getKind());
+
+        var extensionlessArchive = ResourceClassifier.detect(
+            "https://cdn.example/export?id=8",
+            null,
+            "application/zip"
+        );
+        check(ResourceClassifier.Kind.ARCHIVE, extensionlessArchive.getKind());
+        check("export.zip", extensionlessArchive.getFileName());
+
+        var apk = ResourceClassifier.detect(
+            "https://cdn.example/app.apk",
+            null,
+            "application/vnd.android.package-archive"
+        );
+        check(ResourceClassifier.Kind.APPLICATION, apk.getKind());
+
+        var font = ResourceClassifier.detect(
+            "https://cdn.example/typeface.woff2",
+            null,
+            "font/woff2"
+        );
+        check(ResourceClassifier.Kind.FONT, font.getKind());
+
+        var json = ResourceClassifier.detect(
+            "https://cdn.example/catalog.json",
+            null,
+            "application/json"
+        );
+        check(ResourceClassifier.Kind.TEXT_DATA, json.getKind());
+
+        var sourceCode = ResourceClassifier.detect(
+            "https://cdn.example/tool.cpp",
+            null,
+            "text/plain"
+        );
+        check(ResourceClassifier.Kind.TEXT_DATA, sourceCode.getKind());
+
+        var downloadName = ResourceClassifier.detect(
+            "https://cdn.example/get?id=91",
+            "file",
+            null,
+            "../../final-report.pdf"
+        );
+        check(ResourceClassifier.Kind.DOCUMENT, downloadName.getKind());
+        check("final-report.pdf", downloadName.getFileName());
+
+        var extensionlessDownload = ResourceClassifier.detect(
+            "https://cdn.example/get?id=92",
+            "file",
+            null,
+            "exported-data"
+        );
+        check(ResourceClassifier.Kind.OTHER, extensionlessDownload.getKind());
+        check("exported-data", extensionlessDownload.getFileName());
+
+        check(null, ResourceClassifier.detect(
+            "https://cdn.example/app.js",
+            null,
+            "application/javascript"
+        ));
+        check(null, ResourceClassifier.detect(
+            "https://cdn.example/page.html",
+            null,
+            "text/html"
+        ));
+
         var plusName = ResourceClassifier.detect(
             "https://cdn.example/clip+final.mp4",
             null,
