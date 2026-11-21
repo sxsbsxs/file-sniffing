@@ -45,7 +45,7 @@ object DownloadEngine {
         val manager = WorkManager.getInstance(context.applicationContext)
         manager.enqueue(request)
         val liveData = manager.getWorkInfoByIdLiveData(request.id)
-        val observer = object : Observer<WorkInfo> {
+        val observer = object : Observer<WorkInfo?> {
             override fun onChanged(info: WorkInfo?) {
                 if (info == null) return
                 onUpdate(toTask(info))
@@ -65,7 +65,7 @@ object DownloadEngine {
     ) {
         val manager = WorkManager.getInstance(context.applicationContext)
         val liveData = manager.getWorkInfoByIdLiveData(UUID.fromString(taskId))
-        val observer = object : Observer<WorkInfo> {
+        val observer = object : Observer<WorkInfo?> {
             private var handled = false
 
             override fun onChanged(info: WorkInfo?) {
@@ -109,7 +109,7 @@ object DownloadEngine {
         onUpdate: (DownloadTaskUi) -> Unit
     ) {
         val liveData = manager.getWorkInfoByIdLiveData(id)
-        val observer = object : Observer<WorkInfo> {
+        val observer = object : Observer<WorkInfo?> {
             override fun onChanged(info: WorkInfo?) {
                 if (info == null) return
                 onUpdate(toTask(info))
