@@ -238,7 +238,7 @@ object DashDownloader {
             .replace("$" + "RepresentationID" + "$", representationId)
             .replace("$" + "Bandwidth" + "$", bandwidth.toString())
             .replace("$" + "Time" + "$", time.toString())
-        val numberPattern = Regex("\\$Number(?:%0(\\d+)d)?\\$")
+        val numberPattern = Regex("\\\$Number(?:%0(\\d+)d)?\\\$")
         result = numberPattern.replace(result) { match ->
             val width = match.groupValues.getOrNull(1)?.toIntOrNull() ?: 0
             if (width > 0) number.toString().padStart(width, '0') else number.toString()
