@@ -8,6 +8,7 @@
 - Added the WorkManager data-sync foreground service type to the merged manifest.
 - Improved OkDownload progress for multi-block and resumed transfers.
 - Made Media3-to-SAF export stop promptly on worker cancellation.
+- Preserved partial SAF documents and OkDownload breakpoint offsets across cancelled/failed direct-download retries.
 
 ## 0.6.0
 
