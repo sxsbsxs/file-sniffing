@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.2
+
+- Added request-scoped WebView cookie reuse in OkHttp's network interceptor so authenticated resource URLs can use the existing WebView session where CookieManager permits it; cookies are not stored or logged.
+- Added an expand/collapse control for the embedded browser preview to make in-page sign-in and resource inspection usable.
+- Added unit tests for exact-URL cookie lookup and preservation of explicit Cookie headers.
+- Increased app version to 0.9.2 (versionCode 20).
+
 ## 0.9.1
 
 - Added a real HLS/DASH resolution chooser sourced from the current manifest's Media3 video track mapping; the selected height is carried into background export and persisted for retry/history.

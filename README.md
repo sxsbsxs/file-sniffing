@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.9.1
+**Current app version:** 0.9.2
 
 ## Technology architecture
 
@@ -10,7 +10,7 @@ An Android-first webpage resource sniffer and general file download manager.
 |---|---|---|
 | UI | Kotlin, Jetpack Compose, Material 3 | Native home, resource list, download center |
 | Sniffing | WebView, shouldInterceptRequest, injected JavaScript | Observe page requests, DOM media elements and dynamic resource changes |
-| HTTP | OkHttp 5 + OkDownload 1.0.7 | Shared HTTP stack, multi-connection file transfer and breakpoint persistence |
+| HTTP | OkHttp 5 + OkDownload 1.0.7 | Shared HTTP stack, URL-scoped WebView session cookies, multi-connection transfer and breakpoint persistence |
 | Adaptive media | Media3 ExoPlayer, DownloadHelper, Transformer | Inspect HLS/DASH tracks, select supported high-bitrate tracks and export MP4 |
 | Architecture | MVVM, Kotlin Flow, Hilt | ViewModels, reactive state, dependency injection |
 | Local data | Room, DataStore | Sniff history, download history and selected output folder |
@@ -27,11 +27,13 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 - [x] Compose + Material 3 app shell, minimal link-entry home, share-sheet URL receiving and external HTTP/HTTPS link opening.
 - [x] WebView inspection using `shouldInterceptRequest`, DOM scanning, Performance API and a MutationObserver, with main-frame errors separated from empty results and YouTube subresource request diagnostics shown without retaining URLs or credential values.
+- [x] Expand/collapse the embedded page preview so users can interact with a site and sign in before downloading resources.
 - [x] Java resource classifier for media, documents, archives, apps/installers, fonts, code/data and generic files, including MIME-based extensionless URLs and sanitized HTML download-name hints.
 - [x] Page scanning for media DOM elements, recognized file URLs and explicit `<a download>` links, including dynamically added links; standalone HLS/DASH segments are hidden from the normal results list.
 - [x] Result filters appear only for categories actually discovered on the current page.
 - [x] Multi-select resources and batch enqueue.
 - [x] OkHttp shared client, OkDownload adapter and SAF `content://` output.
+- [x] Reuse cookies already stored by WebView for the exact target request URL in the OkHttp network interceptor, including redirect targets; never save or log cookie values.
 - [x] Preserve the same SAF destination URI for interrupted direct transfers so OkDownload can resume saved byte ranges on retry.
 - [x] Media3 `DownloadHelper` prepares adaptive streams and derives selected stream keys, preferring the highest supported bitrate by default.
 - [x] Read actual HLS/DASH video heights from Media3 track mapping, offer those options in the resource chooser, and carry the selected height through Worker, Room and retry.
@@ -62,7 +64,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - Media3 handles clear HLS/DASH streams that its supported extractors and muxer can decode. DRM/protected streams are not decrypted or bypassed. Some live, unusual, encrypted or malformed manifests may fail with a descriptive export error.
 - Adaptive exports use a temporary file in the app cache before copying to the SAF destination. Large exports therefore need sufficient temporary storage.
 - YouTube diagnostics only classify visible WebView request callbacks and Performance API entries. They do not parse `youtubei/v1/player` response bodies, resolve signed media formats, acquire PO Tokens or make Google Video URLs downloadable. WebView callback coverage is incomplete by platform design; a zero count is not proof that YouTube sent no such request.
-- WebView login cookies are not yet bridged into OkHttp/OkDownload or Media3 requests. Authenticated resources may return HTTP 401/403.
+- Only cookies already present in WebView CookieManager for the exact target URL are reused by OkHttp, OkDownload and Media3. Cookies scoped to another host, rejected third-party cookies, app-only tokens and non-cookie authorization schemes are not synthesized; authenticated resources may still return HTTP 401/403.
 - OkDownload upstream 1.0.7 is old. It is isolated behind an adapter and should be reconsidered if a maintained alternative or a safe local fork is adopted.
 - The adaptive chooser lists resolutions exposed by the current HLS/DASH manifest through Media3 track mapping. Live, encrypted, DRM-protected, malformed or otherwise unsupported manifests may not expose selectable tracks.
 - Pause/continue is available for ordinary HTTP/HTTPS downloads; reliable resumption depends on server byte-range support. Media3 adaptive exports cannot currently be paused and restart if cancelled.
@@ -72,7 +74,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 - No account or backend server is required for the basic workflow.
 - Page inspection and downloads run on the device.
-- Credentials are not extracted or uploaded. Diagnostic metadata records only request categories, counters, status codes and whether header names were present; it never stores URL query strings, Cookie values, Authorization values or PO Tokens. WebView cookies are not shared with the download clients.
+- Credentials are not uploaded or stored by the downloader. CookieManager is queried for the exact request URL and its domain/path policy decides whether cookies apply; cookie values are never logged or copied into Room. Diagnostic metadata records only request categories, counters, status codes and whether header names were present; it never stores URL query strings, Cookie values, Authorization values or PO Tokens.
 - DRM circumvention, authentication bypass and protected-stream decryption are out of scope.
 - Cleartext HTTP remains permitted for user-entered pages for compatibility; HTTPS is preferred. Mixed content inside HTTPS pages remains blocked by WebView.
 

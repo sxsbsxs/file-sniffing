@@ -101,6 +101,7 @@ fun SniffingResultScreen(
     var selectionMode by remember { mutableStateOf(false) }
     var showDiagnostics by remember { mutableStateOf(false) }
     var pageTitle by remember { mutableStateOf("") }
+    var previewExpanded by remember(pageUrl) { mutableStateOf(false) }
     var pageError by remember { mutableStateOf<String?>(null) }
     var rendererCrashed by remember(pageUrl) { mutableStateOf(false) }
     var qualityResource by remember { mutableStateOf<SniffedResource?>(null) }
@@ -214,6 +215,16 @@ fun SniffingResultScreen(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            TextButton(
+                onClick = { previewExpanded = !previewExpanded },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    if (previewExpanded) "收起" else "展开网页",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             IconButton(
                 onClick = {
                     pageError = null
@@ -310,7 +321,7 @@ fun SniffingResultScreen(
                     AndroidView(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(104.dp)
+                            .height(if (previewExpanded) 320.dp else 104.dp)
                             .clip(RoundedCornerShape(9.dp)),
                         factory = { context ->
                             WebView(context).apply {

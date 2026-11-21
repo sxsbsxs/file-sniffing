@@ -5,6 +5,7 @@ import com.liulishuo.okdownload.OkDownload
 import com.liulishuo.okdownload.core.dispatcher.DownloadDispatcher
 import com.liulishuo.okdownload.core.connection.DownloadOkHttp3Connection
 import com.sxsbsxs.filesniffing.data.network.SizeAwareDownloadStrategy
+import com.sxsbsxs.filesniffing.data.network.WebViewCookieInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
