@@ -989,7 +989,7 @@ private fun DownloadTaskCard(
                         Text("打开文件", color = Accent, fontWeight = FontWeight.SemiBold)
                     }
                 }
-                failed -> {
+                failed || task.state == "cancelled" -> {
                     Spacer(modifier = Modifier.height(6.dp))
                     TextButton(onClick = onRetry) {
                         Text("重新下载", color = Accent, fontWeight = FontWeight.SemiBold)
