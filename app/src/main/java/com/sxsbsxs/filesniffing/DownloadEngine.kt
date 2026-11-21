@@ -41,6 +41,44 @@ object DownloadEngine {
             var createdDocument: Uri? = null
             try {
                 val parsed = Uri.parse(resource.url)
+                val isHlsPlaylist = resource.kind == ResourceKind.PLAYLIST &&
+                    resource.fileName.endsWith(".m3u8", ignoreCase = true)
+                if (isHlsPlaylist) {
+                    postUpdate(
+                        onUpdate,
+                        initial.copy(
+                            progress = -1,
+                            state = "downloading",
+                            detail = "正在读取 HLS 清单"
+                        )
+                    )
+                    val hlsResult = HlsDownloader.download(
+                        context = context,
+                        destinationTree = destinationTree,
+                        resource = resource
+                    ) { progress, detail ->
+                        postUpdate(
+                            onUpdate,
+                            initial.copy(
+                                fileName = "正在合并：${resource.fileName}",
+                                progress = progress,
+                                state = "downloading",
+                                detail = detail
+                            )
+                        )
+                    }
+                    postUpdate(
+                        onUpdate,
+                        initial.copy(
+                            fileName = hlsResult.fileName,
+                            progress = 100,
+                            state = "completed",
+                            detail = "HLS 分段已合并保存",
+                            fileUri = hlsResult.documentUri.toString()
+                        )
+                    )
+                    return@execute
+                }
                 require(parsed.scheme == "http" || parsed.scheme == "https") {
                     "只支持 HTTP 或 HTTPS 资源"
                 }
