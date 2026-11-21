@@ -268,7 +268,24 @@ private fun FileSniffingApp() {
                     hasFolder = selectedFolderUri != null,
                     tasks = downloadTasks.toList(),
                     onChooseFolder = { folderPicker.launch(null) },
-                    onBackToSniff = { selectedTab = 0 }
+                    onBackToSniff = { selectedTab = 0 },
+                    onOpenTask = { task ->
+                        val uri = task.fileUri?.let(Uri::parse)
+                        if (uri != null) {
+                            val mime = context.contentResolver.getType(uri) ?: "*/*"
+                            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, mime)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            runCatching {
+                                context.startActivity(Intent.createChooser(viewIntent, "打开文件"))
+                            }.onFailure {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("没有找到可以打开此文件的应用")
+                                }
+                            }
+                        }
+                    }
                 )
             }
         }
@@ -705,7 +722,8 @@ private fun DownloadsScreen(
     hasFolder: Boolean,
     tasks: List<DownloadTaskUi>,
     onChooseFolder: () -> Unit,
-    onBackToSniff: () -> Unit
+    onBackToSniff: () -> Unit,
+    onOpenTask: (DownloadTaskUi) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -801,7 +819,7 @@ private fun DownloadsScreen(
             }
             Spacer(modifier = Modifier.height(12.dp))
             tasks.forEach { task ->
-                DownloadTaskCard(task)
+                DownloadTaskCard(task, onOpen = { onOpenTask(task) })
                 Spacer(modifier = Modifier.height(10.dp))
             }
         }
@@ -810,7 +828,7 @@ private fun DownloadsScreen(
 
 
 @Composable
-private fun DownloadTaskCard(task: DownloadTaskUi) {
+private fun DownloadTaskCard(task: DownloadTaskUi, onOpen: () -> Unit) {
     val finished = task.state == "completed"
     val failed = task.state == "failed"
     Surface(
@@ -890,6 +908,12 @@ private fun DownloadTaskCard(task: DownloadTaskUi) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+            if (finished && task.fileUri != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                TextButton(onClick = onOpen) {
+                    Text("打开文件", color = Accent, fontWeight = FontWeight.SemiBold)
+                }
+            }
         }
     }
 }
