@@ -9,6 +9,11 @@ import javax.inject.Inject
 @HiltAndroidApp
 class FileSniffingApplication : Application(), Configuration.Provider {
 
+    override fun onCreate() {
+        super.onCreate()
+        CrashReporter.install(this)
+    }
+
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 

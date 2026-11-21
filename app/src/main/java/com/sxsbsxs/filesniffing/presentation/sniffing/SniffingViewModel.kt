@@ -8,6 +8,7 @@ import com.sxsbsxs.filesniffing.data.local.SniffedResourceEntity
 import com.sxsbsxs.filesniffing.data.repository.SniffedResourceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,10 +33,30 @@ class SniffingViewModel @Inject constructor(
             isPageLoading = true
         )
         observePageJob = viewModelScope.launch {
-            resourceRepository.observeForPage(pageUrl).collectLatest { stored ->
-                val mapped = stored.mapNotNull(::toResource)
+            try {
+                resourceRepository.observeForPage(pageUrl).collectLatest { stored ->
+                    val mapped = stored.mapNotNull(::toResource)
+                    _uiState.update { state ->
+                        if (state.activePageUrl == pageUrl) {
+                            state.copy(resources = mapped, errorMessage = null)
+                        } else {
+                            state
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                val message = error.message
+                    ?.take(160)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "本地资源记录读取失败"
                 _uiState.update { state ->
-                    if (state.activePageUrl == pageUrl) state.copy(resources = mapped) else state
+                    if (state.activePageUrl == pageUrl) {
+                        state.copy(isPageLoading = false, errorMessage = message)
+                    } else {
+                        state
+                    }
                 }
             }
         }
@@ -52,17 +73,29 @@ class SniffingViewModel @Inject constructor(
     fun addResource(resource: SniffedResource) {
         val pageUrl = _uiState.value.activePageUrl ?: return
         viewModelScope.launch {
-            resourceRepository.save(
-                SniffedResourceEntity(
-                    pageUrl = pageUrl,
-                    resourceUrl = resource.url,
-                    resourceKind = resource.kind.name,
-                    fileName = resource.fileName,
-                    mimeType = resource.mimeType,
-                    pageTitle = resource.pageTitle,
-                    firstSeenAtMillis = System.currentTimeMillis()
+            try {
+                resourceRepository.save(
+                    SniffedResourceEntity(
+                        pageUrl = pageUrl,
+                        resourceUrl = resource.url,
+                        resourceKind = resource.kind.name,
+                        fileName = resource.fileName,
+                        mimeType = resource.mimeType,
+                        pageTitle = resource.pageTitle,
+                        firstSeenAtMillis = System.currentTimeMillis()
+                    )
                 )
-            )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                val message = error.message
+                    ?.take(160)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "保存嗅探记录失败"
+                _uiState.update { state ->
+                    if (state.errorMessage == null) state.copy(errorMessage = message) else state
+                }
+            }
         }
     }
 

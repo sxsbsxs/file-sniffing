@@ -8,26 +8,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
- * Shared semantic palette for every screen in File Sniffing.
- * Pages should consume MaterialTheme.colorScheme instead of defining local colors.
+ * Neutral, high-contrast utility palette. Components consume semantic Material 3 roles.
  */
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF315E59),
+    primary = Color(0xFF315FC8),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFE2EFEB),
-    onPrimaryContainer = Color(0xFF173B36),
-    secondary = Color(0xFF596B68),
+    primaryContainer = Color(0xFFE5ECFF),
+    onPrimaryContainer = Color(0xFF132A61),
+    secondary = Color(0xFF53627E),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFE8EFEC),
-    onSecondaryContainer = Color(0xFF263B37),
-    background = Color(0xFFF6F8F6),
-    onBackground = Color(0xFF202826),
+    secondaryContainer = Color(0xFFE9EDF5),
+    onSecondaryContainer = Color(0xFF25324A),
+    background = Color(0xFFF4F6F9),
+    onBackground = Color(0xFF171B23),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF202826),
-    surfaceVariant = Color(0xFFEEF2EF),
-    onSurfaceVariant = Color(0xFF64706C),
-    outline = Color(0xFFD5DEDA),
-    outlineVariant = Color(0xFFE6ECE8),
+    onSurface = Color(0xFF171B23),
+    surfaceVariant = Color(0xFFEEF1F5),
+    onSurfaceVariant = Color(0xFF616B7A),
+    outline = Color(0xFFBFC7D3),
+    outlineVariant = Color(0xFFE0E5EC),
     error = Color(0xFFB3261E),
     onError = Color(0xFFFFFFFF),
     errorContainer = Color(0xFFF9DEDC),
@@ -35,26 +34,26 @@ private val LightColors = lightColorScheme(
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFFA4C9C1),
-    onPrimary = Color(0xFF123731),
-    primaryContainer = Color(0xFF2C514B),
-    onPrimaryContainer = Color(0xFFD0E8E2),
-    secondary = Color(0xFFB7CBC5),
-    onSecondary = Color(0xFF263B37),
-    secondaryContainer = Color(0xFF3C514C),
-    onSecondaryContainer = Color(0xFFD3E4DE),
-    background = Color(0xFF111715),
-    onBackground = Color(0xFFE1E9E5),
-    surface = Color(0xFF171E1B),
-    onSurface = Color(0xFFE1E9E5),
-    surfaceVariant = Color(0xFF26312D),
-    onSurfaceVariant = Color(0xFFB8C5BF),
-    outline = Color(0xFF84918B),
-    outlineVariant = Color(0xFF35423C),
-    error = Color(0xFFF2B8B5),
-    onError = Color(0xFF601410),
-    errorContainer = Color(0xFF8C1D18),
-    onErrorContainer = Color(0xFFF9DEDC)
+    primary = Color(0xFFAEC4FF),
+    onPrimary = Color(0xFF172F69),
+    primaryContainer = Color(0xFF284785),
+    onPrimaryContainer = Color(0xFFDFE7FF),
+    secondary = Color(0xFFBEC9E0),
+    onSecondary = Color(0xFF29354C),
+    secondaryContainer = Color(0xFF3A465E),
+    onSecondaryContainer = Color(0xFFDCE3F2),
+    background = Color(0xFF101319),
+    onBackground = Color(0xFFE7EAF0),
+    surface = Color(0xFF181D25),
+    onSurface = Color(0xFFE7EAF0),
+    surfaceVariant = Color(0xFF252C37),
+    onSurfaceVariant = Color(0xFFB8C1D0),
+    outline = Color(0xFF788394),
+    outlineVariant = Color(0xFF343D4A),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6)
 )
 
 @Composable

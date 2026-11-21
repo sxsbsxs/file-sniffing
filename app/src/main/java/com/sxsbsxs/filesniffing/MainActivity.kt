@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -77,6 +78,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -135,6 +137,10 @@ private fun FileSniffingApp(sharedLink: String) {
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    val startupCrashReport = remember(context) { CrashReporter.read(context) }
+    var showCrashReportDialog by rememberSaveable {
+        mutableStateOf(!startupCrashReport.isNullOrBlank())
+    }
     val sniffingViewModel: SniffingViewModel = hiltViewModel()
     val downloadCenterViewModel: DownloadCenterViewModel = hiltViewModel()
     val sniffingState by sniffingViewModel.uiState.collectAsState()
@@ -203,6 +209,51 @@ private fun FileSniffingApp(sharedLink: String) {
         ?.let { folderNameFromUri(Uri.parse(it)) }
         ?: "选择手机文件夹"
 
+    if (showCrashReportDialog && !startupCrashReport.isNullOrBlank()) {
+        AlertDialog(
+            onDismissRequest = {
+                showCrashReportDialog = false
+                CrashReporter.clear(context)
+            },
+            title = { Text("检测到上次异常退出") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "已在本机保留诊断报告。复制后可以发给开发者定位闪退原因。",
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        startupCrashReport.lineSequence().take(9).joinToString("\n"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        maxLines = 9,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(startupCrashReport))
+                        CrashReporter.clear(context)
+                        showCrashReportDialog = false
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("诊断报告已复制")
+                        }
+                    }
+                ) { Text("复制诊断报告") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        CrashReporter.clear(context)
+                        showCrashReportDialog = false
+                    }
+                ) { Text("关闭") }
+            }
+        )
+    }
+
     val enqueueDownload: (SniffedResource, Boolean) -> Unit = { resource, showQueuedMessage ->
         if (
             Build.VERSION.SDK_INT >= 33 &&
@@ -244,10 +295,12 @@ private fun FileSniffingApp(sharedLink: String) {
             )
         },
         bottomBar = {
-            MainNavigationBar(
-                selectedTab = selectedTab,
-                onSelect = { selectedTab = it }
-            )
+            if (selectedTab == 1 || sniffingState.activePageUrl == null) {
+                MainNavigationBar(
+                    selectedTab = selectedTab,
+                    onSelect = { selectedTab = it }
+                )
+            }
         }
     ) { innerPadding ->
         Box(
@@ -260,6 +313,7 @@ private fun FileSniffingApp(sharedLink: String) {
                     pageUrl = sniffingState.activePageUrl.orEmpty(),
                     resources = sniffingState.resources,
                     isLoading = sniffingState.isPageLoading,
+                    inspectionError = sniffingState.errorMessage,
                     onLoadingChange = sniffingViewModel::setPageLoading,
                     onResourceFound = sniffingViewModel::addResource,
                     onBack = { sniffingViewModel.closeInspection() },
@@ -291,18 +345,28 @@ private fun FileSniffingApp(sharedLink: String) {
                     onClear = { pageUrl = "" },
                     onPickFolder = { folderPicker.launch(null) },
                     onStartSniffing = {
-                        val candidate = Uri.parse(pageUrl.trim())
-                        val valid = (candidate.scheme == "http" || candidate.scheme == "https") &&
+                        val trimmedUrl = pageUrl.trim()
+                        val candidate = runCatching { Uri.parse(trimmedUrl) }.getOrNull()
+                        val valid = candidate != null &&
+                            (candidate.scheme.equals("http", ignoreCase = true) ||
+                                candidate.scheme.equals("https", ignoreCase = true)) &&
                             !candidate.host.isNullOrBlank()
                         when {
-                            pageUrl.isBlank() -> coroutineScope.launch {
+                            trimmedUrl.isBlank() -> coroutineScope.launch {
                                 snackbarHostState.showSnackbar("先粘贴一个网页链接")
+                            }
+                            trimmedUrl.length > 4096 -> coroutineScope.launch {
+                                snackbarHostState.showSnackbar("链接过长，请检查后重试")
                             }
                             !valid -> coroutineScope.launch {
                                 snackbarHostState.showSnackbar("请输入有效的 http 或 https 链接")
                             }
-                            else -> {
-                                sniffingViewModel.beginInspection(pageUrl.trim())
+                            else -> runCatching {
+                                sniffingViewModel.beginInspection(trimmedUrl)
+                            }.onFailure {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("无法开始解析，请重试")
+                                }
                             }
                         }
                     }
@@ -433,40 +497,40 @@ private fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
-            .padding(top = 26.dp, bottom = 24.dp)
+            .padding(horizontal = 20.dp)
+            .padding(top = 18.dp, bottom = 22.dp)
     ) {
         HeaderBrand()
-        Spacer(Modifier.height(54.dp))
+        Spacer(Modifier.height(34.dp))
         Text(
-            text = "粘贴网页链接",
+            text = "网页媒体解析",
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 28.sp,
-            lineHeight = 35.sp,
+            fontSize = 26.sp,
+            lineHeight = 32.sp,
             fontWeight = FontWeight.SemiBold,
-            letterSpacing = (-0.7).sp
+            letterSpacing = (-0.6).sp
         )
-        Spacer(Modifier.height(9.dp))
+        Spacer(Modifier.height(7.dp))
         Text(
-            text = "发现网页中的视频、音频和图片资源",
+            text = "粘贴网页链接，自动发现可用的视频、音频和图片资源",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 14.sp,
-            lineHeight = 22.sp
+            fontSize = 13.sp,
+            lineHeight = 20.sp
         )
-        Spacer(Modifier.height(27.dp))
+        Spacer(Modifier.height(24.dp))
         UrlInputCard(
             value = pageUrl,
             onValueChange = onUrlChange,
             onPaste = onPaste,
             onClear = onClear
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
         Button(
             onClick = onStartSniffing,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(18.dp),
+                .height(52.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
@@ -476,27 +540,60 @@ private fun HomeScreen(
                 pressedElevation = 1.dp
             )
         ) {
-            Text("开始嗅探", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.width(9.dp))
             Icon(
-                Icons.Rounded.ArrowForward,
+                Icons.Rounded.Search,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp)
             )
+            Spacer(Modifier.width(9.dp))
+            Text("开始解析", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
-        Spacer(Modifier.height(30.dp))
-        Text(
-            text = "保存位置",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.height(10.dp))
-        FolderPickerCard(
-            folderLabel = folderLabel,
-            hasFolder = hasFolder,
-            onClick = onPickFolder
-        )
+        Spacer(Modifier.height(25.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    "下载保存位置",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    folderLabel,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            TextButton(onClick = onPickFolder) {
+                Text(
+                    if (hasFolder) "更改" else "选择",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+        Spacer(Modifier.height(22.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(13.dp)
+        ) {
+            Text(
+                "支持普通网页媒体、HLS 和 DASH 资源。不同网站的访问权限和媒体保护方式可能影响可识别内容。",
+                modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                lineHeight = 17.sp
+            )
+        }
     }
 }
 
@@ -504,21 +601,23 @@ private fun HomeScreen(
 private fun HeaderBrand() {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(11.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.primary),
-            contentAlignment = Alignment.Center
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer,
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(
-                Icons.Rounded.CenterFocusStrong,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(22.dp)
-            )
+            Box(
+                modifier = Modifier.size(38.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.CenterFocusStrong,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(21.dp)
+                )
+            }
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
@@ -526,12 +625,14 @@ private fun HeaderBrand() {
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.1.sp
+                letterSpacing = 1.15.sp
             )
             Text(
-                "媒体资源嗅探器",
+                "MEDIA UTILITY",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 1.1.sp
             )
         }
     }
@@ -547,19 +648,19 @@ private fun UrlInputCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 17.dp, vertical = 16.dp)
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 14.dp)
         ) {
             Text(
                 "网页链接",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
             )
-            Spacer(Modifier.height(13.dp))
+            Spacer(Modifier.height(10.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -567,10 +668,10 @@ private fun UrlInputCard(
                 Icon(
                     Icons.Rounded.Link,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(19.dp)
                 )
-                Spacer(Modifier.width(11.dp))
+                Spacer(Modifier.width(10.dp))
                 Box(modifier = Modifier.weight(1f)) {
                     BasicTextField(
                         value = value,
@@ -590,7 +691,7 @@ private fun UrlInputCard(
                             if (value.isEmpty()) {
                                 Text(
                                     "粘贴或输入网页地址",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.68f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
                                     fontSize = 14.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -603,13 +704,13 @@ private fun UrlInputCard(
                 }
                 IconButton(
                     onClick = if (value.isEmpty()) onPaste else onClear,
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
                         imageVector = if (value.isEmpty()) Icons.Rounded.ContentPaste else Icons.Rounded.Close,
                         contentDescription = if (value.isEmpty()) "粘贴链接" else "清空链接",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(19.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -620,37 +721,32 @@ private fun UrlInputCard(
 @Composable
 private fun FolderPickerCard(folderLabel: String, hasFolder: Boolean, onClick: () -> Unit) {
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(13.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 15.dp, vertical = 13.dp),
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Rounded.FolderOpen,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            Spacer(Modifier.width(12.dp))
+            Icon(
+                Icons.Rounded.FolderOpen,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(19.dp)
+            )
+            Spacer(Modifier.width(11.dp))
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
-                    if (hasFolder) "已选择文件夹" else "选择保存文件夹",
+                    if (hasFolder) "保存到" else "选择保存位置",
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
@@ -661,11 +757,11 @@ private fun FolderPickerCard(folderLabel: String, hasFolder: Boolean, onClick: (
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                "更改",
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
+            Icon(
+                Icons.Rounded.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
             )
         }
     }

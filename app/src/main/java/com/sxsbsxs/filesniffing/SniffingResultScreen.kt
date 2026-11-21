@@ -43,13 +43,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +68,7 @@ fun SniffingResultScreen(
     pageUrl: String,
     resources: List<SniffedResource>,
     isLoading: Boolean,
+    inspectionError: String?,
     onLoadingChange: (Boolean) -> Unit,
     onResourceFound: (SniffedResource) -> Unit,
     onBack: () -> Unit,
@@ -75,6 +79,8 @@ fun SniffingResultScreen(
     var selectedResourceIds by remember { mutableStateOf(emptySet<String>()) }
     var pageTitle by remember { mutableStateOf("") }
     var pageError by remember { mutableStateOf<String?>(null) }
+    var rendererCrashed by remember(pageUrl) { mutableStateOf(false) }
+    var webViewGeneration by remember(pageUrl) { mutableIntStateOf(0) }
     val webViewHolder = remember { WebViewHolder() }
     val diagnosticHandler = remember { Handler(Looper.getMainLooper()) }
     var youtubeDiagnostics by remember(pageUrl) {
@@ -158,7 +164,17 @@ fun SniffingResultScreen(
                 onClick = {
                     pageError = null
                     onLoadingChange(true)
-                    webViewHolder.view?.reload()
+                    if (rendererCrashed) {
+                        rendererCrashed = false
+                        webViewGeneration += 1
+                    } else {
+                        runCatching { webViewHolder.view?.reload() }
+                            .onFailure {
+                                rendererCrashed = true
+                                onLoadingChange(false)
+                                pageError = "网页内核无法继续运行，请点击刷新重建页面"
+                            }
+                    }
                 }
             ) {
                 Icon(
@@ -179,144 +195,232 @@ fun SniffingResultScreen(
             )
         }
 
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(top = 10.dp),
-            color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            AndroidView(
+        if (rendererCrashed) {
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(184.dp)
-                    .clip(RoundedCornerShape(18.dp)),
-                factory = { context ->
-                    WebView(context).apply {
-                        webViewHolder.view = this
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.allowFileAccess = false
-                        settings.allowContentAccess = false
-                        settings.javaScriptCanOpenWindowsAutomatically = false
-                        settings.setSupportMultipleWindows(false)
-                        settings.safeBrowsingEnabled = true
-                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                        addJavascriptInterface(
-                            ResourceBridge(
-                                onFound = onResourceFound,
-                                sourcePage = pageUrl,
-                                mainHandler = diagnosticHandler,
-                                onPerformanceEntry = ::observePerformanceResource
-                            ),
-                            "FileSniffBridge"
-                        )
-                        webChromeClient = object : WebChromeClient() {
-                            override fun onReceivedTitle(view: WebView?, title: String?) {
-                                pageTitle = title.orEmpty()
-                            }
-
-                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                                if (newProgress >= 100) onLoadingChange(false)
-                            }
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "网页内核异常退出",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "页面已安全停止。点击刷新可重新创建网页内核。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            pageError = null
+                            rendererCrashed = false
+                            webViewGeneration += 1
+                            onLoadingChange(true)
                         }
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                pageError = null
-                                if (YouTubeRequestDiagnostics.isYouTubePageUrl(url.orEmpty())) {
-                                    postYouTubeDiagnosticUpdate { it.copy(isYouTubePage = true) }
-                                }
-                                onLoadingChange(true)
-                            }
-
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                onLoadingChange(false)
-                                view?.evaluateJavascript(RESOURCE_CAPTURE_SCRIPT, null)
-                            }
-
-                            override fun shouldInterceptRequest(
-                                view: WebView?,
-                                request: WebResourceRequest?
-                            ): android.webkit.WebResourceResponse? {
-                                val requested = request?.url?.toString().orEmpty()
-                                if (request != null) {
-                                    observeYouTubeRequest(requested, request.requestHeaders)
-                                }
-                                val found = ResourceSniffer.detect(
-                                    rawUrl = requested,
-                                    sourcePage = view?.url ?: pageUrl
-                                )
-                                if (found != null) {
-                                    Handler(Looper.getMainLooper()).post { onResourceFound(found) }
-                                }
-                                return null
-                            }
-
-                            override fun onReceivedError(
-                                view: WebView?,
-                                request: WebResourceRequest?,
-                                error: android.webkit.WebResourceError?
-                            ) {
-                                if (request != null) {
-                                    val observation = YouTubeRequestDiagnostics.inspect(
-                                        request.url.toString(),
-                                        request.requestHeaders
-                                    )
-                                    if (observation.isYouTubeRelated) {
-                                        postYouTubeDiagnosticUpdate {
-                                            it.recordNetworkError(observation, error?.errorCode ?: 0)
-                                        }
-                                    }
-                                }
-                                if (request?.isForMainFrame == true) {
-                                    pageError = error?.description
-                                        ?.toString()
-                                        ?.take(160)
-                                        ?.takeIf { it.isNotBlank() }
-                                        ?: "网页加载失败，请检查网络或链接"
-                                    onLoadingChange(false)
-                                }
-                            }
-
-                            override fun onReceivedHttpError(
-                                view: WebView?,
-                                request: WebResourceRequest?,
-                                errorResponse: android.webkit.WebResourceResponse?
-                            ) {
-                                if (request != null) {
-                                    val observation = YouTubeRequestDiagnostics.inspect(
-                                        request.url.toString(),
-                                        request.requestHeaders
-                                    )
-                                    if (observation.isYouTubeRelated) {
-                                        val status = errorResponse?.statusCode ?: 0
-                                        postYouTubeDiagnosticUpdate {
-                                            it.recordHttpError(observation, status)
-                                        }
-                                    }
-                                }
-                                if (request?.isForMainFrame == true) {
-                                    val statusCode = errorResponse?.statusCode
-                                    val reason = errorResponse?.reasonPhrase.orEmpty()
-                                    pageError = if (statusCode != null) {
-                                        "网页返回 HTTP $statusCode" +
-                                            reason.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
-                                    } else {
-                                        "网页响应异常"
-                                    }
-                                    onLoadingChange(false)
-                                }
-                            }
-                        }
-                        loadUrl(pageUrl)
-                    }
-                },
-                update = { view ->
-                    if (view.url != pageUrl) view.loadUrl(pageUrl)
+                    ) { Text("重新加载") }
                 }
-            )
+            }
+        } else {
+            key(webViewGeneration) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 10.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    AndroidView(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(196.dp)
+                            .clip(RoundedCornerShape(16.dp)),
+                        factory = { context ->
+                            WebView(context).apply {
+                                webViewHolder.view = this
+                                try {
+                                    settings.javaScriptEnabled = true
+                                    settings.domStorageEnabled = true
+                                    settings.allowFileAccess = false
+                                    settings.allowContentAccess = false
+                                    settings.javaScriptCanOpenWindowsAutomatically = false
+                                    settings.setSupportMultipleWindows(false)
+                                    settings.safeBrowsingEnabled = true
+                                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                    addJavascriptInterface(
+                                        ResourceBridge(
+                                            onFound = onResourceFound,
+                                            sourcePage = pageUrl,
+                                            mainHandler = diagnosticHandler,
+                                            onPerformanceEntry = ::observePerformanceResource
+                                        ),
+                                        "FileSniffBridge"
+                                    )
+                                    webChromeClient = object : WebChromeClient() {
+                                        override fun onReceivedTitle(view: WebView?, title: String?) {
+                                            pageTitle = title.orEmpty()
+                                        }
+
+                                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                            if (newProgress >= 100) onLoadingChange(false)
+                                        }
+                                    }
+                                    webViewClient = object : WebViewClient() {
+                                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                            pageError = null
+                                            if (YouTubeRequestDiagnostics.isYouTubePageUrl(url.orEmpty())) {
+                                                postYouTubeDiagnosticUpdate { it.copy(isYouTubePage = true) }
+                                            }
+                                            onLoadingChange(true)
+                                        }
+
+                                        override fun onPageFinished(view: WebView?, url: String?) {
+                                            onLoadingChange(false)
+                                            runCatching {
+                                                view?.evaluateJavascript(RESOURCE_CAPTURE_SCRIPT, null)
+                                            }
+                                        }
+
+                                        override fun shouldInterceptRequest(
+                                            view: WebView?,
+                                            request: WebResourceRequest?
+                                        ): android.webkit.WebResourceResponse? {
+                                            // Called on a worker thread: never call WebView methods from this callback.
+                                            val requested = request?.url?.toString().orEmpty()
+                                            if (request != null) {
+                                                observeYouTubeRequest(requested, request.requestHeaders)
+                                            }
+                                            val found = runCatching {
+                                                ResourceSniffer.detect(
+                                                    rawUrl = requested,
+                                                    sourcePage = pageUrl
+                                                )
+                                            }.getOrNull()
+                                            if (found != null) {
+                                                diagnosticHandler.post { onResourceFound(found) }
+                                            }
+                                            return null
+                                        }
+
+                                        override fun onReceivedError(
+                                            view: WebView?,
+                                            request: WebResourceRequest?,
+                                            error: android.webkit.WebResourceError?
+                                        ) {
+                                            if (request != null) {
+                                                val observation = YouTubeRequestDiagnostics.inspect(
+                                                    request.url.toString(),
+                                                    request.requestHeaders
+                                                )
+                                                if (observation.isYouTubeRelated) {
+                                                    postYouTubeDiagnosticUpdate {
+                                                        it.recordNetworkError(observation, error?.errorCode ?: 0)
+                                                    }
+                                                }
+                                            }
+                                            if (request?.isForMainFrame == true) {
+                                                pageError = error?.description
+                                                    ?.toString()
+                                                    ?.take(160)
+                                                    ?.takeIf { it.isNotBlank() }
+                                                    ?: "网页加载失败，请检查网络或链接"
+                                                onLoadingChange(false)
+                                            }
+                                        }
+
+                                        override fun onReceivedHttpError(
+                                            view: WebView?,
+                                            request: WebResourceRequest?,
+                                            errorResponse: android.webkit.WebResourceResponse?
+                                        ) {
+                                            if (request != null) {
+                                                val observation = YouTubeRequestDiagnostics.inspect(
+                                                    request.url.toString(),
+                                                    request.requestHeaders
+                                                )
+                                                if (observation.isYouTubeRelated) {
+                                                    val status = errorResponse?.statusCode ?: 0
+                                                    postYouTubeDiagnosticUpdate {
+                                                        it.recordHttpError(observation, status)
+                                                    }
+                                                }
+                                            }
+                                            if (request?.isForMainFrame == true) {
+                                                val statusCode = errorResponse?.statusCode
+                                                val reason = errorResponse?.reasonPhrase.orEmpty()
+                                                pageError = if (statusCode != null) {
+                                                    "网页返回 HTTP $statusCode" +
+                                                        reason.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+                                                } else {
+                                                    "网页响应异常"
+                                                }
+                                                onLoadingChange(false)
+                                            }
+                                        }
+
+                                        override fun onReceivedSslError(
+                                            view: WebView?,
+                                            handler: android.webkit.SslErrorHandler?,
+                                            error: android.net.http.SslError?
+                                        ) {
+                                            handler?.cancel()
+                                            pageError = "网页证书验证失败，出于安全考虑已停止加载"
+                                            onLoadingChange(false)
+                                        }
+
+                                        override fun onRenderProcessGone(
+                                            view: WebView?,
+                                            detail: android.webkit.RenderProcessGoneDetail?
+                                        ): Boolean {
+                                            pageError = if (detail?.didCrash() == true) {
+                                                "网页内核崩溃，应用已隔离该页面"
+                                            } else {
+                                                "系统回收了网页内核，应用已安全停止该页面"
+                                            }
+                                            onLoadingChange(false)
+                                            webViewHolder.view = null
+                                            runCatching { view?.destroy() }
+                                            rendererCrashed = true
+                                            return true
+                                        }
+                                    }
+                                    loadUrl(pageUrl)
+                                } catch (error: Exception) {
+                                    pageError = error.message
+                                        ?.take(140)
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: "无法创建网页预览，请检查系统 WebView"
+                                    onLoadingChange(false)
+                                }
+                            }
+                        },
+                        update = { view ->
+                            if (!rendererCrashed) {
+                                runCatching {
+                                    if (view.url != pageUrl) view.loadUrl(pageUrl)
+                                }.onFailure {
+                                    pageError = "网页预览更新失败，请点击刷新重试"
+                                    onLoadingChange(false)
+                                }
+                            }
+                        }
+                    )
+                }
+            }
         }
 
         if (pageError != null) {
@@ -349,6 +453,36 @@ fun SniffingResultScreen(
                         text = "检查网络后，点击右上角刷新重试",
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         fontSize = 11.sp
+                    )
+                }
+            }
+        }
+
+        if (!inspectionError.isNullOrBlank()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 8.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        "资源记录暂不可用",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        inspectionError,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 11.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -763,13 +897,15 @@ private class ResourceBridge(
 ) {
     @JavascriptInterface
     fun onResource(url: String, kind: String, mime: String, title: String) {
-        val resource = ResourceSniffer.detect(
-            rawUrl = url,
-            hintedKind = kind,
-            hintedMime = mime,
-            pageTitle = title,
-            sourcePage = sourcePage
-        ) ?: return
+        val resource = runCatching {
+            ResourceSniffer.detect(
+                rawUrl = url,
+                hintedKind = kind,
+                hintedMime = mime,
+                pageTitle = title,
+                sourcePage = sourcePage
+            )
+        }.getOrNull() ?: return
         mainHandler.post { onFound(resource) }
     }
 
