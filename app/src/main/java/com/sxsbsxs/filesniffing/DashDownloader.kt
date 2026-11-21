@@ -204,10 +204,10 @@ object DashDownloader {
                 require(duration > 0L) { "DASH SegmentTimeline 分段时长无效" }
                 val explicitTime = segment.getAttribute("t").toLongOrNull()
                 if (explicitTime != null) nextTime = explicitTime
-                val repeat = segment.getAttribute("r").toIntOrNull() ?: 0
-                require(repeat >= 0) { "暂不支持 DASH SegmentTimeline 负数 repeat" }
-                require(repeat <= MAX_SEGMENTS) { "DASH SegmentTimeline repeat 过大" }
-                repeat(repeat + 1) {
+                val repeatCount = segment.getAttribute("r").toIntOrNull() ?: 0
+                require(repeatCount >= 0) { "暂不支持 DASH SegmentTimeline 负数 repeat" }
+                require(repeatCount <= MAX_SEGMENTS) { "DASH SegmentTimeline repeat 过大" }
+                repeat(repeatCount + 1) {
                     require(mediaUrls.size < MAX_SEGMENTS) { "DASH 分段数量超过限制" }
                     val resolved = substitute(
                         mediaTemplate,
