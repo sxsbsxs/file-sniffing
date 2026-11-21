@@ -25,8 +25,11 @@ jobs:
         with:
           packages: platform-tools
 
-      - name: Install Android 36 SDK
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Android and native build tools
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Validate media fixtures (Python + C++)
+        run: python3 tools/validate_media_fixtures.py
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
