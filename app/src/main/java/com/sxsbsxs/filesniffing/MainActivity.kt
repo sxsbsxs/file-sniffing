@@ -68,7 +68,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -170,7 +169,6 @@ private fun FileSniffingApp(sharedLink: String) {
     }
     val sniffedResources = remember { mutableStateListOf<SniffedResource>() }
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
-    val downloadResources = remember { mutableStateMapOf<String, SniffedResource>() }
     DisposableEffect(context) {
         val removeObserver = DownloadEngine.observeAll(context.applicationContext) { task ->
             val index = downloadTasks.indexOfFirst { it.id == task.id }
@@ -220,7 +218,6 @@ private fun FileSniffingApp(sharedLink: String) {
                 destinationTree = Uri.parse(folder),
                 resource = resource
             ) { task ->
-                downloadResources[task.id] = resource
                 val index = downloadTasks.indexOfFirst { it.id == task.id }
                 if (index < 0) downloadTasks.add(0, task)
                 else downloadTasks[index] = task
@@ -323,7 +320,11 @@ private fun FileSniffingApp(sharedLink: String) {
                     onChooseFolder = { folderPicker.launch(null) },
                     onBackToSniff = { selectedTab = 0 },
                     onRetryTask = { task ->
-                        downloadResources[task.id]?.let { resource -> enqueueDownload(resource, true) }
+                        DownloadEngine.retry(context.applicationContext, task.id) { updated ->
+                            val index = downloadTasks.indexOfFirst { it.id == updated.id }
+                            if (index < 0) downloadTasks.add(0, updated)
+                            else downloadTasks[index] = updated
+                        }
                     },
                     onCancelTask = { task ->
                         DownloadEngine.cancel(context.applicationContext, task.id)
