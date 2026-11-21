@@ -63,6 +63,36 @@ class YtDlpInfoJsonParserTest {
     }
 
     @Test
+    fun formatsWithoutConcreteMediaTransportAreNotSelectable() {
+        val json = """
+            {
+              "id":"dQw4w9WgXcQ",
+              "title":"Transport sample",
+              "formats":[
+                {"format_id":"137","height":1080,"vcodec":"avc1","acodec":"none"},
+                {"format_id":"140","vcodec":"none","acodec":"mp4a.40.2"},
+                {"format_id":"248","height":1080,"vcodec":"vp9","acodec":"none",
+                 "manifest_url":"https://signed.example/manifest.mpd?token=secret"},
+                {"format_id":"251","vcodec":"none","acodec":"opus",
+                 "fragments":[{"url":"https://signed.example/segment?token=secret"}]}
+              ]
+            }
+        """.trimIndent()
+        val info = YtDlpInfoJsonParser.parse(json)
+
+        assertEquals(listOf("248"), info.selectableVideoFormats.map { it.formatId })
+        assertEquals(listOf("251"), info.audioOnlyFormats.map { it.formatId })
+        assertFalse(info.toString().contains("signed.example"))
+        assertFalse(info.toString().contains("token=secret"))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            YtDlpInfoJsonParser.buildFormatSelector(info.formats.first {
+                it.formatId == "137"
+            })
+        }
+    }
+
+    @Test
     fun unsafeFormatIdsAreNotExposedAsSelectableOptions() {
         val unsafeAudioId = singleVideoJson.replace(
             "\"format_id\": \"140\"",
@@ -145,7 +175,8 @@ class YtDlpInfoJsonParserTest {
                   "height": 360,
                   "vcodec": "avc1",
                   "acodec": "mp4a.40.2",
-                  "tbr": 650
+                  "tbr": 650,
+                  "url": "https://signed.example/muxed?token=secret"
                 }
               ]
             }

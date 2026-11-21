@@ -23,7 +23,7 @@ internal data class YtDlpVideoInfo(
 ) {
     val selectableVideoFormats: List<YtDlpFormat>
         get() = formats
-            .filter { it.hasVideo && !it.isDrm }
+            .filter { it.hasVideo && it.hasTransportAddress && !it.isDrm }
             .sortedWith(
                 compareByDescending<YtDlpFormat> { it.height ?: 0 }
                     .thenByDescending { it.bitrateKbps ?: 0.0 }
@@ -31,7 +31,7 @@ internal data class YtDlpVideoInfo(
 
     val videoOnlyFormats: List<YtDlpFormat>
         get() = formats
-            .filter { it.hasVideo && !it.hasAudio && !it.isDrm }
+            .filter { it.hasVideo && it.hasTransportAddress && !it.hasAudio && !it.isDrm }
             .sortedWith(
                 compareByDescending<YtDlpFormat> { it.height ?: 0 }
                     .thenByDescending { it.bitrateKbps ?: 0.0 }
@@ -39,12 +39,12 @@ internal data class YtDlpVideoInfo(
 
     val audioOnlyFormats: List<YtDlpFormat>
         get() = formats
-            .filter { !it.hasVideo && it.hasAudio && !it.isDrm }
+            .filter { !it.hasVideo && it.hasTransportAddress && it.hasAudio && !it.isDrm }
             .sortedByDescending { it.audioBitrateKbps ?: it.bitrateKbps ?: 0.0 }
 
     val muxedFormats: List<YtDlpFormat>
         get() = formats
-            .filter { it.hasVideo && it.hasAudio && !it.isDrm }
+            .filter { it.hasVideo && it.hasTransportAddress && it.hasAudio && !it.isDrm }
             .sortedWith(
                 compareByDescending<YtDlpFormat> { it.height ?: 0 }
                     .thenByDescending { it.bitrateKbps ?: 0.0 }
@@ -67,7 +67,9 @@ internal data class YtDlpFormat(
     val fileSizeBytes: Long?,
     val protocol: String?,
     val language: String?,
-    val isDrm: Boolean
+    val isDrm: Boolean,
+    /** True when yt-dlp returned a direct URL, manifest URL, or concrete fragment list. */
+    val hasTransportAddress: Boolean = true
 ) {
     val hasVideo: Boolean
         get() = (!videoCodec.isNullOrBlank() && !videoCodec.equals("none", true)) ||
@@ -139,7 +141,10 @@ internal object YtDlpInfoJsonParser {
         videoFormat: YtDlpFormat,
         audioFormat: YtDlpFormat? = null
     ): String {
-        require(videoFormat.hasVideo && !videoFormat.isDrm && safeFormatId.matches(videoFormat.formatId)) {
+        require(
+            videoFormat.hasVideo && videoFormat.hasTransportAddress &&
+                !videoFormat.isDrm && safeFormatId.matches(videoFormat.formatId)
+        ) {
             "所选视频格式不可下载"
         }
         if (videoFormat.hasAudio) {
@@ -152,8 +157,8 @@ internal object YtDlpInfoJsonParser {
         }
         require(
             audio.videoId == videoFormat.videoId &&
-                !audio.hasVideo && audio.hasAudio && !audio.isDrm &&
-                safeFormatId.matches(audio.formatId)
+                !audio.hasVideo && audio.hasAudio && audio.hasTransportAddress &&
+                !audio.isDrm && safeFormatId.matches(audio.formatId)
         ) {
             "所选音频格式无效，或不属于当前视频"
         }
@@ -180,6 +185,13 @@ internal object YtDlpInfoJsonParser {
         val isDrm = item.boolean("has_drm") == true ||
             item.boolean("is_drm") == true ||
             hasDrmFamily
+        // Do not offer metadata-only entries which cannot be passed to a downloader.
+        // URLs are inspected only as a boolean and are never copied into the model.
+        val hasTransportAddress = item.string("url") != null ||
+            item.string("manifest_url") != null ||
+            item.array("fragments")?.any { fragment ->
+                fragment.isJsonObject && fragment.asJsonObject.string("url") != null
+            } == true
 
         return YtDlpFormat(
             videoId = videoId,
@@ -196,7 +208,8 @@ internal object YtDlpInfoJsonParser {
             fileSizeBytes = item.long("filesize") ?: item.long("filesize_approx"),
             protocol = item.string("protocol"),
             language = item.string("language"),
-            isDrm = isDrm
+            isDrm = isDrm,
+            hasTransportAddress = hasTransportAddress
         )
     }
 
