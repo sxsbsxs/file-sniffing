@@ -861,7 +861,7 @@ private fun DownloadTaskCard(task: DownloadTaskUi) {
                     )
                 }
                 Text(
-                    text = if (finished) "100%" else if (task.state == "downloading") "${task.progress}%" else "—",
+                    text = if (finished) "100%" else if (task.state == "downloading" && task.progress >= 0) "${task.progress}%" else "—",
                     color = Ink,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
