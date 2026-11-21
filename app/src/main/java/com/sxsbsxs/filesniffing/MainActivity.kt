@@ -347,6 +347,19 @@ private fun FileSniffingApp(sharedLink: String) {
                                 snackbarHostState.showSnackbar("已将 ${selected.size} 项加入下载队列")
                             }
                         }
+                    },
+                    onNiconicoPageReady = { targetUrl ->
+                        sniffingViewModel.extractNiconicoResource(targetUrl) { resource, error ->
+                            if (resource != null) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("N站视频流已解析，可选择画质并下载")
+                                }
+                            } else if (!error.isNullOrBlank()) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("N站解析失败：$error")
+                                }
+                            }
+                        }
                     }
                 )
             } else if (selectedTab == 0) {

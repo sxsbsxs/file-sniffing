@@ -7,5 +7,6 @@ data class SniffingUiState(
     val pageTitle: String = "",
     val isPageLoading: Boolean = false,
     val resources: List<SniffedResource> = emptyList(),
+    val transientResources: List<SniffedResource> = emptyList(),
     val errorMessage: String? = null
 )

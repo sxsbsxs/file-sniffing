@@ -97,7 +97,8 @@ fun SniffingResultScreen(
     onBack: () -> Unit,
     onDownload: (SniffedResource, Int?) -> Unit,
     onInspectAdaptiveQualities: (SniffedResource, (List<AdaptiveQualityOption>, String?) -> Unit) -> Unit,
-    onDownloadBatch: (List<SniffedResource>) -> Unit
+    onDownloadBatch: (List<SniffedResource>) -> Unit,
+    onNiconicoPageReady: (String) -> Unit
 ) {
     var currentFilter by remember { mutableStateOf("全部") }
     var selectedResourceIds by remember { mutableStateOf(emptySet<String>()) }
@@ -413,6 +414,10 @@ fun SniffingResultScreen(
 
                                         override fun onPageFinished(view: WebView?, url: String?) {
                                             onLoadingChange(false)
+                                            val finishedUrl = url ?: pageUrl
+                                            if (NiconicoUrlParser.extractVideoId(finishedUrl) != null) {
+                                                onNiconicoPageReady(finishedUrl)
+                                            }
                                             runCatching {
                                                 view?.evaluateJavascript(RESOURCE_CAPTURE_SCRIPT, null)
                                             }

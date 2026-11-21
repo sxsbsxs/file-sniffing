@@ -10,6 +10,10 @@ flowchart TD
     B --> C[WebView]
     C --> D[shouldInterceptRequest]
     C --> E[Injected JavaScript]
+    C --> N[Niconico watch page ready]
+    N --> N1[NiconicoExtractor: v3 / v3_guest]
+    N1 --> N2[DMS access-right HLS endpoint]
+    N2 --> F
     D --> F[ResourceSniffer]
     E --> E1[Media DOM + Performance + Download Links]
     E1 --> F
@@ -44,6 +48,8 @@ flowchart TD
 - `presentation.downloads`: DataStore output-folder state and Room-backed download history.
 - `data.network`: OkDownload adapter, using the app's shared OkHttp configuration.
 - `data.media`: Media3 DownloadHelper track selection, persistent HLS/DASH segment cache, resumable segment download and Transformer export.
+- `data.extractor.NiconicoExtractor` + `NiconicoApiParser`: request Niconico's current watch API and DMS HLS access-right endpoint, reusing only the active WebView session cookie where applicable. Temporary manifest URLs remain in memory and are refreshed by the worker before transfer.
+- `NiconicoUrlParser`: accepts canonical Niconico watch URLs and official `nico.ms` short links; rejects lookalike domains and live-stream IDs.
 - `data.extractor.YtDlpInfoJsonParser`: pure JSON boundary for future yt-dlp `-J` output. It extracts actual format metadata, excludes DRM formats from selectable lists, builds safe format selectors and intentionally never retains signed media URLs or request headers. This parser is not yet wired to a yt-dlp execution runtime or UI.
 - `data.local`: Room entities, DAOs and database.
 - `data.preferences`: DataStore preferences.

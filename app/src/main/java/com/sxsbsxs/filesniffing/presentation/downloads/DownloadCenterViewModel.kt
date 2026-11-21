@@ -3,6 +3,7 @@ package com.sxsbsxs.filesniffing.presentation.downloads
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sxsbsxs.filesniffing.DownloadTaskUi
+import com.sxsbsxs.filesniffing.NiconicoUrlParser
 import com.sxsbsxs.filesniffing.SniffedResource
 import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 import com.sxsbsxs.filesniffing.data.preferences.AppPreferences
@@ -54,7 +55,11 @@ class DownloadCenterViewModel @Inject constructor(
             repository.save(
                 DownloadRecordEntity(
                     id = task.id,
-                    sourceUrl = resource?.url ?: previous?.sourceUrl.orEmpty(),
+                    sourceUrl = resource?.let { current ->
+                        if (current.kind.name == "PLAYLIST" &&
+                            NiconicoUrlParser.extractVideoId(current.sourcePage) != null
+                        ) current.sourcePage else current.url
+                    } ?: previous?.sourceUrl.orEmpty(),
                     fileName = task.fileName,
                     resourceKind = resource?.kind?.name ?: previous?.resourceKind ?: "OTHER",
                     mimeType = resource?.mimeType ?: previous?.mimeType,

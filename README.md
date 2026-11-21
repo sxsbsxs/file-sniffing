@@ -2,14 +2,14 @@
 
 An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.9.5
+**Current app version:** 0.9.6
 
 ## Technology architecture
 
 | Layer | Technology | Responsibility |
 |---|---|---|
 | UI | Kotlin, Jetpack Compose, Material 3 | Native home, resource list, download center |
-| Sniffing | WebView, shouldInterceptRequest, injected JavaScript | Observe page requests, DOM media elements and dynamic resource changes |
+| Sniffing | WebView, shouldInterceptRequest, injected JavaScript, Niconico watch API | Observe generic page media and resolve Niconico DMS HLS manifests using the active WebView session |
 | HTTP | OkHttp 5 + OkDownload 1.0.7 | Shared HTTP stack, URL-scoped WebView session cookies, multi-connection transfer and breakpoint persistence |
 | Adaptive media | Media3 ExoPlayer, DownloadHelper, Transformer | Inspect HLS/DASH tracks, select supported high-bitrate tracks and export MP4 |
 | Architecture | MVVM, Kotlin Flow, Hilt | ViewModels, reactive state, dependency injection |
@@ -27,6 +27,8 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 - [x] Compose + Material 3 app shell, minimal link-entry home, share-sheet URL receiving and external HTTP/HTTPS link opening.
 - [x] WebView inspection using `shouldInterceptRequest`, DOM scanning, Performance API and a MutationObserver, with main-frame errors separated from empty results and YouTube subresource request diagnostics shown without retaining URLs or credential values.
+- [x] Niconico video extraction for `nicovideo.jp/watch` and `nico.ms` links: request the current `v3` or `v3_guest` watch API, use only the logged-in WebView `user_session` when present, request the DMS HLS manifest with its short-lived access key, and expose the actual manifest to the existing Media3 quality/download pipeline.
+- [x] Refresh Niconico's short-lived HLS manifest inside the WorkManager worker on every start/retry; keep the stable watch URL in download history instead of persisting the expiring manifest URL.
 - [x] Expand/collapse the embedded page preview so users can interact with a site and sign in before downloading resources.
 - [x] Java resource classifier for media, documents, archives, apps/installers, fonts, code/data and generic files, including MIME-based extensionless URLs and sanitized HTML download-name hints.
 - [x] Page scanning for media DOM elements, recognized file URLs and explicit `<a download>` links, including dynamically added links; standalone HLS/DASH segments are hidden from the normal results list.
@@ -61,12 +63,13 @@ See [the YouTube extraction research report](docs/YOUTUBE_EXTRACTION_RESEARCH.md
 
 ## Known limitations
 
-- This is a generic webpage sniffer, not a universal extractor for every site. Results are best-effort and depend on URLs exposed to WebView request callbacks, the DOM or the Performance API.
+- This is a generic webpage sniffer with a dedicated Niconico DMS adapter, not a universal extractor for every site. Generic-site results remain best-effort and depend on URLs exposed to WebView request callbacks, the DOM or the Performance API.
 - Blob-only URLs, service-worker-private responses, app-private media and sites that conceal media URLs may not be extractable as ordinary files.
 - Generic downloadable assets are best-effort: known file extensions and explicit HTML `download` links are captured, but WebView's request interception callback does not expose response headers such as `Content-Disposition`; opaque extensionless endpoints without a DOM filename or MIME hint may remain unidentified.
 - The local file browser currently reads the selected SAF download directory only; it is not a full-device filesystem explorer and does not bypass Android storage permissions.
 - Media3 handles clear HLS/DASH streams that its supported extractors and muxer can decode. DRM/protected streams are not decrypted or bypassed. Some live, unusual, encrypted or malformed manifests may fail with a descriptive export error.
 - Adaptive exports use a temporary file in the app cache before copying to the SAF destination. Large exports therefore need sufficient temporary storage.
+- Niconico extraction uses the service's current watch API and HLS access-right endpoint. Guest access is used only when the WebView has no `user_session`; otherwise the current WebView session is reused. Premium-only, pay-per-view, channel-member and region-restricted responses remain unavailable unless the signed-in account already has the required access. Short-lived HLS manifest URLs are refreshed by the worker before download. The app does not create account credentials, bypass access restrictions, or add a custom DRM/key-decryption implementation.
 - YouTube URL recognition validates video IDs from watch, youtu.be, shorts, live and embed URLs. A pure parser can now consume a future yt-dlp `-J` result and expose only actual non-DRM format metadata; it deliberately drops signed media URLs and request headers. This parser is not yet connected to a yt-dlp runtime or the download UI. YouTube diagnostics still classify visible WebView request callbacks and Performance API entries; they do not decrypt signed media URLs. The app still does not resolve signature / n transforms, execute EJS as part of a downloader, or acquire PO Tokens, so recognizing a video page does not yet mean its stream formats are downloadable. WebView callback coverage is incomplete by platform design; a zero count is not proof that YouTube sent no such request.
 - Only cookies already present in WebView CookieManager for the exact target URL are reused by OkHttp, OkDownload and Media3. Cookies scoped to another host, rejected third-party cookies, app-only tokens and non-cookie authorization schemes are not synthesized; authenticated resources may still return HTTP 401/403.
 - OkDownload upstream 1.0.7 is old. It is isolated behind an adapter and should be reconsidered if a maintained alternative or a safe local fork is adopted.

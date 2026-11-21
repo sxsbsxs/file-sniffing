@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.6
+
+- Added a dedicated Niconico extractor for `nicovideo.jp/watch` and `nico.ms` video links, using the current `v3` / `v3_guest` watch API and the DMS HLS access-right endpoint.
+- Reuses only the user's existing WebView `user_session` when present; guest requests stay guest requests. Premium, PPV, member-only and regional restrictions are reported instead of bypassed.
+- Sends the returned HLS master manifest through the existing Media3 track inspection and download/export path, so the quality picker is based on tracks exposed by the manifest.
+- Refreshes short-lived Niconico manifest URLs in the WorkManager worker before every download/retry and stores the stable watch-page URL in history instead of the expiring manifest URL.
+- Added unit tests for Niconico URL validation, DMS track parsing, output combinations, HLS URL validation and restricted-access responses.
+- Increased app version to 0.9.6 (versionCode 24).
+
 ## 0.9.5
 
 - Added privacy-safe WebView page diagnostics for human-verification screens, region restrictions and access-denied responses. The native app receives only boolean signals, never raw page text or credential values.

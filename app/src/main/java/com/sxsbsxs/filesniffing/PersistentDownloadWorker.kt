@@ -9,6 +9,8 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 import com.sxsbsxs.filesniffing.data.repository.DownloadRepository
+import com.sxsbsxs.filesniffing.NiconicoUrlParser
+import com.sxsbsxs.filesniffing.data.extractor.NiconicoExtractor
 import com.sxsbsxs.filesniffing.data.network.OkDownloadTransferEngine
 import com.sxsbsxs.filesniffing.data.media.Media3AdaptiveProcessor
 import android.net.Uri
@@ -30,23 +32,38 @@ class PersistentDownloadWorker @AssistedInject constructor(
     @Assisted parameters: WorkerParameters,
     private val okDownloadTransferEngine: OkDownloadTransferEngine,
     private val media3AdaptiveProcessor: Media3AdaptiveProcessor,
-    private val downloadRepository: DownloadRepository
+    private val downloadRepository: DownloadRepository,
+    private val niconicoExtractor: NiconicoExtractor
 ) : CoroutineWorker(appContext, parameters) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val url = inputData.getString(KEY_URL).orEmpty()
+        val requestedUrl = inputData.getString(KEY_URL).orEmpty()
         val treeValue = inputData.getString(KEY_TREE).orEmpty()
-        val fileName = inputData.getString(KEY_FILE_NAME).orEmpty()
+        val requestedFileName = inputData.getString(KEY_FILE_NAME).orEmpty()
         val kindName = inputData.getString(KEY_KIND).orEmpty()
-        val mime = inputData.getString(KEY_MIME)
+        val requestedMime = inputData.getString(KEY_MIME)
         val referer = inputData.getString(KEY_REFERER).orEmpty()
+        val requestedKind = runCatching {
+            ResourceKind.valueOf(kindName)
+        }.getOrDefault(ResourceKind.OTHER)
+        val niconicoPageUrl = when {
+            NiconicoUrlParser.extractVideoId(requestedUrl) != null -> requestedUrl
+            requestedKind == ResourceKind.PLAYLIST &&
+                NiconicoUrlParser.extractVideoId(referer) != null -> referer
+            else -> null
+        }
 
-        if (url.isBlank() || treeValue.isBlank() || fileName.isBlank()) {
+        if ((requestedUrl.isBlank() && niconicoPageUrl == null) ||
+            treeValue.isBlank() || requestedFileName.isBlank()
+        ) {
             return@withContext Result.failure(workDataOf(KEY_ERROR to "下载任务参数不完整"))
         }
 
-        val kind = runCatching { ResourceKind.valueOf(kindName) }.getOrDefault(ResourceKind.OTHER)
-        val resource = SniffedResource(
+        var url = requestedUrl
+        var fileName = requestedFileName
+        var kind = requestedKind
+        var mime = requestedMime
+        var resource = SniffedResource(
             url = url,
             kind = kind,
             fileName = fileName,
@@ -54,9 +71,10 @@ class PersistentDownloadWorker @AssistedInject constructor(
             pageTitle = "",
             sourcePage = referer
         )
+        val recordSourceUrl = niconicoPageUrl ?: requestedUrl
         val tree = Uri.parse(treeValue)
         val adaptiveVideoHeight = inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
-        val isAdaptiveManifest = kind == ResourceKind.PLAYLIST &&
+        var isAdaptiveManifest = kind == ResourceKind.PLAYLIST &&
             (fileName.endsWith(".m3u8", ignoreCase = true) ||
                 fileName.endsWith(".mpd", ignoreCase = true))
         var createdDocument: Uri? = null
@@ -66,7 +84,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
             publishProgressAsync(-1, "正在准备下载", fileName)
             persistRecord(
                 fileName = fileName,
-                sourceUrl = url,
+                sourceUrl = recordSourceUrl,
                 kind = kind,
                 mimeType = mime,
                 state = "downloading",
@@ -74,6 +92,28 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 detail = "正在准备下载",
                 documentUri = null
             )
+
+            if (niconicoPageUrl != null) {
+                publishProgressAsync(-1, "正在向 N站刷新本次播放授权", fileName)
+                resource = niconicoExtractor.extract(niconicoPageUrl)
+                url = resource.url
+                fileName = resource.fileName
+                kind = resource.kind
+                mime = resource.mimeType
+                isAdaptiveManifest = kind == ResourceKind.PLAYLIST &&
+                    fileName.endsWith(".m3u8", ignoreCase = true)
+                require(isAdaptiveManifest) { "N站没有返回可下载的 HLS 视频流" }
+                persistRecord(
+                    fileName = fileName,
+                    sourceUrl = recordSourceUrl,
+                    kind = kind,
+                    mimeType = mime,
+                    state = "downloading",
+                    progress = -1,
+                    detail = "N站视频流已刷新，正在分析画质",
+                    documentUri = null
+                )
+            }
 
             if (isAdaptiveManifest) {
                 val result = media3AdaptiveProcessor.exportAdaptiveStream(
@@ -85,7 +125,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 }
                 persistRecord(
                     fileName = result.fileName,
-                    sourceUrl = url,
+                    sourceUrl = recordSourceUrl,
                     kind = kind,
                     mimeType = "video/mp4",
                     state = "completed",
@@ -129,7 +169,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
             createdDocument = destinationDocument
             persistRecord(
                 fileName = targetName,
-                sourceUrl = url,
+                sourceUrl = recordSourceUrl,
                 kind = kind,
                 mimeType = mimeType,
                 state = "downloading",
@@ -213,7 +253,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
 
             persistRecord(
                 fileName = targetName,
-                sourceUrl = url,
+                sourceUrl = recordSourceUrl,
                 kind = kind,
                 mimeType = responseMime,
                 state = "completed",
@@ -243,7 +283,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 val previous = downloadRepository.findById(id.toString())
                 persistRecord(
                     fileName = fileName,
-                    sourceUrl = url,
+                    sourceUrl = recordSourceUrl,
                     kind = kind,
                     mimeType = mime,
                     state = if (paused) "paused" else "cancelled",
@@ -256,7 +296,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
         } catch (error: Exception) {
             persistRecord(
                 fileName = fileName,
-                sourceUrl = url,
+                sourceUrl = recordSourceUrl,
                 kind = kind,
                 mimeType = mime,
                 state = "failed",
