@@ -1,14 +1,18 @@
 package com.sxsbsxs.filesniffing
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -154,6 +158,10 @@ private fun FileSniffingApp(sharedLink: String) {
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    var askedForNotificationPermission by rememberSaveable { mutableStateOf(false) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var pageUrl by rememberSaveable { mutableStateOf(sharedLink) }
@@ -209,6 +217,14 @@ private fun FileSniffingApp(sharedLink: String) {
         ?: "选择手机文件夹"
 
     val enqueueDownload: (SniffedResource, Boolean) -> Unit = { resource, showQueuedMessage ->
+        if (
+            Build.VERSION.SDK_INT >= 33 &&
+            !askedForNotificationPermission &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            askedForNotificationPermission = true
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         val folder = selectedFolderUri
         if (folder == null) {
             coroutineScope.launch { snackbarHostState.showSnackbar("请先选择保存文件夹") }
