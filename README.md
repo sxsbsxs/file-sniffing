@@ -15,6 +15,9 @@ An Android-first webpage resource sniffer and local media download manager.
 | Architecture | MVVM, Kotlin Flow, Hilt | ViewModels, reactive state, dependency injection |
 | Local data | Room, DataStore | Sniff history, download history and selected output folder |
 | Background | WorkManager, foreground worker notification | Persistent download jobs, progress, cancel and retry |
+| Filename policy | Java | Shared safe filename normalization for URL-derived and downloaded names |
+| Native inspection | C++17 + JNI | Identify downloaded byte signatures and reject HTML error pages saved as media |
+| Developer validation | Python 3 | Validate local HLS/DASH fixtures and regression-test the native signature detector |
 
 OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it is an older upstream library, so the rest of the app depends on the adapter contract rather than on its API directly.
 
@@ -34,6 +37,9 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] DataStore for the selected output folder.
 - [x] WorkManager foreground download jobs with notifications, progress updates, cancellation and retry.
 - [x] Restore task list from WorkManager and Room after reopening the app.
+- [x] Persist the original URL, Referer and SAF destination tree in Room so failed/cancelled jobs can be retried without relying on WorkInfo input data.
+- [x] Verify direct-download payload signatures through a C++17/JNI probe before reporting completion; HTML error pages are reported as failures.
+- [x] Validate HLS/DASH fixtures and native signature cases with the Python CI tool.
 
 ## Known limitations
 
@@ -59,6 +65,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 Open the project in Android Studio with JDK 17 and Android SDK 36, or run:
 
 ```bash
+python3 tools/validate_media_fixtures.py
 ./gradlew :app:assembleDebug
 ```
 
