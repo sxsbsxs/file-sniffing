@@ -23,7 +23,7 @@ object StorageModule {
             context,
             FileSniffDatabase::class.java,
             "file-sniffing.db"
-        ).build()
+        ).addMigrations(FileSniffDatabase.MIGRATION_1_2).build()
 
     @Provides
     fun provideDownloadRecordDao(database: FileSniffDatabase): DownloadRecordDao =
