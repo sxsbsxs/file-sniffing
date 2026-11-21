@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.9.3
+**Current app version:** 0.9.4
 
 ## Technology architecture
 
@@ -55,6 +55,10 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Verify direct-download payload signatures through a C++17/JNI probe before reporting completion; HTML error pages are reported as failures.
 - [x] Validate HLS/DASH fixtures, Java URL/MIME classification, YouTube diagnostic redaction and native ISO BMFF/file signatures with the Python CI tool.
 
+## YouTube extraction research
+
+See [the YouTube extraction research report](docs/YOUTUBE_EXTRACTION_RESEARCH.md) for the current yt-dlp/EJS/QuickJS/PO Token runtime comparison, licensing findings and staged integration plan. The current JSON parser is groundwork only: this change does not bundle or execute yt-dlp yet.
+
 ## Known limitations
 
 - This is a generic webpage sniffer, not a universal extractor for every site. Results are best-effort and depend on URLs exposed to WebView request callbacks, the DOM or the Performance API.
@@ -63,12 +67,12 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - The local file browser currently reads the selected SAF download directory only; it is not a full-device filesystem explorer and does not bypass Android storage permissions.
 - Media3 handles clear HLS/DASH streams that its supported extractors and muxer can decode. DRM/protected streams are not decrypted or bypassed. Some live, unusual, encrypted or malformed manifests may fail with a descriptive export error.
 - Adaptive exports use a temporary file in the app cache before copying to the SAF destination. Large exports therefore need sufficient temporary storage.
-- YouTube URL recognition validates video IDs from watch, youtu.be, shorts, live and embed URLs. This is URL validation only: YouTube diagnostics still classify visible WebView request callbacks and Performance API entries; they do not decrypt signed media URLs. The app still does not parse `youtubei/v1/player` response bodies, resolve signature / n transforms, execute EJS or acquire PO Tokens, so recognizing a video page does not yet mean its stream formats are downloadable. WebView callback coverage is incomplete by platform design; a zero count is not proof that YouTube sent no such request.
+- YouTube URL recognition validates video IDs from watch, youtu.be, shorts, live and embed URLs. A pure parser can now consume a future yt-dlp `-J` result and expose only actual non-DRM format metadata; it deliberately drops signed media URLs and request headers. This parser is not yet connected to a yt-dlp runtime or the download UI. YouTube diagnostics still classify visible WebView request callbacks and Performance API entries; they do not decrypt signed media URLs. The app still does not resolve signature / n transforms, execute EJS as part of a downloader, or acquire PO Tokens, so recognizing a video page does not yet mean its stream formats are downloadable. WebView callback coverage is incomplete by platform design; a zero count is not proof that YouTube sent no such request.
 - Only cookies already present in WebView CookieManager for the exact target URL are reused by OkHttp, OkDownload and Media3. Cookies scoped to another host, rejected third-party cookies, app-only tokens and non-cookie authorization schemes are not synthesized; authenticated resources may still return HTTP 401/403.
 - OkDownload upstream 1.0.7 is old. It is isolated behind an adapter and should be reconsidered if a maintained alternative or a safe local fork is adopted.
 - The adaptive chooser lists resolutions exposed by the current HLS/DASH manifest through Media3 track mapping. Live, encrypted, DRM-protected, malformed or otherwise unsupported manifests may not expose selectable tracks.
-- Pause/continue is available for ordinary HTTP/HTTPS downloads; reliable resumption depends on server byte-range support. Media3 adaptive exports cannot currently be paused and restart if cancelled.
-- A dedicated pause button is not yet exposed. Cancelling and retrying a direct HTTP/HTTPS task reuses its SAF URI and OkDownload breakpoint store where the server supports range requests. Adaptive Media3 exports currently restart on retry.
+- Pause/continue is available for ordinary HTTP/HTTPS downloads when the server supports byte ranges. HLS/DASH exports cache selected segments in a task-specific private Media3 cache; pausing and retrying can reuse completed segments, while final remux/export is repeated. A stream whose manifest or signed segment URLs expire may still need a fresh parse.
+- HLS/DASH pause and continue controls are exposed in the download center. Explicit cancellation discards the adaptive partial cache; a pause retains it. Real-device validation across multiple live/VOD HLS and DASH providers is still outstanding.
 
 ## Privacy and scope
 

@@ -5,6 +5,8 @@
 ```mermaid
 flowchart TD
     A[Compose URL Entry] --> B[SniffingViewModel]
+    X[Future yt-dlp runtime] -.-> X1[Actual -J format metadata parser]
+    X1 -.-> I
     B --> C[WebView]
     C --> D[shouldInterceptRequest]
     C --> E[Injected JavaScript]
@@ -42,6 +44,7 @@ flowchart TD
 - `presentation.downloads`: DataStore output-folder state and Room-backed download history.
 - `data.network`: OkDownload adapter, using the app's shared OkHttp configuration.
 - `data.media`: Media3 DownloadHelper track selection, persistent HLS/DASH segment cache, resumable segment download and Transformer export.
+- `data.extractor.YtDlpInfoJsonParser`: pure JSON boundary for future yt-dlp `-J` output. It extracts actual format metadata, excludes DRM formats from selectable lists, builds safe format selectors and intentionally never retains signed media URLs or request headers. This parser is not yet wired to a yt-dlp execution runtime or UI.
 - `data.local`: Room entities, DAOs and database.
 - `data.preferences`: DataStore preferences.
 - `data.repository`: repository interfaces and implementations.

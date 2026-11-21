@@ -1,5 +1,12 @@
 # Changelog
 
+## YouTube extraction research groundwork (post-0.9.4, not a released runtime)
+
+- Added a pure parser for actual yt-dlp `-J` JSON metadata. It exposes only formats reported by the extractor, separates muxed/video-only/audio-only tracks, filters DRM-marked formats, and can compose an explicit video+audio format selector.
+- The parser never retains signed media URLs or request headers, preventing short-lived URLs and authorization headers from leaking into UI state, Room history or logs.
+- Added JVM tests for actual format selection, video/audio pairing, DRM filtering, malformed/playlist payloads and URL/header redaction.
+- Added a research report comparing yt-dlp + EJS + JS runtimes + PO Token providers, Android packaging approaches, ABI/runtime constraints and third-party license risks. This is parser groundwork only: it does not bundle or execute yt-dlp yet.
+
 ## 0.9.4
 
 - Added persistent per-request Media3 segment caching for HLS/DASH exports. Selected segments are downloaded into a private app cache before remuxing; a paused or interrupted job can reuse already-completed segments when retried.

@@ -106,6 +106,7 @@ dependencies {
 
     // HTTP stack. OkDownload is isolated behind an adapter because upstream 1.0.7 is old.
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
+    implementation("com.google.code.gson:gson:2.13.2")
     implementation("com.liulishuo.okdownload:okdownload:1.0.7")
     implementation("com.liulishuo.okdownload:sqlite:1.0.7")
     implementation("com.liulishuo.okdownload:okhttp:1.0.7")
