@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0
+
+- Reused the original SAF document URI for direct-download retries so OkDownload can continue saved breakpoints.
+- Preserved partial document URIs in WorkManager progress and Room history.
+- Added legacy SharedPreferences-to-DataStore migration for the selected download folder.
+- Added explicit HLS/DASH MIME hints for extensionless adaptive manifest URLs.
+- Updated the task action label to distinguish continuing a breakpoint download from starting a fresh retry.
+
 ## 0.7.0
 
 - Aligned the toolchain to Kotlin 2.3.20, KSP 2.3.12, AGP 8.13.2 and Gradle 8.14.8.
