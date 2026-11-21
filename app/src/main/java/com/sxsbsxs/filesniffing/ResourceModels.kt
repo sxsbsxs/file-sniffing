@@ -58,11 +58,32 @@ object ResourceSniffer {
         val decodedName = runCatching {
             URLDecoder.decode(path, StandardCharsets.UTF_8.name())
         }.getOrDefault(path)
-        val fileName = decodedName
+        val inferredExtension = extension.ifBlank {
+            when {
+                mime?.contains("webp") == true -> "webp"
+                mime?.contains("png") == true -> "png"
+                mime?.contains("jpeg") == true -> "jpg"
+                mime?.contains("gif") == true -> "gif"
+                mime?.contains("mp4") == true -> "mp4"
+                mime?.contains("webm") == true -> "webm"
+                mime?.contains("mpegurl") == true -> "m3u8"
+                mime?.contains("dash+xml") == true -> "mpd"
+                kind == ResourceKind.AUDIO -> "mp3"
+                kind == ResourceKind.IMAGE -> "jpg"
+                kind == ResourceKind.VIDEO -> "mp4"
+                else -> "bin"
+            }
+        }
+        val baseName = decodedName
             .substringAfterLast('/')
             .replace(Regex("[\\\\/:*?\"<>|]"), "_")
             .takeIf { it.isNotBlank() && it != "." }
-            ?: "media_resource.$extension"
+            ?: "media_resource"
+        val fileName = if (baseName.substringAfterLast('.', "").isBlank()) {
+            "$baseName.$inferredExtension"
+        } else {
+            baseName
+        }
 
         return SniffedResource(
             url = parsed.toString(),
