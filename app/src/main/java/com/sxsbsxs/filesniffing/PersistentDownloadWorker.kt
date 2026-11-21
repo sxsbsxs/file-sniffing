@@ -108,12 +108,13 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 tree,
                 DocumentsContract.getTreeDocumentId(tree)
             )
-            createdDocument = DocumentsContract.createDocument(
+            val destinationDocument = DocumentsContract.createDocument(
                 applicationContext.contentResolver,
                 parent,
                 mimeType,
                 targetName
             ) ?: error("无法在所选文件夹创建文件")
+            createdDocument = destinationDocument
 
             val headers = buildMap<String, List<String>> {
                 put("User-Agent", listOf(android.webkit.WebSettings.getDefaultUserAgent(applicationContext)))
@@ -123,7 +124,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
             publishProgressAsync(-1, "正在下载（OkDownload）", targetName)
             okDownloadTransferEngine.downloadToDocument(
                 url = url,
-                destinationDocument = createdDocument,
+                destinationDocument = destinationDocument,
                 headers = headers
             ) { progress, detail ->
                 publishProgressAsync(progress, detail, targetName)
