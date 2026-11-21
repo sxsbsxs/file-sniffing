@@ -44,7 +44,11 @@ class DownloadCenterViewModel @Inject constructor(
         viewModelScope.launch { preferences.setSelectedDownloadFolder(uri) }
     }
 
-    fun persistTask(task: DownloadTaskUi, resource: SniffedResource? = null) {
+    fun persistTask(
+        task: DownloadTaskUi,
+        resource: SniffedResource? = null,
+        destinationTreeUri: String? = null
+    ) {
         viewModelScope.launch {
             val previous = repository.findById(task.id)
             repository.save(
@@ -59,9 +63,17 @@ class DownloadCenterViewModel @Inject constructor(
                     detail = task.detail,
                     destinationUri = task.fileUri ?: previous?.destinationUri,
                     createdAtMillis = previous?.createdAtMillis ?: System.currentTimeMillis(),
-                    updatedAtMillis = System.currentTimeMillis()
+                    updatedAtMillis = System.currentTimeMillis(),
+                    referer = resource?.sourcePage ?: previous?.referer.orEmpty(),
+                    destinationTreeUri = destinationTreeUri ?: previous?.destinationTreeUri
                 )
             )
+        }
+    }
+
+    fun loadRetryRecord(id: String, onResult: (DownloadRecordEntity?) -> Unit) {
+        viewModelScope.launch {
+            onResult(repository.findById(id))
         }
     }
 
