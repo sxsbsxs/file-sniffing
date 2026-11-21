@@ -19,6 +19,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 class PersistentDownloadWorker(
@@ -115,7 +117,7 @@ class PersistentDownloadWorker(
                 BufferedOutputStream(output).use { sink ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
-                        ensureActive()
+                        currentCoroutineContext().ensureActive()
                         val count = source.read(buffer)
                         if (count < 0) break
                         sink.write(buffer, 0, count)
