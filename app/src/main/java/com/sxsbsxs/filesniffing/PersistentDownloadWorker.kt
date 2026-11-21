@@ -127,6 +127,7 @@ class PersistentDownloadWorker(
 
             val totalBytes = connection.contentLengthLong
             var copied = 0L
+            var lastReportedProgress = -2
             publishProgress(if (totalBytes > 0L) 0 else -1, "正在下载", targetName)
             BufferedInputStream(connection.inputStream).use { source ->
                 val output = applicationContext.contentResolver.openOutputStream(createdDocument, "w")
@@ -141,11 +142,14 @@ class PersistentDownloadWorker(
                         copied += count
                         if (totalBytes > 0L) {
                             val progress = ((copied * 100.0) / totalBytes).toInt().coerceIn(0, 99)
-                            publishProgress(
-                                progress,
-                                "${formatBytes(copied)} / ${formatBytes(totalBytes)}",
-                                targetName
-                            )
+                            if (progress != lastReportedProgress) {
+                                lastReportedProgress = progress
+                                publishProgress(
+                                    progress,
+                                    "${formatBytes(copied)} / ${formatBytes(totalBytes)}",
+                                    targetName
+                                )
+                            }
                         } else if (copied % (512 * 1024L) < buffer.size) {
                             publishProgress(-1, "已下载 ${formatBytes(copied)}", targetName)
                         }
