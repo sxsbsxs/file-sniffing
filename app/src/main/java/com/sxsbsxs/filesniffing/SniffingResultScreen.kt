@@ -70,6 +70,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sxsbsxs.filesniffing.data.media.AdaptiveQualityOption
 import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
+import com.sxsbsxs.filesniffing.data.extractor.YouTubePlayerResponseParser
+import com.sxsbsxs.filesniffing.data.extractor.YouTubePlayerResponseSummary
 
 private val RESOURCE_FILTER_GROUPS = listOf(
     "视频" to setOf(ResourceKind.VIDEO, ResourceKind.PLAYLIST),
@@ -386,6 +388,29 @@ fun SniffingResultScreen(
                                             onLoadingChange(false)
                                             runCatching {
                                                 view?.evaluateJavascript(RESOURCE_CAPTURE_SCRIPT, null)
+                                            }
+                                            val isYouTubeWatchPage =
+                                                YouTubeUrlParser.extractVideoId(url.orEmpty()) != null ||
+                                                    YouTubeUrlParser.extractVideoId(pageUrl) != null
+                                            if (isYouTubeWatchPage) {
+                                                runCatching {
+                                                    view?.evaluateJavascript(YOUTUBE_PLAYER_RESPONSE_SUMMARY_SCRIPT) { encoded ->
+                                                        val summaryJson = runCatching {
+                                                            val value = com.google.gson.JsonParser.parseString(encoded)
+                                                            if (value.isJsonPrimitive && value.asJsonPrimitive.isString) {
+                                                                value.asString
+                                                            } else {
+                                                                null
+                                                            }
+                                                        }.getOrNull()
+                                                        val summary = summaryJson?.let(YouTubePlayerResponseParser::parse)
+                                                        if (summary != null) {
+                                                            postYouTubeDiagnosticUpdate {
+                                                                it.copy(playerResponseSummary = summary)
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
 
@@ -824,7 +849,18 @@ fun SniffingResultScreen(
                     Text("网络错误：" + youtubeDiagnostics.networkErrors + " · 媒体域错误：" + youtubeDiagnostics.googleVideoHttpErrors)
                     Text("观察到 Cookie 头：" + (if (youtubeDiagnostics.cookieHeaderObserved) "是" else "未见"))
                     Text("观察到 Authorization 头：" + (if (youtubeDiagnostics.authorizationHeaderObserved) "是" else "未见"))
-                    Text("请求回调只记录类别、计数和状态，不保存 URL 参数、Cookie 或 Token。",
+                    youtubeDiagnostics.playerResponseSummary?.let { player ->
+                        Divider()
+                        Text("播放器状态：${player.status}")
+                        Text(player.diagnosis)
+                        player.reason?.let { reason ->
+                            Text("站点原因：$reason", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(
+                            "普通格式：${player.formatCount} · 自适应格式：${player.adaptiveFormatCount} · SABR：${if (player.hasSabrStream) "有" else "无"}"
+                        )
+                    }
+                    Text("诊断只保存播放器状态、格式数量和简短原因，不保存媒体 URL、Cookie 或 Token。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
@@ -946,7 +982,8 @@ private data class YouTubeDiagnosticState(
     val authorizationHeaderObserved: Boolean = false,
     val lastHttpStatus: Int? = null,
     val lastNetworkErrorCode: Int? = null,
-    val lastInitiatorType: String = ""
+    val lastInitiatorType: String = "",
+    val playerResponseSummary: YouTubePlayerResponseSummary? = null
 ) {
     fun recordRequest(
         observation: YouTubeRequestDiagnostics.Observation
@@ -1021,6 +1058,36 @@ private class ResourceBridge(
         }
     }
 }
+
+private const val YOUTUBE_PLAYER_RESPONSE_SUMMARY_SCRIPT = """
+(function() {
+  try {
+    var response = window.ytInitialPlayerResponse;
+    if (!response || typeof response !== 'object') return null;
+    var playability = response.playabilityStatus || {};
+    var details = response.videoDetails || {};
+    var streaming = response.streamingData || {};
+    return JSON.stringify({
+      playabilityStatus: {
+        status: String(playability.status || 'UNKNOWN'),
+        reason: typeof playability.reason === 'string' ? playability.reason.slice(0, 240) : null
+      },
+      videoDetails: {
+        videoId: typeof details.videoId === 'string' ? details.videoId : null,
+        title: typeof details.title === 'string' ? details.title.slice(0, 160) : null
+      },
+      streamingData: {
+        formats: Array.isArray(streaming.formats) ? streaming.formats.length : 0,
+        adaptiveFormats: Array.isArray(streaming.adaptiveFormats) ? streaming.adaptiveFormats.length : 0,
+        serverAbrStreamingUrlAvailable:
+          typeof streaming.serverAbrStreamingUrl === 'string' && streaming.serverAbrStreamingUrl.length > 0
+      }
+    });
+  } catch (error) {
+    return null;
+  }
+})()
+"""
 
 private const val RESOURCE_CAPTURE_SCRIPT = """
 (function() {
