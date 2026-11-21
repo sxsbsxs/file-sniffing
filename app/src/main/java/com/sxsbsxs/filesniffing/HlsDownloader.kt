@@ -72,9 +72,9 @@ object HlsDownloader {
                 }
             }
             val detail = if (playlist.isLiveSnapshot) {
-                "已保存当前直播清单中的 playlist.segments.size 个分段（快照）"
+                "已保存当前直播清单中的 ${playlist.segments.size} 个分段（快照）"
             } else {
-                "已合并 playlist.segments.size 个分段"
+                "已合并 ${playlist.segments.size} 个分段"
             }
             onProgress(100, detail)
             return HlsDownloadResult(document, outputName)
