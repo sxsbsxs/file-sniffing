@@ -130,7 +130,7 @@ fun SniffingResultScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(190.dp)
-                .background(Color.White),
+                .background(MaterialTheme.colorScheme.surface),
             factory = { context ->
                 WebView(context).apply {
                     webViewHolder.view = this
@@ -213,7 +213,7 @@ fun SniffingResultScreen(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .background(Color(0xFFF6F7F9))
+                .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 18.dp)
         ) {
             Spacer(Modifier.height(12.dp))
@@ -272,7 +272,7 @@ fun SniffingResultScreen(
                     modifier = Modifier.fillMaxWidth().height(44.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.onSurface,
+                        containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = Color.White
                     )
                 ) {
@@ -352,8 +352,8 @@ private fun ResourceRow(
         else -> Icons.Rounded.Download
     }
     Surface(
-        color = Color.White,
-        shape = RoundedCornerShape(17.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
