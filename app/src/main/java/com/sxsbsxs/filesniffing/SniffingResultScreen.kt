@@ -186,7 +186,321 @@ fun SniffingResultScreen(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            // Detailed request diagnostics are available from the toolbar info action.
+            if (youtubeDiagnostics.isYouTubePage) {
+                IconButton(onClick = { showDiagnostics = true }) {
+                    Icon(
+                        Icons.Rounded.Info,
+                        contentDescription = "网页诊断",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        if (isLoading) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        }
+
+        if (rendererCrashed) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(184.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "网页内核异常退出",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "页面已安全停止。点击刷新可重新创建网页内核。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            pageError = null
+                            rendererCrashed = false
+                            webViewGeneration += 1
+                            onLoadingChange(true)
+                        }
+                    ) { Text("重新加载") }
+                }
+            }
+        } else {
+            key(webViewGeneration) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 10.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    AndroidView(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(156.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        factory = { context ->
+                            WebView(context).apply {
+                                webViewHolder.view = this
+                                try {
+                                    settings.javaScriptEnabled = true
+                                    settings.domStorageEnabled = true
+                                    settings.allowFileAccess = false
+                                    settings.allowContentAccess = false
+                                    settings.javaScriptCanOpenWindowsAutomatically = false
+                                    settings.setSupportMultipleWindows(false)
+                                    settings.safeBrowsingEnabled = true
+                                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                    addJavascriptInterface(
+                                        ResourceBridge(
+                                            onFound = onResourceFound,
+                                            sourcePage = pageUrl,
+                                            mainHandler = diagnosticHandler,
+                                            onPerformanceEntry = ::observePerformanceResource
+                                        ),
+                                        "FileSniffBridge"
+                                    )
+                                    webChromeClient = object : WebChromeClient() {
+                                        override fun onReceivedTitle(view: WebView?, title: String?) {
+                                            pageTitle = title.orEmpty()
+                                        }
+
+                                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                            if (newProgress >= 100) onLoadingChange(false)
+                                        }
+                                    }
+                                    webViewClient = object : WebViewClient() {
+                                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                            pageError = null
+                                            if (YouTubeRequestDiagnostics.isYouTubePageUrl(url.orEmpty())) {
+                                                postYouTubeDiagnosticUpdate { it.copy(isYouTubePage = true) }
+                                            }
+                                            onLoadingChange(true)
+                                        }
+
+                                        override fun onPageFinished(view: WebView?, url: String?) {
+                                            onLoadingChange(false)
+                                            runCatching {
+                                                view?.evaluateJavascript(RESOURCE_CAPTURE_SCRIPT, null)
+                                            }
+                                        }
+
+                                        override fun shouldInterceptRequest(
+                                            view: WebView?,
+                                            request: WebResourceRequest?
+                                        ): android.webkit.WebResourceResponse? {
+                                            // Called on a worker thread: never call WebView methods from this callback.
+                                            val requested = request?.url?.toString().orEmpty()
+                                            if (request != null) {
+                                                observeYouTubeRequest(requested, request.requestHeaders)
+                                            }
+                                            val found = runCatching {
+                                                ResourceSniffer.detect(
+                                                    rawUrl = requested,
+                                                    sourcePage = pageUrl
+                                                )
+                                            }.getOrNull()
+                                            if (found != null) {
+                                                diagnosticHandler.post { onResourceFound(found) }
+                                            }
+                                            return null
+                                        }
+
+                                        override fun onReceivedError(
+                                            view: WebView?,
+                                            request: WebResourceRequest?,
+                                            error: android.webkit.WebResourceError?
+                                        ) {
+                                            if (request != null) {
+                                                val observation = YouTubeRequestDiagnostics.inspect(
+                                                    request.url.toString(),
+                                                    request.requestHeaders
+                                                )
+                                                if (observation.isYouTubeRelated) {
+                                                    postYouTubeDiagnosticUpdate {
+                                                        it.recordNetworkError(observation, error?.errorCode ?: 0)
+                                                    }
+                                                }
+                                            }
+                                            if (request?.isForMainFrame == true) {
+                                                pageError = error?.description
+                                                    ?.toString()
+                                                    ?.take(160)
+                                                    ?.takeIf { it.isNotBlank() }
+                                                    ?: "网页加载失败，请检查网络或链接"
+                                                onLoadingChange(false)
+                                            }
+                                        }
+
+                                        override fun onReceivedHttpError(
+                                            view: WebView?,
+                                            request: WebResourceRequest?,
+                                            errorResponse: android.webkit.WebResourceResponse?
+                                        ) {
+                                            if (request != null) {
+                                                val observation = YouTubeRequestDiagnostics.inspect(
+                                                    request.url.toString(),
+                                                    request.requestHeaders
+                                                )
+                                                if (observation.isYouTubeRelated) {
+                                                    val status = errorResponse?.statusCode ?: 0
+                                                    postYouTubeDiagnosticUpdate {
+                                                        it.recordHttpError(observation, status)
+                                                    }
+                                                }
+                                            }
+                                            if (request?.isForMainFrame == true) {
+                                                val statusCode = errorResponse?.statusCode
+                                                val reason = errorResponse?.reasonPhrase.orEmpty()
+                                                pageError = if (statusCode != null) {
+                                                    "网页返回 HTTP $statusCode" +
+                                                        reason.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+                                                } else {
+                                                    "网页响应异常"
+                                                }
+                                                onLoadingChange(false)
+                                            }
+                                        }
+
+                                        override fun onReceivedSslError(
+                                            view: WebView?,
+                                            handler: android.webkit.SslErrorHandler?,
+                                            error: android.net.http.SslError?
+                                        ) {
+                                            handler?.cancel()
+                                            pageError = "网页证书验证失败，出于安全考虑已停止加载"
+                                            onLoadingChange(false)
+                                        }
+
+                                        override fun onRenderProcessGone(
+                                            view: WebView?,
+                                            detail: android.webkit.RenderProcessGoneDetail?
+                                        ): Boolean {
+                                            pageError = if (detail?.didCrash() == true) {
+                                                "网页内核崩溃，应用已隔离该页面"
+                                            } else {
+                                                "系统回收了网页内核，应用已安全停止该页面"
+                                            }
+                                            onLoadingChange(false)
+                                            webViewHolder.view = null
+                                            runCatching { view?.destroy() }
+                                            rendererCrashed = true
+                                            return true
+                                        }
+                                    }
+                                    loadUrl(pageUrl)
+                                } catch (error: Exception) {
+                                    pageError = error.message
+                                        ?.take(140)
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: "无法创建网页预览，请检查系统 WebView"
+                                    onLoadingChange(false)
+                                }
+                            }
+                        },
+                        update = { view ->
+                            if (!rendererCrashed) {
+                                runCatching {
+                                    if (view.url != pageUrl) view.loadUrl(pageUrl)
+                                }.onFailure {
+                                    pageError = "网页预览更新失败，请点击刷新重试"
+                                    onLoadingChange(false)
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        if (pageError != null) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp)
+                    .padding(top = 10.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "网页加载失败",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = pageError.orEmpty(),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 12.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "检查网络后，点击右上角刷新重试",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+
+        if (!inspectionError.isNullOrBlank()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 8.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        "资源记录暂不可用",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        inspectionError,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 11.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        // Detailed request diagnostics are available from the toolbar info action.
 
         DisposableEffect(Unit) {
             onDispose {
@@ -316,7 +630,7 @@ fun SniffingResultScreen(
             }
         }
     }
-        if (showDiagnostics && youtubeDiagnostics.isYouTubePage) {
+    if (showDiagnostics && youtubeDiagnostics.isYouTubePage) {
         AlertDialog(
             onDismissRequest = { showDiagnostics = false },
             confirmButton = {
@@ -332,11 +646,8 @@ fun SniffingResultScreen(
                     Text("网络错误：" + youtubeDiagnostics.networkErrors + " · 媒体域错误：" + youtubeDiagnostics.googleVideoHttpErrors)
                     Text("观察到 Cookie 头：" + (if (youtubeDiagnostics.cookieHeaderObserved) "是" else "未见"))
                     Text("观察到 Authorization 头：" + (if (youtubeDiagnostics.authorizationHeaderObserved) "是" else "未见"))
-                    Text(
-                        "请求回调只记录类别、计数和状态，不保存 URL 参数、Cookie 或 Token。",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
+                    Text("请求回调只记录类别、计数和状态，不保存 URL 参数、Cookie 或 Token。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
         )
@@ -359,43 +670,23 @@ private fun ResourceRow(
     }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 11.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (selectionMode) {
-                Checkbox(
-                    checked = selected,
-                    onCheckedChange = onSelectionChange
-                )
+                Checkbox(checked = selected, onCheckedChange = onSelectionChange)
             }
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
-            )
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(13.dp))
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Text(
-                    item.fileName,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    item.kind.label + " · " + (item.mimeType ?: item.url.substringBefore('?').takeLast(48)),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(item.fileName, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.kind.label + " · " + (item.mimeType ?: item.url.substringBefore('?').takeLast(48)),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (item.kind == ResourceKind.PLAYLIST || item.kind == ResourceKind.SEGMENT) {
                     Text(
                         when {
@@ -405,26 +696,15 @@ private fun ResourceRow(
                             else -> "媒体清单"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                 }
             }
             IconButton(onClick = onDownload, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    Icons.Rounded.Download,
-                    contentDescription = "下载资源",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Rounded.Download, contentDescription = "下载资源", tint = MaterialTheme.colorScheme.primary)
             }
         }
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant)
-        )
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
     }
 }
 
