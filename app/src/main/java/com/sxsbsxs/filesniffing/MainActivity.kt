@@ -63,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -97,12 +98,30 @@ private val Accent = Color(0xFF4B66E8)
 private val SoftAccent = Color(0xFFEEF1FF)
 
 class MainActivity : ComponentActivity() {
+    private val sharedLink = mutableStateOf("")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        sharedLink.value = extractSharedLink(intent)
         setContent {
             FileSniffingTheme {
-                FileSniffingApp()
+                FileSniffingApp(sharedLink = sharedLink.value)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        sharedLink.value = extractSharedLink(intent)
+    }
+
+    private fun extractSharedLink(source: Intent?): String {
+        if (source == null) return ""
+        return when (source.action) {
+            Intent.ACTION_SEND -> source.getStringExtra(Intent.EXTRA_TEXT).orEmpty().trim()
+            Intent.ACTION_VIEW -> source.dataString.orEmpty().trim()
+            else -> ""
         }
     }
 }
@@ -123,14 +142,17 @@ private fun FileSniffingTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun FileSniffingApp() {
+private fun FileSniffingApp(sharedLink: String) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    var pageUrl by rememberSaveable { mutableStateOf("") }
+    var pageUrl by rememberSaveable { mutableStateOf(sharedLink) }
+    LaunchedEffect(sharedLink) {
+        if (sharedLink.isNotBlank()) pageUrl = sharedLink
+    }
     var activeInspectionUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var isPageLoading by rememberSaveable { mutableStateOf(false) }
     val sniffedResources = remember { mutableStateListOf<SniffedResource>() }
