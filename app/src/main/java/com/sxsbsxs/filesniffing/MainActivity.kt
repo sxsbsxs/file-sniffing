@@ -607,6 +607,60 @@ private fun UrlInputCard(
 }
 
 @Composable
+private fun FolderPickerCard(folderLabel: String, hasFolder: Boolean, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Rounded.FolderOpen,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    if (hasFolder) "已选择文件夹" else "选择保存文件夹",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    folderLabel,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                "更改",
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
 private fun DownloadsScreen(
     folderLabel: String,
     hasFolder: Boolean,
@@ -617,52 +671,119 @@ private fun DownloadsScreen(
     onCancelTask: (DownloadTaskUi) -> Unit,
     onOpenTask: (DownloadTaskUi) -> Unit
 ) {
+    val activeCount = tasks.count { it.state == "downloading" || it.state == "queued" }
+    val completedCount = tasks.count { it.state == "completed" }
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(top = 22.dp, bottom = 12.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp)
+            .padding(top = 24.dp, bottom = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("下载", color = MaterialTheme.colorScheme.onSurface, fontSize = 27.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp)
-                Spacer(Modifier.height(5.dp))
-                Text("管理正在进行和已保存的文件", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    "下载",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.6).sp
+                )
+                Text(
+                    "管理正在进行和已保存的文件",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp
+                )
             }
-            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {
-                Text("${tasks.size}", modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(13.dp)
+            ) {
+                Text(
+                    "${tasks.size} 项",
+                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
-        Spacer(Modifier.height(20.dp))
-        FolderPickerCard(folderLabel = folderLabel, hasFolder = hasFolder, onClick = onChooseFolder)
+
+        Spacer(Modifier.height(21.dp))
+        FolderPickerCard(folderLabel, hasFolder, onChooseFolder)
         Spacer(Modifier.height(22.dp))
+
         if (tasks.isEmpty()) {
             Box(
-                modifier = Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.surface).padding(horizontal = 24.dp, vertical = 36.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 24.dp, vertical = 34.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Rounded.Download, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f), modifier = Modifier.size(34.dp))
-                    Spacer(Modifier.height(16.dp))
-                    Text("暂无下载任务", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = CircleShape
+                    ) {
+                        Icon(
+                            Icons.Rounded.Download,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(18.dp).size(32.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(17.dp))
+                    Text(
+                        "暂无下载任务",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                     Spacer(Modifier.height(7.dp))
-                    Text("嗅探并下载资源后，任务会显示在这里", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(16.dp))
-                    TextButton(onClick = onBackToSniff) { Text("去嗅探资源", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
+                    Text(
+                        "嗅探并下载资源后，任务会显示在这里",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(17.dp))
+                    TextButton(onClick = onBackToSniff) {
+                        Text(
+                            "去嗅探资源",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         } else {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("下载任务", color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "下载任务",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Spacer(Modifier.weight(1f))
-                Text("共 ${tasks.size} 项", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(
+                    "进行中 $activeCount · 已完成 $completedCount",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(9.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(tasks, key = { it.id }) { task ->
                     DownloadTaskCard(
-                        task,
+                        task = task,
                         onOpen = { onOpenTask(task) },
                         onRetry = { onRetryTask(task) },
                         onCancel = { onCancelTask(task) }
@@ -682,30 +803,50 @@ private fun DownloadTaskCard(
 ) {
     val finished = task.state == "completed"
     val failed = task.state == "failed"
+    val statusLabel = when {
+        finished -> "已完成"
+        failed -> "下载失败"
+        task.state == "cancelled" -> "已取消"
+        task.state == "downloading" -> "正在下载"
+        else -> "等待下载"
+    }
+    val statusContainer = when {
+        failed -> MaterialTheme.colorScheme.errorContainer
+        finished -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val statusContent = when {
+        failed -> MaterialTheme.colorScheme.onErrorContainer
+        finished -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(17.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(15.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Download,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(19.dp)
-                    )
+                    Box(modifier = Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.Download,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.width(11.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Spacer(Modifier.width(12.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
                     Text(
                         text = task.fileName,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -714,31 +855,32 @@ private fun DownloadTaskCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = when {
-                            finished -> "已完成"
-                            failed -> "下载失败"
-                            task.state == "cancelled" -> "已取消"
-                            task.state == "downloading" -> "正在下载"
-                            else -> "等待下载"
-                        },
-                        color = when {
-                            finished -> MaterialTheme.colorScheme.secondary
-                            failed -> MaterialTheme.colorScheme.error
-                            task.state == "cancelled" -> MaterialTheme.colorScheme.onSurfaceVariant
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        fontSize = 11.sp
-                    )
+                    Surface(color = statusContainer, shape = RoundedCornerShape(8.dp)) {
+                        Text(
+                            statusLabel,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = statusContent,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    text = if (finished) "100%" else if (task.state == "downloading" && task.progress >= 0) "${task.progress}%" else "—",
+                    text = if (finished) {
+                        "100%"
+                    } else if (task.state == "downloading" && task.progress >= 0) {
+                        "${task.progress.coerceIn(0, 100)}%"
+                    } else {
+                        "—"
+                    },
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+
+            Spacer(Modifier.height(15.dp))
             if (task.progress < 0 && task.state == "downloading") {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
@@ -747,41 +889,53 @@ private fun DownloadTaskCard(
                 )
             } else {
                 LinearProgressIndicator(
-                    progress = task.progress.coerceAtLeast(0) / 100f,
+                    progress = task.progress.coerceIn(0, 100) / 100f,
                     modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
                     color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             }
-            Spacer(modifier = Modifier.height(7.dp))
-            Text(
-                text = task.detail,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            when {
-                finished && task.fileUri != null -> {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    TextButton(onClick = onOpen) {
-                        Text("打开文件", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+
+            Spacer(Modifier.height(9.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = task.detail,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                when {
+                    finished && task.fileUri != null -> {
+                        TextButton(onClick = onOpen) {
+                            Text(
+                                "打开文件",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
-                }
-                failed || task.state == "cancelled" -> {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    TextButton(onClick = onRetry) {
-                        Text(
-                            text = if (task.fileUri != null) "继续断点下载" else "重新下载",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                    failed || task.state == "cancelled" -> {
+                        TextButton(onClick = onRetry) {
+                            Text(
+                                if (task.fileUri != null) "继续下载" else "重新下载",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
-                }
-                task.state == "downloading" || task.state == "queued" -> {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    TextButton(onClick = onCancel) {
-                        Text("取消任务", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                    task.state == "downloading" || task.state == "queued" -> {
+                        TextButton(onClick = onCancel) {
+                            Text(
+                                "取消任务",
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             }
