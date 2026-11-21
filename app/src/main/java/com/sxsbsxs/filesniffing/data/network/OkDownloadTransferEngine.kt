@@ -22,6 +22,36 @@ data class DownloadTransferProgress(
     val speedBytesPerSecond: Long
 )
 
+data class DownloadTransferResult(
+    val responseHeaders: Map<String, List<String>>,
+    val downloadedBytes: Long,
+    val totalBytes: Long
+)
+
+private fun updateTotalFromHeaders(
+    responseCode: Int,
+    headers: Map<String, List<String>>,
+    totalBytes: AtomicLong
+) {
+    fun header(name: String): String? = headers.entries
+        .firstOrNull { it.key.equals(name, ignoreCase = true) }
+        ?.value?.firstOrNull()
+    val contentRange = header("Content-Range")
+    if (responseCode == 206 && !contentRange.isNullOrBlank()) {
+        val total = contentRange.substringAfterLast('/', "").toLongOrNull()
+        if (total != null && total > 0L) {
+            totalBytes.set(total)
+            return
+        }
+    }
+    // Content-Length on a 206 response is only the current range length, not
+    // the complete resource size. Only use it for a full 200 response.
+    if (responseCode == 200) {
+        val length = header("Content-Length")?.toLongOrNull()
+        if (length != null && length > 0L) totalBytes.set(length)
+    }
+}
+
 @Singleton
 class OkDownloadTransferEngine @Inject constructor(
     private val initializedEngine: OkDownload
@@ -32,12 +62,13 @@ class OkDownloadTransferEngine @Inject constructor(
         destinationDocument: Uri,
         headers: Map<String, List<String>>,
         onProgress: (DownloadTransferProgress) -> Unit
-    ) {
-        suspendCancellableCoroutine { continuation ->
+    ): DownloadTransferResult {
+        return suspendCancellableCoroutine { continuation ->
             val receivedBytes = AtomicLong(0L)
             val totalBytes = AtomicLong(-1L)
             val lastReportedBytes = AtomicLong(0L)
             val lastReportedAtNanos = AtomicLong(System.nanoTime())
+            val latestResponseHeaders = java.util.concurrent.atomic.AtomicReference<Map<String, List<String>>>(emptyMap())
 
             fun reportProgress(current: Long, total: Long) {
                 val now = System.nanoTime()
@@ -90,16 +121,8 @@ class OkDownloadTransferEngine @Inject constructor(
                     responseCode: Int,
                     responseHeaderFields: Map<String, List<String>>
                 ) {
-                    if (responseCode !in 200..299) {
-                        reportProgress(receivedBytes.get(), totalBytes.get())
-
-                    }
-                    val length = responseHeaderFields.entries
-                        .firstOrNull { it.key.equals("Content-Length", ignoreCase = true) }
-                        ?.value
-                        ?.firstOrNull()
-                        ?.toLongOrNull()
-                    if (length != null && length > 0L) totalBytes.set(length)
+                    latestResponseHeaders.set(responseHeaderFields)
+                    updateTotalFromHeaders(responseCode, responseHeaderFields, totalBytes)
                 }
 
                 override fun downloadFromBeginning(
@@ -136,9 +159,8 @@ class OkDownloadTransferEngine @Inject constructor(
                     responseCode: Int,
                     responseHeaderFields: Map<String, List<String>>
                 ) {
-                    if (responseCode !in 200..299) {
-                        reportProgress(receivedBytes.get(), totalBytes.get())
-                    }
+                    if (responseHeaderFields.isNotEmpty()) latestResponseHeaders.set(responseHeaderFields)
+                    updateTotalFromHeaders(responseCode, responseHeaderFields, totalBytes)
                 }
 
                 override fun fetchStart(task: DownloadTask, blockIndex: Int, contentLength: Long) {
@@ -161,7 +183,13 @@ class OkDownloadTransferEngine @Inject constructor(
                 override fun taskEnd(task: DownloadTask, cause: EndCause, realCause: Exception?) {
                     if (!continuation.isActive) return
                     when (cause) {
-                        EndCause.COMPLETED -> continuation.resume(Unit)
+                        EndCause.COMPLETED -> continuation.resume(
+                            DownloadTransferResult(
+                                responseHeaders = latestResponseHeaders.get(),
+                                downloadedBytes = receivedBytes.get(),
+                                totalBytes = totalBytes.get()
+                            )
+                        )
                         EndCause.CANCELED -> continuation.resumeWithException(
                             kotlinx.coroutines.CancellationException("下载已取消")
                         )

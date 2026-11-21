@@ -104,7 +104,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 "只支持 HTTP 或 HTTPS 资源"
             }
             val mimeType = mime ?: defaultMimeType(kind, fileName)
-            val targetName = ensureExtension(fileName, mimeType, kind)
+            var targetName = ensureExtension(fileName, mimeType, kind)
             val parent = DocumentsContract.buildDocumentUriUsingTree(
                 tree,
                 DocumentsContract.getTreeDocumentId(tree)
@@ -118,7 +118,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                         candidate
                     }.getOrNull()
                 }
-            val destinationDocument = reusableDocument ?: DocumentsContract.createDocument(
+            var destinationDocument = reusableDocument ?: DocumentsContract.createDocument(
                 applicationContext.contentResolver,
                 parent,
                 mimeType,
@@ -147,7 +147,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 targetName,
                 destinationDocument.toString()
             )
-            okDownloadTransferEngine.downloadToDocument(
+            val transferResult = okDownloadTransferEngine.downloadToDocument(
                 url = url,
                 destinationDocument = destinationDocument,
                 headers = headers
@@ -162,6 +162,34 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     totalBytes = snapshot.totalBytes,
                     speedBytesPerSecond = snapshot.speedBytesPerSecond
                 )
+            }
+
+            val responseHeaders = transferResult.responseHeaders
+            fun responseHeader(name: String): String? = responseHeaders.entries
+                .firstOrNull { it.key.equals(name, ignoreCase = true) }
+                ?.value?.firstOrNull()
+            val responseMime = responseHeader("Content-Type")
+                ?.substringBefore(';')
+                ?.trim()
+                ?.takeIf { it.contains('/') }
+                ?: mimeType
+            val serverFileName = parseContentDisposition(responseHeader("Content-Disposition"))
+            if (!serverFileName.isNullOrBlank()) {
+                val finalName = ensureExtension(serverFileName, responseMime, kind)
+                if (finalName != targetName) {
+                    val renamed = runCatching {
+                        DocumentsContract.renameDocument(
+                            applicationContext.contentResolver,
+                            destinationDocument,
+                            finalName
+                        )
+                    }.getOrNull()
+                    if (renamed != null) {
+                        destinationDocument = renamed
+                        createdDocument = renamed
+                    }
+                    targetName = finalName
+                }
             }
 
             val prefix = applicationContext.contentResolver
@@ -185,7 +213,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 fileName = targetName,
                 sourceUrl = url,
                 kind = kind,
-                mimeType = mimeType,
+                mimeType = responseMime,
                 state = "completed",
                 progress = 100,
                 detail = completedDetail,
