@@ -93,17 +93,24 @@ fun SniffingResultScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 12.dp, vertical = 9.dp),
+                .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Rounded.ArrowBack, contentDescription = "返回", tint = MaterialTheme.colorScheme.onSurface)
+                Icon(
+                    Icons.Rounded.ArrowBack,
+                    contentDescription = "返回",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
             }
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(
                     text = pageTitle.ifBlank { "正在分析网页" },
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -111,92 +118,119 @@ fun SniffingResultScreen(
                 Text(
                     text = pageUrl,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            IconButton(onClick = {
-                onLoadingChange(true)
-                webViewHolder.view?.reload()
-            }) {
-                Icon(Icons.Rounded.Refresh, contentDescription = "刷新", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            IconButton(
+                onClick = {
+                    onLoadingChange(true)
+                    webViewHolder.view?.reload()
+                }
+            ) {
+                Icon(
+                    Icons.Rounded.Refresh,
+                    contentDescription = "刷新",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
-        AndroidView(
+        if (isLoading) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        }
+
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(190.dp)
-                .background(MaterialTheme.colorScheme.surface),
-            factory = { context ->
-                WebView(context).apply {
-                    webViewHolder.view = this
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.allowFileAccess = false
-                    settings.allowContentAccess = false
-                    settings.javaScriptCanOpenWindowsAutomatically = false
-                    settings.setSupportMultipleWindows(false)
-                    settings.safeBrowsingEnabled = true
-                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                    addJavascriptInterface(
-                        ResourceBridge(
-                            onFound = onResourceFound,
-                            sourcePage = pageUrl,
-                            mainHandler = Handler(Looper.getMainLooper())
-                        ),
-                        "FileSniffBridge"
-                    )
-                    webChromeClient = object : WebChromeClient() {
-                        override fun onReceivedTitle(view: WebView?, title: String?) {
-                            pageTitle = title.orEmpty()
-                        }
-
-                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                            if (newProgress >= 100) onLoadingChange(false)
-                        }
-                    }
-                    webViewClient = object : WebViewClient() {
-                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                            onLoadingChange(true)
-                        }
-
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            onLoadingChange(false)
-                            view?.evaluateJavascript(RESOURCE_CAPTURE_SCRIPT, null)
-                        }
-
-                        override fun shouldInterceptRequest(
-                            view: WebView?,
-                            request: WebResourceRequest?
-                        ): android.webkit.WebResourceResponse? {
-                            val requested = request?.url?.toString().orEmpty()
-                            val found = ResourceSniffer.detect(
-                                rawUrl = requested,
-                                sourcePage = pageUrl
-                            )
-                            if (found != null) {
-                                Handler(Looper.getMainLooper()).post { onResourceFound(found) }
+                .padding(horizontal = 16.dp)
+                .padding(top = 10.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(184.dp)
+                    .clip(RoundedCornerShape(18.dp)),
+                factory = { context ->
+                    WebView(context).apply {
+                        webViewHolder.view = this
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        settings.javaScriptCanOpenWindowsAutomatically = false
+                        settings.setSupportMultipleWindows(false)
+                        settings.safeBrowsingEnabled = true
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        addJavascriptInterface(
+                            ResourceBridge(
+                                onFound = onResourceFound,
+                                sourcePage = pageUrl,
+                                mainHandler = Handler(Looper.getMainLooper())
+                            ),
+                            "FileSniffBridge"
+                        )
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onReceivedTitle(view: WebView?, title: String?) {
+                                pageTitle = title.orEmpty()
                             }
-                            return null
-                        }
 
-                        override fun onReceivedError(
-                            view: WebView?,
-                            request: WebResourceRequest?,
-                            error: android.webkit.WebResourceError?
-                        ) {
-                            if (request?.isForMainFrame == true) onLoadingChange(false)
+                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                if (newProgress >= 100) onLoadingChange(false)
+                            }
                         }
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                onLoadingChange(true)
+                            }
+
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                onLoadingChange(false)
+                                view?.evaluateJavascript(RESOURCE_CAPTURE_SCRIPT, null)
+                            }
+
+                            override fun shouldInterceptRequest(
+                                view: WebView?,
+                                request: WebResourceRequest?
+                            ): android.webkit.WebResourceResponse? {
+                                val requested = request?.url?.toString().orEmpty()
+                                val found = ResourceSniffer.detect(
+                                    rawUrl = requested,
+                                    sourcePage = pageUrl
+                                )
+                                if (found != null) {
+                                    Handler(Looper.getMainLooper()).post { onResourceFound(found) }
+                                }
+                                return null
+                            }
+
+                            override fun onReceivedError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                error: android.webkit.WebResourceError?
+                            ) {
+                                if (request?.isForMainFrame == true) onLoadingChange(false)
+                            }
+                        }
+                        loadUrl(pageUrl)
                     }
-                    loadUrl(pageUrl)
+                },
+                update = { view ->
+                    if (view.url != pageUrl) view.loadUrl(pageUrl)
                 }
-            },
-            update = { view ->
-                if (view.url != pageUrl) view.loadUrl(pageUrl)
-            }
-        )
+            )
+        }
+
         DisposableEffect(Unit) {
             onDispose {
                 webViewHolder.view?.apply {
@@ -214,44 +248,50 @@ fun SniffingResultScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 18.dp)
         ) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(18.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
                     Text(
                         text = "发现的资源",
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 19.sp
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp
                     )
                     Text(
-                        text = if (isLoading) "正在扫描页面请求…" else "已捕获 ${resources.size} 项可识别资源",
+                        text = if (isLoading) {
+                            "正在扫描网页请求…"
+                        } else {
+                            "已捕获 ${resources.size} 项可识别资源"
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
                 }
-                if (isLoading) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.width(42.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = resources.size.toString(),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
                     )
-                } else {
-                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
-                        Text(
-                            text = resources.size.toString(),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    }
                 }
             }
-            Spacer(Modifier.height(11.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+
+            Spacer(Modifier.height(14.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 listOf("全部", "视频", "音频", "图片").forEach { filter ->
                     FilterChip(
                         selected = currentFilter == filter,
@@ -260,27 +300,39 @@ fun SniffingResultScreen(
                     )
                 }
             }
-            Spacer(Modifier.height(8.dp))
+
             if (selectedResourceIds.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = {
                         onDownloadBatch(resources.filter { it.id in selectedResourceIds })
                         selectedResourceIds = emptySet()
                     },
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
-                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                 ) {
-                    Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(17.dp))
+                    Icon(
+                        Icons.Rounded.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text("下载已选 ${selectedResourceIds.size} 项", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "下载已选 ${selectedResourceIds.size} 项",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
                 }
-                Spacer(Modifier.height(8.dp))
             }
 
+            Spacer(Modifier.height(10.dp))
             if (filteredResources.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -289,22 +341,29 @@ fun SniffingResultScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Rounded.PlayArrow,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(Modifier.height(10.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = CircleShape
+                        ) {
+                            Icon(
+                                Icons.Rounded.PlayArrow,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .padding(17.dp)
+                                    .size(30.dp)
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
                         Text(
                             text = if (isLoading) "正在寻找媒体资源" else "暂未发现可识别的媒体资源",
                             color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Spacer(Modifier.height(5.dp))
+                        Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "页面里的资源会在捕获到后显示在这里",
+                            text = "捕获到的资源会显示在这里",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp
                         )
@@ -313,7 +372,7 @@ fun SniffingResultScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filteredResources, key = { it.id }) { item ->
                         ResourceRow(
@@ -351,25 +410,35 @@ private fun ResourceRow(
     }
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(13.dp)
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Box(
+                    modifier = Modifier.size(42.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
             }
-            Spacer(Modifier.width(11.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Spacer(Modifier.width(12.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(
                     text = item.fileName,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -378,11 +447,10 @@ private fun ResourceRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(3.dp))
                 Text(
                     text = "${item.kind.label} · ${item.mimeType ?: item.url.substringBefore('?').takeLast(48)}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -405,7 +473,10 @@ private fun ResourceRow(
                 checked = selected,
                 onCheckedChange = onSelectionChange
             )
-            IconButton(onClick = onDownload, modifier = Modifier.size(38.dp)) {
+            IconButton(
+                onClick = onDownload,
+                modifier = Modifier.size(40.dp)
+            ) {
                 Icon(
                     Icons.Rounded.Download,
                     contentDescription = "下载资源",
