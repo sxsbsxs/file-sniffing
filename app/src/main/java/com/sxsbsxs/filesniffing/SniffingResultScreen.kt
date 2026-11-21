@@ -77,7 +77,7 @@ fun SniffingResultScreen(
     val webViewHolder = remember { WebViewHolder() }
     val filteredResources = resources.filter {
         when (currentFilter) {
-            "视频" -> it.kind == ResourceKind.VIDEO || it.kind == ResourceKind.PLAYLIST
+            "视频" -> it.kind == ResourceKind.VIDEO || it.kind == ResourceKind.PLAYLIST || it.kind == ResourceKind.SEGMENT
             "音频" -> it.kind == ResourceKind.AUDIO
             "图片" -> it.kind == ResourceKind.IMAGE
             else -> true
@@ -311,7 +311,7 @@ private fun ResourceRow(
     onDownload: () -> Unit
 ) {
     val icon = when (item.kind) {
-        ResourceKind.VIDEO, ResourceKind.PLAYLIST -> Icons.Rounded.VideoLibrary
+        ResourceKind.VIDEO, ResourceKind.PLAYLIST, ResourceKind.SEGMENT -> Icons.Rounded.VideoLibrary
         ResourceKind.AUDIO -> Icons.Rounded.MusicNote
         ResourceKind.IMAGE -> Icons.Rounded.Image
         else -> Icons.Rounded.Download
@@ -353,6 +353,15 @@ private fun ResourceRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (item.kind == ResourceKind.PLAYLIST || item.kind == ResourceKind.SEGMENT) {
+                    Text(
+                        text = if (item.kind == ResourceKind.PLAYLIST) "清单文件，不会自动合并为 MP4" else "单个媒体分段，不是完整视频",
+                        color = Color(0xFFB07932),
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             IconButton(onClick = onDownload, modifier = Modifier.size(38.dp)) {
                 Icon(
