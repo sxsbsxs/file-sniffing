@@ -20,6 +20,12 @@ class DownloadCenterViewModel @Inject constructor(
     private val repository: DownloadRepository
 ) : ViewModel() {
 
+    init {
+        viewModelScope.launch {
+            preferences.migrateLegacyFolderIfNeeded()
+        }
+    }
+
     val selectedDownloadFolder: StateFlow<String?> =
         preferences.selectedDownloadFolder.stateIn(
             viewModelScope,
