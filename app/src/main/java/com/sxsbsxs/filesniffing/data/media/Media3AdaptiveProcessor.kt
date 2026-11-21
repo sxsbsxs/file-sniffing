@@ -19,13 +19,14 @@ import androidx.media3.transformer.Transformer
 import com.sxsbsxs.filesniffing.SniffedResource
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -97,6 +98,7 @@ class Media3AdaptiveProcessor @Inject constructor(
                         var copied = 0L
                         val total = tempFile.length()
                         while (true) {
+                            currentCoroutineContext().ensureActive()
                             val count = source.read(buffer)
                             if (count < 0) break
                             sink.write(buffer, 0, count)
