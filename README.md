@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and local media download manager.
 
-**Current app version:** 0.8.0
+**Current app version:** 0.8.1
 
 ## Technology architecture
 
@@ -23,7 +23,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 ## Current implementation
 
-- [x] Compose + Material 3 app shell, minimal link-entry home, share-sheet URL receiving.
+- [x] Compose + Material 3 app shell, minimal link-entry home, share-sheet URL receiving and external HTTP/HTTPS link opening.
 - [x] WebView inspection using `shouldInterceptRequest`, DOM scanning, Performance API and a MutationObserver.
 - [x] Resource types and filtering for video, audio, image, HLS and DASH manifest URLs.
 - [x] Multi-select resources and batch enqueue.
@@ -38,6 +38,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] WorkManager foreground download jobs with notifications, progress updates, cancellation and retry.
 - [x] Restore task list from WorkManager and Room after reopening the app.
 - [x] Persist the original URL, Referer and SAF destination tree in Room so failed/cancelled jobs can be retried without relying on WorkInfo input data.
+- [x] Restore task filenames from durable WorkManager tags instead of trying to read unavailable inputData from WorkInfo.
 - [x] Verify direct-download payload signatures through a C++17/JNI probe before reporting completion; HTML error pages are reported as failures.
 - [x] Validate HLS/DASH fixtures and native signature cases with the Python CI tool.
 
