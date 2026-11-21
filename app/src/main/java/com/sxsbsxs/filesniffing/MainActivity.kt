@@ -201,7 +201,7 @@ private fun FileSniffingApp(sharedLink: String) {
         ?.let { folderNameFromUri(Uri.parse(it)) }
         ?: "选择手机文件夹"
 
-    val enqueueDownload: (SniffedResource) -> Unit = { resource ->
+    val enqueueDownload: (SniffedResource, Boolean) -> Unit = { resource, showQueuedMessage ->
         val folder = selectedFolderUri
         if (folder == null) {
             coroutineScope.launch { snackbarHostState.showSnackbar("请先选择保存文件夹") }
@@ -219,7 +219,9 @@ private fun FileSniffingApp(sharedLink: String) {
                     coroutineScope.launch { snackbarHostState.showSnackbar(task.detail) }
                 }
             }
-            coroutineScope.launch { snackbarHostState.showSnackbar("已加入下载队列") }
+            if (showQueuedMessage) {
+                coroutineScope.launch { snackbarHostState.showSnackbar("已加入下载队列") }
+            }
         }
     }
 
@@ -258,7 +260,17 @@ private fun FileSniffingApp(sharedLink: String) {
                         activeInspectionUrl = null
                         isPageLoading = false
                     },
-                    onDownload = enqueueDownload
+                    onDownload = { resource -> enqueueDownload(resource, true) },
+                    onDownloadBatch = { selected ->
+                        if (selectedFolderUri == null) {
+                            coroutineScope.launch { snackbarHostState.showSnackbar("请先选择保存文件夹") }
+                        } else {
+                            selected.forEach { resource -> enqueueDownload(resource, false) }
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("已将 ${selected.size} 项加入下载队列")
+                            }
+                        }
+                    }
                 )
             } else if (selectedTab == 0) {
                 HomeScreen(
@@ -302,7 +314,7 @@ private fun FileSniffingApp(sharedLink: String) {
                     onChooseFolder = { folderPicker.launch(null) },
                     onBackToSniff = { selectedTab = 0 },
                     onRetryTask = { task ->
-                        downloadResources[task.id]?.let(enqueueDownload)
+                        downloadResources[task.id]?.let { resource -> enqueueDownload(resource, true) }
                     },
                     onOpenTask = { task ->
                         val uri = task.fileUri?.let(Uri::parse)
