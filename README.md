@@ -25,6 +25,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Resource types and filtering for video, audio, image, HLS and DASH manifest URLs.
 - [x] Multi-select resources and batch enqueue.
 - [x] OkHttp shared client, OkDownload adapter and SAF `content://` output.
+- [x] Preserve the same SAF destination URI for interrupted direct transfers so OkDownload can resume saved byte ranges on retry.
 - [x] Media3 `DownloadHelper` prepares adaptive streams and derives the selected stream keys, preferring the highest supported bitrate.
 - [x] Media3 `Transformer` exports selected HLS/DASH streams to an MP4 file, then copies it into the chosen SAF folder.
 - [x] Hilt application and Hilt-aware WorkManager worker.
@@ -43,7 +44,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - WebView login cookies are not yet bridged into OkHttp/OkDownload or Media3 requests. Authenticated resources may return HTTP 401/403.
 - OkDownload upstream 1.0.7 is old. It is isolated behind an adapter and should be reconsidered if a maintained alternative or a safe local fork is adopted.
 - The current Media3 path selects the highest supported bitrate by default. A user-facing per-resolution chooser is a follow-up task.
-- Pause/resume controls are not yet exposed in the UI. OkDownload keeps breakpoint state for eligible direct HTTP downloads; WorkManager can cancel and retry jobs. Adaptive Media3 exports currently restart on retry.
+- A dedicated pause button is not yet exposed. Cancelling and retrying a direct HTTP/HTTPS task reuses its SAF URI and OkDownload breakpoint store where the server supports range requests. Adaptive Media3 exports currently restart on retry.
 
 ## Privacy and scope
 
