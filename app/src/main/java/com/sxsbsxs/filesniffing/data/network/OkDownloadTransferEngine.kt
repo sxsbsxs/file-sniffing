@@ -72,9 +72,19 @@ class OkDownloadTransferEngine @Inject constructor(
                     task: DownloadTask,
                     info: BreakpointInfo,
                     cause: ResumeFailedCause
-                ) = Unit
+                ) {
+                    val total = info.totalLength
+                    val offset = info.totalOffset
+                    if (total > 0L) totalBytes.set(total)
+                    if (offset > 0L) receivedBytes.set(offset)
+                }
 
-                override fun downloadFromBreakpoint(task: DownloadTask, info: BreakpointInfo) = Unit
+                override fun downloadFromBreakpoint(task: DownloadTask, info: BreakpointInfo) {
+                    val total = info.totalLength
+                    val offset = info.totalOffset
+                    if (total > 0L) totalBytes.set(total)
+                    if (offset > 0L) receivedBytes.set(offset)
+                }
 
                 override fun connectStart(
                     task: DownloadTask,
@@ -94,8 +104,12 @@ class OkDownloadTransferEngine @Inject constructor(
                 }
 
                 override fun fetchStart(task: DownloadTask, blockIndex: Int, contentLength: Long) {
-                    if (contentLength > 0L && totalBytes.get() <= 0L) {
-                        totalBytes.compareAndSet(-1L, contentLength)
+                    val info = task.info
+                    if (info != null) {
+                        if (info.totalLength > 0L) totalBytes.set(info.totalLength)
+                        if (info.totalOffset > receivedBytes.get()) {
+                            receivedBytes.set(info.totalOffset)
+                        }
                     }
                 }
 
