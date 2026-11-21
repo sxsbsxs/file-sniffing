@@ -228,7 +228,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 )
             )
         } catch (cancelled: CancellationException) {
-            val paused = consumePauseRequest()
+            val paused = isPauseRequested()
             withContext(NonCancellable) {
                 val previous = downloadRepository.findById(id.toString())
                 persistRecord(
@@ -308,18 +308,11 @@ class PersistentDownloadWorker @AssistedInject constructor(
         }
     }
 
-    private fun consumePauseRequest(): Boolean {
-        val preferences = applicationContext.getSharedPreferences(
+    private fun isPauseRequested(): Boolean =
+        applicationContext.getSharedPreferences(
             "download_pause_requests",
             Context.MODE_PRIVATE
-        )
-        val key = id.toString()
-        val requested = preferences.getBoolean(key, false)
-        if (requested) {
-            preferences.edit().remove(key).apply()
-        }
-        return requested
-    }
+        ).getBoolean(id.toString(), false)
 
     private suspend fun persistRecord(
         fileName: String,

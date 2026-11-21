@@ -60,7 +60,7 @@ object DownloadEngine {
 
         val manager = WorkManager.getInstance(context.applicationContext)
         manager.enqueue(request)
-        observeRequest(manager, request.id, onUpdate)
+        observeRequest(context.applicationContext, manager, request.id, onUpdate)
     }
 
     fun retry(
@@ -123,7 +123,7 @@ object DownloadEngine {
 
         val manager = WorkManager.getInstance(context.applicationContext)
         manager.enqueue(request)
-        observeRequest(manager, request.id, onUpdate)
+        observeRequest(context.applicationContext, manager, request.id, onUpdate)
     }
 
     private fun fileNameTag(fileName: String): String =
@@ -139,6 +139,7 @@ object DownloadEngine {
         ADAPTIVE_HEIGHT_TAG_PREFIX + (height?.toString() ?: "auto")
 
     private fun observeRequest(
+        context: Context,
         manager: WorkManager,
         id: UUID,
         onUpdate: (DownloadTaskUi) -> Unit
@@ -147,7 +148,7 @@ object DownloadEngine {
         val observer = object : Observer<WorkInfo?> {
             override fun onChanged(info: WorkInfo?) {
                 if (info == null) return
-                onUpdate(toTask(info))
+                onUpdate(toTask(info, context))
                 if (info.state.isFinished) liveData.removeObserver(this)
             }
         }
@@ -176,13 +177,13 @@ object DownloadEngine {
         val liveData = WorkManager.getInstance(context.applicationContext)
             .getWorkInfosByTagLiveData(DOWNLOAD_TAG)
         val observer = Observer<List<WorkInfo>> { infos ->
-            infos.orEmpty().forEach { info -> onUpdate(toTask(info)) }
+            infos.orEmpty().forEach { info -> onUpdate(toTask(info, context.applicationContext)) }
         }
         liveData.observeForever(observer)
         return { liveData.removeObserver(observer) }
     }
 
-    private fun toTask(info: WorkInfo): DownloadTaskUi {
+    private fun toTask(info: WorkInfo, context: Context): DownloadTaskUi {
         val taggedName = info.tags
             .firstOrNull { it.startsWith(FILE_NAME_TAG_PREFIX) }
             ?.removePrefix(FILE_NAME_TAG_PREFIX)
@@ -190,12 +191,15 @@ object DownloadEngine {
         val inputName = taggedName ?: "download"
         val outputName = info.outputData.getString(PersistentDownloadWorker.KEY_FILE_NAME)
         val progressName = info.progress.getString(PersistentDownloadWorker.KEY_FILE_NAME)
+        val pauseWasRequested = info.state == WorkInfo.State.CANCELLED &&
+            context.getSharedPreferences(PAUSE_REQUESTS_PREF, Context.MODE_PRIVATE)
+                .getBoolean(info.id.toString(), false)
         val state = when (info.state) {
             WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> "queued"
             WorkInfo.State.RUNNING -> "downloading"
             WorkInfo.State.SUCCEEDED -> "completed"
             WorkInfo.State.FAILED -> "failed"
-            WorkInfo.State.CANCELLED -> "cancelled"
+            WorkInfo.State.CANCELLED -> if (pauseWasRequested) "paused" else "cancelled"
         }
         val progress = when {
             info.state == WorkInfo.State.SUCCEEDED -> 100
@@ -206,7 +210,7 @@ object DownloadEngine {
         val detail = when (info.state) {
             WorkInfo.State.FAILED ->
                 info.outputData.getString(PersistentDownloadWorker.KEY_ERROR) ?: "下载失败"
-            WorkInfo.State.CANCELLED -> "下载已取消"
+            WorkInfo.State.CANCELLED -> if (pauseWasRequested) "已暂停，可继续下载" else "下载已取消"
             WorkInfo.State.SUCCEEDED ->
                 info.outputData.getString(PersistentDownloadWorker.KEY_DETAIL) ?: "下载完成"
             else ->
