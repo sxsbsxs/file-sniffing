@@ -118,11 +118,15 @@ class MainActivity : ComponentActivity() {
 
     private fun extractSharedLink(source: Intent?): String {
         if (source == null) return ""
-        return when (source.action) {
-            Intent.ACTION_SEND -> source.getStringExtra(Intent.EXTRA_TEXT).orEmpty().trim()
-            Intent.ACTION_VIEW -> source.dataString.orEmpty().trim()
+        val sharedText = when (source.action) {
+            Intent.ACTION_SEND -> source.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+            Intent.ACTION_VIEW -> source.dataString.orEmpty()
             else -> ""
-        }
+        }.trim()
+        val match = Regex("https?://[^\\\\s]+", RegexOption.IGNORE_CASE)
+            .find(sharedText)?.value
+            ?.trimEnd(')', ']', '}', ',', '.', '!', '?', ';')
+        return match ?: sharedText
     }
 }
 
@@ -150,11 +154,16 @@ private fun FileSniffingApp(sharedLink: String) {
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var pageUrl by rememberSaveable { mutableStateOf(sharedLink) }
-    LaunchedEffect(sharedLink) {
-        if (sharedLink.isNotBlank()) pageUrl = sharedLink
-    }
     var activeInspectionUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var isPageLoading by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(sharedLink) {
+        if (sharedLink.isNotBlank()) {
+            pageUrl = sharedLink
+            activeInspectionUrl = null
+            isPageLoading = false
+            selectedTab = 0
+        }
+    }
     val sniffedResources = remember { mutableStateListOf<SniffedResource>() }
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
     var selectedFolderUri by rememberSaveable {
