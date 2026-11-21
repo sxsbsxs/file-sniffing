@@ -158,6 +158,12 @@ public final class YouTubeRequestDiagnosticsTest {
         );
         check(YouTubeRequestDiagnostics.RequestType.PLAYER_API, player.getRequestType());
 
+        var playerGoogleApi = YouTubeRequestDiagnostics.inspect(
+            "https://youtubei.googleapis.com/youtubei/v1/player",
+            Map.of()
+        );
+        check(YouTubeRequestDiagnostics.RequestType.PLAYER_API, playerGoogleApi.getRequestType());
+
         var shortLink = YouTubeRequestDiagnostics.inspect("https://youtu.be/abc123", Map.of());
         check(true, YouTubeRequestDiagnostics.isYouTubePageUrl("https://youtu.be/abc123"));
         check(YouTubeRequestDiagnostics.RequestType.YOUTUBE_PAGE, shortLink.getRequestType());

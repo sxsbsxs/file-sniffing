@@ -120,7 +120,9 @@ public final class YouTubeRequestDiagnostics {
                 || host.equals("youtube-nocookie.com")
                 || host.endsWith(".youtube-nocookie.com")
                 || host.equals("youtube.googleapis.com")
-                || host.endsWith(".youtube.googleapis.com");
+                || host.endsWith(".youtube.googleapis.com")
+                || host.equals("youtubei.googleapis.com")
+                || host.endsWith(".youtubei.googleapis.com");
     }
 
     private static boolean isGoogleVideoHost(String host) {

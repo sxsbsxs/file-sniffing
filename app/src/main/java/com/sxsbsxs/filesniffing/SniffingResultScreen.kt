@@ -720,8 +720,8 @@ private data class YouTubeDiagnosticState(
         googleVideoRequests = googleVideoRequests + if (observation.isGoogleVideo) 1 else 0,
         otherYouTubeRequests = otherYouTubeRequests +
             if (observation.requestType == YouTubeRequestDiagnostics.RequestType.YOUTUBE_PAGE) 1 else 0,
-        cookieHeaderObserved = cookieHeaderObserved || observation.cookieHeaderPresent,
-        authorizationHeaderObserved = authorizationHeaderObserved || observation.authorizationHeaderPresent
+        cookieHeaderObserved = cookieHeaderObserved || observation.isCookieHeaderPresent(),
+        authorizationHeaderObserved = authorizationHeaderObserved || observation.isAuthorizationHeaderPresent()
     )
 
     fun recordPerformance(
