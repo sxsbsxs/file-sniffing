@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.9.0
+**Current app version:** 0.9.1
 
 ## Technology architecture
 
@@ -33,15 +33,18 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Multi-select resources and batch enqueue.
 - [x] OkHttp shared client, OkDownload adapter and SAF `content://` output.
 - [x] Preserve the same SAF destination URI for interrupted direct transfers so OkDownload can resume saved byte ranges on retry.
-- [x] Media3 `DownloadHelper` prepares adaptive streams and derives the selected stream keys, preferring the highest supported bitrate.
+- [x] Media3 `DownloadHelper` prepares adaptive streams and derives selected stream keys, preferring the highest supported bitrate by default.
+- [x] Read actual HLS/DASH video heights from Media3 track mapping, offer those options in the resource chooser, and carry the selected height through Worker, Room and retry.
 - [x] Media3 `Transformer` exports selected HLS/DASH streams to an MP4 file, then copies it into the chosen SAF folder.
 - [x] Hilt application and Hilt-aware WorkManager worker.
 - [x] MVVM + StateFlow for sniffing state and download-center preferences/history.
 - [x] Room database for captured resources and persistent download records.
 - [x] DataStore for the selected output folder.
 - [x] WorkManager foreground download jobs with notifications, progress updates, cancellation and retry.
+- [x] Pause direct HTTP/HTTPS tasks and continue from the saved OkDownload breakpoint when the server supports byte ranges; persist and distinguish paused tasks from cancelled tasks after app restart.
 - [x] Download-center filters for task status and discovered resource kind.
 - [x] Live direct-transfer byte counts, total size and speed; remaining time is shown only when the server provides a usable total length and a speed estimate exists.
+- [x] Persist direct-transfer byte count, confirmed total size and speed in Room so transfer metrics survive app restarts.
 - [x] MIME-aware SAF file creation and output-name inference for common document, archive, application, font, image, audio and video formats.
 - [x] Restore task list from WorkManager and Room after reopening the app.
 - [x] Browse the selected SAF download directory in-app, including subfolders, filename search, MIME filters, file sizes, modification dates and opening files with Android.
@@ -61,7 +64,8 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - YouTube diagnostics only classify visible WebView request callbacks and Performance API entries. They do not parse `youtubei/v1/player` response bodies, resolve signed media formats, acquire PO Tokens or make Google Video URLs downloadable. WebView callback coverage is incomplete by platform design; a zero count is not proof that YouTube sent no such request.
 - WebView login cookies are not yet bridged into OkHttp/OkDownload or Media3 requests. Authenticated resources may return HTTP 401/403.
 - OkDownload upstream 1.0.7 is old. It is isolated behind an adapter and should be reconsidered if a maintained alternative or a safe local fork is adopted.
-- The current Media3 path selects the highest supported bitrate by default. A user-facing per-resolution chooser is a follow-up task.
+- The adaptive chooser lists resolutions exposed by the current HLS/DASH manifest through Media3 track mapping. Live, encrypted, DRM-protected, malformed or otherwise unsupported manifests may not expose selectable tracks.
+- Pause/continue is available for ordinary HTTP/HTTPS downloads; reliable resumption depends on server byte-range support. Media3 adaptive exports cannot currently be paused and restart if cancelled.
 - A dedicated pause button is not yet exposed. Cancelling and retrying a direct HTTP/HTTPS task reuses its SAF URI and OkDownload breakpoint store where the server supports range requests. Adaptive Media3 exports currently restart on retry.
 
 ## Privacy and scope

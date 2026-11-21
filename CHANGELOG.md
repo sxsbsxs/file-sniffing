@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.1
+
+- Added a real HLS/DASH resolution chooser sourced from the current manifest's Media3 video track mapping; the selected height is carried into background export and persisted for retry/history.
+- Added pause/continue for direct HTTP/HTTPS downloads using the existing OkDownload breakpoint and SAF document; paused state is distinguishable from cancellation after app restart.
+- Persisted transferred bytes, confirmed total size and speed in Room so download history retains real transfer metrics.
+- Completed the file-browser and tool-first UI work from 0.9.0, and clarified remaining Media3 and site-authentication limitations.
+- Increased app version to 0.9.1 (versionCode 19).
+
 ## 0.9.0
 
 - Added a local file browser for the selected SAF download directory with folder navigation, search, MIME-category filters, size/date metadata and Android file opening.
