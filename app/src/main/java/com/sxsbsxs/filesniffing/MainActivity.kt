@@ -869,7 +869,7 @@ private fun DownloadTaskCard(task: DownloadTaskUi) {
             }
             Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
-                progress = { task.progress / 100f },
+                progress = task.progress / 100f,
                 modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
                 color = if (failed) Color(0xFFD24B4B) else Accent,
                 trackColor = Color(0xFFEDEFF3)
