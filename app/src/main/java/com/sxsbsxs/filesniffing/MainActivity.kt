@@ -224,6 +224,7 @@ private fun FileSniffingApp(sharedLink: String) {
                 val index = downloadTasks.indexOfFirst { it.id == task.id }
                 if (index < 0) downloadTasks.add(0, task)
                 else downloadTasks[index] = task
+                downloadCenterViewModel.persistTask(task, resource, folder)
                 if (task.state == "failed") {
                     coroutineScope.launch { snackbarHostState.showSnackbar(task.detail) }
                 }
@@ -314,14 +315,24 @@ private fun FileSniffingApp(sharedLink: String) {
                     onChooseFolder = { folderPicker.launch(null) },
                     onBackToSniff = { selectedTab = 0 },
                     onRetryTask = { task ->
-                        DownloadEngine.retry(
-                            context.applicationContext,
-                            task.id,
-                            partialUri = task.fileUri
-                        ) { updated ->
-                            val index = downloadTasks.indexOfFirst { it.id == updated.id }
-                            if (index < 0) downloadTasks.add(0, updated)
-                            else downloadTasks[index] = updated
+                        downloadCenterViewModel.loadRetryRecord(task.id) { record ->
+                            if (record == null || record.sourceUrl.isBlank() ||
+                                record.destinationTreeUri.isNullOrBlank()
+                            ) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("任务缺少原始参数，请重新嗅探后下载")
+                                }
+                            } else {
+                                DownloadEngine.retry(
+                                    context.applicationContext,
+                                    record,
+                                    partialUri = task.fileUri
+                                ) { updated ->
+                                    val index = downloadTasks.indexOfFirst { it.id == updated.id }
+                                    if (index < 0) downloadTasks.add(0, updated)
+                                    else downloadTasks[index] = updated
+                                }
+                            }
                         }
                     },
                     onCancelTask = { task ->
