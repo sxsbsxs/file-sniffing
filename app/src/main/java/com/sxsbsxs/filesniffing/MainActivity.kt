@@ -184,8 +184,13 @@ private fun FileSniffingApp(sharedLink: String) {
         }
     }
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
+    val storedTasksById = storedDownloadHistory.associateBy { it.id }
+    val liveTasksWithStoredUri = downloadTasks.map { task ->
+        if (task.fileUri != null) task
+        else task.copy(fileUri = storedTasksById[task.id]?.destinationUri)
+    }
     val visibleDownloadTasks = (
-        downloadTasks.toList() + storedDownloadHistory.map { record ->
+        liveTasksWithStoredUri + storedDownloadHistory.map { record ->
             DownloadTaskUi(
                 id = record.id,
                 fileName = record.fileName,
@@ -337,7 +342,11 @@ private fun FileSniffingApp(sharedLink: String) {
                     onChooseFolder = { folderPicker.launch(null) },
                     onBackToSniff = { selectedTab = 0 },
                     onRetryTask = { task ->
-                        DownloadEngine.retry(context.applicationContext, task.id) { updated ->
+                        DownloadEngine.retry(
+                            context.applicationContext,
+                            task.id,
+                            partialUri = task.fileUri
+                        ) { updated ->
                             val index = downloadTasks.indexOfFirst { it.id == updated.id }
                             if (index < 0) downloadTasks.add(0, updated)
                             else downloadTasks[index] = updated
