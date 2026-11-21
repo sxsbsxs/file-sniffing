@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- Aligned the toolchain to Kotlin 2.4.20, KSP 2.3.12, AGP 8.13.2 and Gradle 8.14.8.
+- Updated Compose BOM to 2026.09.00 and Lifecycle to 2.11.0.
+- Switched CI to install Android SDK 36 and build with the checked-in Gradle Wrapper.
+- Added the WorkManager data-sync foreground service type to the merged manifest.
+- Improved OkDownload progress for multi-block and resumed transfers.
+- Made Media3-to-SAF export stop promptly on worker cancellation.
+
 ## 0.6.0
 
 - Refactored the download architecture around Hilt, MVVM and Kotlin Flow.
