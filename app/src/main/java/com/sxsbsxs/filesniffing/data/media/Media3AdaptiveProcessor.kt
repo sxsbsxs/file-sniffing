@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.Clock
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -63,7 +64,18 @@ class Media3AdaptiveProcessor @Inject constructor(
         }
         val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setDefaultRequestProperties(headers)
-        val sourceMediaItem = MediaItem.fromUri(resource.url)
+        val sourceMediaItem = MediaItem.Builder()
+            .setUri(resource.url)
+            .setMimeType(
+                when {
+                    resource.fileName.endsWith(".m3u8", ignoreCase = true) ->
+                        MimeTypes.APPLICATION_M3U8
+                    resource.fileName.endsWith(".mpd", ignoreCase = true) ->
+                        MimeTypes.APPLICATION_MPD
+                    else -> resource.mimeType
+                }
+            )
+            .build()
 
         onProgress(-1, "Media3 正在分析播放轨道")
         val downloadRequest = prepareDownloadRequest(sourceMediaItem, dataSourceFactory)
