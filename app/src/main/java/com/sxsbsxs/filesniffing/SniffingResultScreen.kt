@@ -393,7 +393,12 @@ private fun ResourceRow(
                 )
                 if (item.kind == ResourceKind.PLAYLIST || item.kind == ResourceKind.SEGMENT) {
                     Text(
-                        text = if (item.kind == ResourceKind.PLAYLIST) "清单文件，不会自动合并为 MP4" else "单个媒体分段，不是完整视频",
+                        text = when {
+                            item.kind == ResourceKind.SEGMENT -> "单个媒体分段，不是完整视频"
+                            item.fileName.endsWith(".m3u8", ignoreCase = true) -> "HLS 清单 · 支持明文分段合并"
+                            item.fileName.endsWith(".mpd", ignoreCase = true) -> "DASH 清单 · 支持静态分段合并"
+                            else -> "媒体清单"
+                        },
                         color = Color(0xFFB07932),
                         fontSize = 10.sp,
                         maxLines = 1,
