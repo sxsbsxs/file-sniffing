@@ -3,10 +3,12 @@ package com.sxsbsxs.filesniffing
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.Observer
+import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import java.util.UUID
+import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 
 object DownloadEngine {
     const val DOWNLOAD_TAG = "file-sniffing-download"
@@ -59,48 +61,57 @@ object DownloadEngine {
 
     fun retry(
         context: Context,
-        taskId: String,
+        record: DownloadRecordEntity,
         partialUri: String? = null,
         onUpdate: (DownloadTaskUi) -> Unit
     ) {
-        val manager = WorkManager.getInstance(context.applicationContext)
-        val liveData = manager.getWorkInfoByIdLiveData(UUID.fromString(taskId))
-        val observer = object : Observer<WorkInfo?> {
-            private var handled = false
-
-            override fun onChanged(info: WorkInfo?) {
-                if (info == null || handled || !info.state.isFinished) return
-                handled = true
-                liveData.removeObserver(this)
-                if (info.state != WorkInfo.State.FAILED && info.state != WorkInfo.State.CANCELLED) return
-
-                val retryData = androidx.work.Data.Builder()
-                    .putAll(info.inputData)
-                    .apply {
-                        (partialUri ?: info.progress.getString(PersistentDownloadWorker.KEY_PARTIAL_URI))
-                            ?.takeIf { it.isNotBlank() }
-                            ?.let { putString(PersistentDownloadWorker.KEY_PARTIAL_URI, it) }
-                    }
-                    .build()
-                val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
-                    .setInputData(retryData)
-                    .addTag(DOWNLOAD_TAG)
-                    .build()
-                val originalName = info.inputData.getString(PersistentDownloadWorker.KEY_FILE_NAME) ?: "download"
-                onUpdate(
-                    DownloadTaskUi(
-                        id = request.id.toString(),
-                        fileName = originalName,
-                        progress = 0,
-                        state = "queued",
-                        detail = "正在重新加入后台队列"
-                    )
+        val destinationTree = record.destinationTreeUri
+        if (record.sourceUrl.isBlank() || destinationTree.isNullOrBlank()) {
+            onUpdate(
+                DownloadTaskUi(
+                    id = record.id,
+                    fileName = record.fileName,
+                    progress = record.progress,
+                    state = "failed",
+                    detail = "缺少原始下载参数，请重新嗅探后下载"
                 )
-                manager.enqueue(request)
-                observeRequest(manager, request.id, onUpdate)
-            }
+            )
+            return
         }
-        liveData.observeForever(observer)
+
+        val retryData = Data.Builder()
+            .putString(PersistentDownloadWorker.KEY_TASK_ID, UUID.randomUUID().toString())
+            .putString(PersistentDownloadWorker.KEY_URL, record.sourceUrl)
+            .putString(PersistentDownloadWorker.KEY_TREE, destinationTree)
+            .putString(PersistentDownloadWorker.KEY_FILE_NAME, record.fileName)
+            .putString(PersistentDownloadWorker.KEY_KIND, record.resourceKind)
+            .putString(PersistentDownloadWorker.KEY_REFERER, record.referer)
+            .apply {
+                record.mimeType?.let { putString(PersistentDownloadWorker.KEY_MIME, it) }
+                (partialUri ?: record.destinationUri)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { putString(PersistentDownloadWorker.KEY_PARTIAL_URI, it) }
+            }
+            .build()
+
+        val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
+            .setInputData(retryData)
+            .addTag(DOWNLOAD_TAG)
+            .build()
+
+        onUpdate(
+            DownloadTaskUi(
+                id = request.id.toString(),
+                fileName = record.fileName,
+                progress = 0,
+                state = "queued",
+                detail = "正在重新加入后台队列"
+            )
+        )
+
+        val manager = WorkManager.getInstance(context.applicationContext)
+        manager.enqueue(request)
+        observeRequest(manager, request.id, onUpdate)
     }
 
     private fun observeRequest(
