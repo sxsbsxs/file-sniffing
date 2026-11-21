@@ -23,7 +23,8 @@ The visual direction follows the clarity and polish of leading consumer apps (Do
 - [x] Byte progress for known-length files and indeterminate progress for chunked/unknown-length transfers.
 - [x] Persistent WorkManager download jobs with foreground data-transfer notifications.
 - [x] Task status restoration after reopening the app, cancellation, retry for failed/cancelled work, and open-file action.
-- [x] Clear HLS VOD/live-snapshot playlist download: master playlist bandwidth selection, relative segment resolution, TS concatenation, and fMP4 init-segment plus fragment concatenation.
+- [x] Clear HLS VOD/live-snapshot playlist download: master-playlist bandwidth selection, relative segment resolution, TS concatenation, and fMP4 init-segment plus fragment concatenation.
+- [x] Static DASH MPD download for common SegmentList and SegmentTemplate + SegmentTimeline layouts, selecting the highest-bandwidth video representation.
 - [x] Adaptive launcher icon and GitHub Actions debug-build workflow.
 
 ## Current limitations
@@ -32,7 +33,7 @@ The visual direction follows the clarity and polish of leading consumer apps (Do
 - HLS support currently covers clear playlists without byte-range segments. AES-128 encrypted playlists, SAMPLE-AES, DRM, encrypted keys, alternate audio rendition selection, and BYTERANGE are not handled.
 - HLS MPEG-TS segments are saved as a .ts file. Fragmented MP4 playlists are assembled from the initialization segment and media fragments into an .mp4 container; unusual discontinuities, codec switches or malformed manifests may still require a dedicated remuxer.
 - A live HLS playlist is downloaded as the currently available segment snapshot; the worker does not follow the live stream indefinitely.
-- DASH MPD manifests are currently detected but not yet expanded into representation/segment downloads.
+- Dynamic DASH live MPDs, SegmentBase, negative SegmentTimeline repeats, byte-range segments, and MPDs without SegmentTimeline for SegmentTemplate are not yet supported.
 - Downloads do not yet reuse WebView login cookies. A resource that requires an authenticated browser session may return HTTP 401/403.
 - WorkManager jobs survive ordinary app process recreation and expose task notifications. Pause/resume and byte-level HTTP range continuation are not implemented yet.
 - Cross-origin restrictions, service workers, blob-only URLs, encrypted media, app-private resources and sites that conceal media URLs can limit results.
