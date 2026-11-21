@@ -96,9 +96,15 @@ class OkDownloadTransferEngine @Inject constructor(
 
             val task = DownloadTask.Builder(url, destinationDocument)
                 .setHeaderMapFields(headers)
-                // More parallel byte ranges improve throughput on capable CDNs.
-                // OkDownload still uses a single stream when range support is unavailable.
-                .setConnectionCount(8)
+                // Keep the network read size aligned with modern high-throughput clients.
+                .setReadBufferSize(64 * 1024)
+                .setFlushBufferSize(64 * 1024)
+                // Batch disk syncs to reduce per-block write overhead without
+                // allowing an unbounded amount of buffered data.
+                .setSyncBufferSize(1024 * 1024)
+                .setSyncBufferIntervalMillis(1000)
+                // Connection count is selected by SizeAwareDownloadStrategy after
+                // the server's trial response reveals the resource length.
                 .setAutoCallbackToUIThread(false)
                 .setMinIntervalMillisCallbackProcess(500)
                 .setPassIfAlreadyCompleted(false)

@@ -2,7 +2,9 @@ package com.sxsbsxs.filesniffing.di
 
 import android.content.Context
 import com.liulishuo.okdownload.OkDownload
+import com.liulishuo.okdownload.core.dispatcher.DownloadDispatcher
 import com.liulishuo.okdownload.core.connection.DownloadOkHttp3Connection
+import com.sxsbsxs.filesniffing.data.network.SizeAwareDownloadStrategy
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -35,10 +37,14 @@ object NetworkModule {
         @ApplicationContext context: Context,
         client: OkHttpClient
     ): OkDownload {
+        // Favor a small number of active files so one large transfer can use
+        // its range connections instead of having many tasks fragment bandwidth.
+        DownloadDispatcher.setMaxParallelRunningCount(3)
         val connectionFactory = DownloadOkHttp3Connection.Factory()
             .setBuilder(client.newBuilder())
         val instance = OkDownload.Builder(context)
             .connectionFactory(connectionFactory)
+            .downloadStrategy(SizeAwareDownloadStrategy())
             .build()
         OkDownload.setSingletonInstance(instance)
         return instance
