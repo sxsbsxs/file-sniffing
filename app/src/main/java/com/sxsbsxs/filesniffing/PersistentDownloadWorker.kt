@@ -4,28 +4,29 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
+import androidx.hilt.work.HiltWorker
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
+import com.sxsbsxs.filesniffing.data.repository.DownloadRepository
+import com.sxsbsxs.filesniffing.data.network.OkDownloadTransferEngine
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
-import android.webkit.WebSettings
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
-class PersistentDownloadWorker(
-    appContext: Context,
-    parameters: WorkerParameters
+@HiltWorker
+class PersistentDownloadWorker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted parameters: WorkerParameters,
+    private val okDownloadTransferEngine: OkDownloadTransferEngine,
+    private val downloadRepository: DownloadRepository
 ) : CoroutineWorker(appContext, parameters) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -51,12 +52,21 @@ class PersistentDownloadWorker(
             sourcePage = referer
         )
         val tree = Uri.parse(treeValue)
-        var connection: HttpURLConnection? = null
         var createdDocument: Uri? = null
 
         try {
             setForeground(createForegroundInfo(fileName, -1, "正在准备下载"))
-            publishProgress(-1, "正在准备下载", fileName)
+            publishProgressAsync(-1, "正在准备下载", fileName)
+            persistRecord(
+                fileName = fileName,
+                sourceUrl = url,
+                kind = kind,
+                mimeType = mime,
+                state = "downloading",
+                progress = -1,
+                detail = "正在准备下载",
+                documentUri = null
+            )
 
             if (kind == ResourceKind.PLAYLIST && fileName.endsWith(".m3u8", ignoreCase = true)) {
                 val result = HlsDownloader.download(
@@ -66,6 +76,16 @@ class PersistentDownloadWorker(
                 ) { progress, detail ->
                     publishProgressAsync(progress, detail, fileName)
                 }
+                persistRecord(
+                    fileName = result.fileName,
+                    sourceUrl = url,
+                    kind = kind,
+                    mimeType = mime,
+                    state = "completed",
+                    progress = 100,
+                    detail = "HLS 分段已合并保存",
+                    documentUri = result.documentUri.toString()
+                )
                 return@withContext Result.success(
                     workDataOf(
                         KEY_FILE_NAME to result.fileName,
@@ -83,6 +103,16 @@ class PersistentDownloadWorker(
                 ) { progress, detail ->
                     publishProgressAsync(progress, detail, fileName)
                 }
+                persistRecord(
+                    fileName = result.fileName,
+                    sourceUrl = url,
+                    kind = kind,
+                    mimeType = mime,
+                    state = "completed",
+                    progress = 100,
+                    detail = "DASH 分段已合并保存",
+                    documentUri = result.documentUri.toString()
+                )
                 return@withContext Result.success(
                     workDataOf(
                         KEY_FILE_NAME to result.fileName,
@@ -96,24 +126,8 @@ class PersistentDownloadWorker(
             require(parsed.scheme == "http" || parsed.scheme == "https") {
                 "只支持 HTTP 或 HTTPS 资源"
             }
-            connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 20_000
-                readTimeout = 30_000
-                instanceFollowRedirects = true
-                setRequestProperty("User-Agent", WebSettings.getDefaultUserAgent(applicationContext))
-                setRequestProperty("Accept", "*/*")
-                if (referer.isNotBlank()) setRequestProperty("Referer", referer)
-            }
-
-            val responseCode = connection.responseCode
-            require(responseCode in 200..299) { "服务器返回 HTTP $responseCode" }
-            val responseMime = connection.contentType?.substringBefore(';')?.trim()
-                ?.takeIf { it.isNotBlank() }
-            val mimeType = responseMime ?: mime ?: defaultMimeType(kind)
-            val serverName = parseContentDisposition(connection.getHeaderField("Content-Disposition"))
-            val targetName = ensureExtension(serverName ?: fileName, mimeType, kind)
-
+            val mimeType = mime ?: defaultMimeType(kind)
+            val targetName = ensureExtension(fileName, mimeType, kind)
             val parent = DocumentsContract.buildDocumentUriUsingTree(
                 tree,
                 DocumentsContract.getTreeDocumentId(tree)
@@ -125,37 +139,30 @@ class PersistentDownloadWorker(
                 targetName
             ) ?: error("无法在所选文件夹创建文件")
 
-            val totalBytes = connection.contentLengthLong
-            var copied = 0L
-            var lastReportedProgress = -2
-            publishProgress(if (totalBytes > 0L) 0 else -1, "正在下载", targetName)
-            BufferedInputStream(connection.inputStream).use { source ->
-                val output = applicationContext.contentResolver.openOutputStream(createdDocument, "w")
-                    ?: error("无法写入目标文件")
-                BufferedOutputStream(output).use { sink ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val count = source.read(buffer)
-                        if (count < 0) break
-                        sink.write(buffer, 0, count)
-                        copied += count
-                        if (totalBytes > 0L) {
-                            val progress = ((copied * 100.0) / totalBytes).toInt().coerceIn(0, 99)
-                            if (progress != lastReportedProgress) {
-                                lastReportedProgress = progress
-                                publishProgress(
-                                    progress,
-                                    "${formatBytes(copied)} / ${formatBytes(totalBytes)}",
-                                    targetName
-                                )
-                            }
-                        } else if (copied % (512 * 1024L) < buffer.size) {
-                            publishProgress(-1, "已下载 ${formatBytes(copied)}", targetName)
-                        }
-                    }
-                }
+            val headers = buildMap<String, List<String>> {
+                put("User-Agent", listOf(android.webkit.WebSettings.getDefaultUserAgent(applicationContext)))
+                put("Accept", listOf("*/*"))
+                if (referer.isNotBlank()) put("Referer", listOf(referer))
             }
+            publishProgressAsync(-1, "正在下载（OkDownload）", targetName)
+            okDownloadTransferEngine.downloadToDocument(
+                url = url,
+                destinationDocument = createdDocument,
+                headers = headers
+            ) { progress, detail ->
+                publishProgressAsync(progress, detail, targetName)
+            }
+
+            persistRecord(
+                fileName = targetName,
+                sourceUrl = url,
+                kind = kind,
+                mimeType = mimeType,
+                state = "completed",
+                progress = 100,
+                detail = "已保存到所选文件夹",
+                documentUri = createdDocument.toString()
+            )
             Result.success(
                 workDataOf(
                     KEY_FILE_NAME to targetName,
@@ -165,18 +172,31 @@ class PersistentDownloadWorker(
             )
         } catch (cancelled: CancellationException) {
             createdDocument?.let { runCatching { applicationContext.contentResolver.delete(it, null, null) } }
+            persistRecord(
+                fileName = fileName,
+                sourceUrl = url,
+                kind = kind,
+                mimeType = mime,
+                state = "cancelled",
+                progress = 0,
+                detail = "下载已取消",
+                documentUri = null
+            )
             throw cancelled
         } catch (error: Exception) {
             createdDocument?.let { runCatching { applicationContext.contentResolver.delete(it, null, null) } }
+            persistRecord(
+                fileName = fileName,
+                sourceUrl = url,
+                kind = kind,
+                mimeType = mime,
+                state = "failed",
+                progress = 0,
+                detail = error.message ?: "下载失败",
+                documentUri = null
+            )
             Result.failure(workDataOf(KEY_ERROR to (error.message ?: "下载失败")))
-        } finally {
-            connection?.disconnect()
         }
-    }
-
-    private suspend fun publishProgress(progress: Int, detail: String, fileName: String) {
-        setProgress(workDataOf(KEY_PROGRESS to progress, KEY_DETAIL to detail, KEY_FILE_NAME to fileName))
-        setForeground(createForegroundInfo(fileName, progress, detail))
     }
 
     private fun publishProgressAsync(progress: Int, detail: String, fileName: String) {
@@ -208,6 +228,36 @@ class PersistentDownloadWorker(
         } else {
             ForegroundInfo(NOTIFICATION_ID, notification)
         }
+    }
+
+    private suspend fun persistRecord(
+        fileName: String,
+        sourceUrl: String,
+        kind: ResourceKind,
+        mimeType: String?,
+        state: String,
+        progress: Int,
+        detail: String,
+        documentUri: String?
+    ) {
+        val id = id.toString()
+        val previous = downloadRepository.findById(id)
+        val now = System.currentTimeMillis()
+        downloadRepository.save(
+            DownloadRecordEntity(
+                id = id,
+                sourceUrl = sourceUrl,
+                fileName = fileName,
+                resourceKind = kind.name,
+                mimeType = mimeType,
+                state = state,
+                progress = progress,
+                detail = detail,
+                destinationUri = documentUri ?: previous?.destinationUri,
+                createdAtMillis = previous?.createdAtMillis ?: now,
+                updatedAtMillis = now
+            )
+        )
     }
 
     private fun parseContentDisposition(header: String?): String? {
