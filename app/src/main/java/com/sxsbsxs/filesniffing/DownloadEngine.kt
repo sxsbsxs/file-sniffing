@@ -60,6 +60,7 @@ object DownloadEngine {
     fun retry(
         context: Context,
         taskId: String,
+        partialUri: String? = null,
         onUpdate: (DownloadTaskUi) -> Unit
     ) {
         val manager = WorkManager.getInstance(context.applicationContext)
@@ -76,7 +77,7 @@ object DownloadEngine {
                 val retryData = androidx.work.Data.Builder()
                     .putAll(info.inputData)
                     .apply {
-                        info.progress.getString(PersistentDownloadWorker.KEY_PARTIAL_URI)
+                        (partialUri ?: info.progress.getString(PersistentDownloadWorker.KEY_PARTIAL_URI))
                             ?.takeIf { it.isNotBlank() }
                             ?.let { putString(PersistentDownloadWorker.KEY_PARTIAL_URI, it) }
                     }
