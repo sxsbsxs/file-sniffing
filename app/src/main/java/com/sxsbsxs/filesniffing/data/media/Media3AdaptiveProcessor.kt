@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.Clock
@@ -39,6 +40,16 @@ data class Media3ExportResult(
     val fileName: String
 )
 
+data class AdaptiveQualityOption(
+    val height: Int,
+    val width: Int,
+    val bitrate: Int
+) {
+    val label: String get() = "${height}p"
+    val bitrateLabel: String?
+        get() = bitrate.takeIf { it > 0 }?.let { "${it / 1000} kbps" }
+}
+
 @OptIn(UnstableApi::class)
 @Singleton
 class Media3AdaptiveProcessor @Inject constructor(
@@ -47,9 +58,53 @@ class Media3AdaptiveProcessor @Inject constructor(
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    suspend fun inspectAdaptiveQualities(resource: SniffedResource): List<AdaptiveQualityOption> =
+        withContext(Dispatchers.IO) {
+            require(resource.fileName.endsWith(".m3u8", true) ||
+                resource.fileName.endsWith(".mpd", true)) {
+                "Media3 画质探测只支持 HLS 或 DASH 清单"
+            }
+            val helper = prepareHelper(
+                createMediaItem(resource),
+                createDataSourceFactory(resource),
+                null
+            )
+            try {
+                val options = mutableListOf<AdaptiveQualityOption>()
+                for (periodIndex in 0 until helper.periodCount) {
+                    val mapped = helper.getMappedTrackInfo(periodIndex)
+                    for (rendererIndex in 0 until mapped.rendererCount) {
+                        if (mapped.getRendererType(rendererIndex) != C.TRACK_TYPE_VIDEO) continue
+                        val groups = mapped.getTrackGroups(rendererIndex)
+                        for (groupIndex in 0 until groups.length) {
+                            val group = groups.get(groupIndex)
+                            for (trackIndex in 0 until group.length) {
+                                val format = group.getFormat(trackIndex)
+                                if (format.height > 0) {
+                                    options += AdaptiveQualityOption(
+                                        height = format.height,
+                                        width = format.width,
+                                        bitrate = format.bitrate
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                options
+                    .groupBy { it.height }
+                    .values
+                    .map { candidates -> candidates.maxBy { it.bitrate } }
+                    .sortedByDescending { it.height }
+            } finally {
+                helper.release()
+            }
+        }
+
     suspend fun exportAdaptiveStream(
         resource: SniffedResource,
         destinationTree: Uri,
+        maxVideoHeight: Int? = null,
         onProgress: (Int, String) -> Unit
     ): Media3ExportResult = withContext(Dispatchers.IO) {
         require(resource.fileName.endsWith(".m3u8", true) ||
@@ -57,28 +112,15 @@ class Media3AdaptiveProcessor @Inject constructor(
             "Media3 导出只处理 HLS 或 DASH 自适应媒体清单"
         }
 
-        val headers = buildMap {
-            put("User-Agent", android.webkit.WebSettings.getDefaultUserAgent(context))
-            put("Accept", "*/*")
-            if (resource.sourcePage.isNotBlank()) put("Referer", resource.sourcePage)
-        }
-        val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
-            .setDefaultRequestProperties(headers)
-        val sourceMediaItem = MediaItem.Builder()
-            .setUri(resource.url)
-            .setMimeType(
-                when {
-                    resource.fileName.endsWith(".m3u8", ignoreCase = true) ->
-                        MimeTypes.APPLICATION_M3U8
-                    resource.fileName.endsWith(".mpd", ignoreCase = true) ->
-                        MimeTypes.APPLICATION_MPD
-                    else -> resource.mimeType
-                }
-            )
-            .build()
+        val dataSourceFactory = createDataSourceFactory(resource)
+        val sourceMediaItem = createMediaItem(resource)
 
         onProgress(-1, "Media3 正在分析播放轨道")
-        val downloadRequest = prepareDownloadRequest(sourceMediaItem, dataSourceFactory)
+        val downloadRequest = prepareDownloadRequest(
+            sourceMediaItem,
+            dataSourceFactory,
+            maxVideoHeight
+        )
         val selectedMediaItem = downloadRequest.toMediaItem()
 
         val tempFile = File(context.cacheDir, "media3-${UUID.randomUUID()}.mp4")
@@ -136,16 +178,50 @@ class Media3AdaptiveProcessor @Inject constructor(
         }
     }
 
+    private fun createDataSourceFactory(resource: SniffedResource): OkHttpDataSource.Factory {
+        val headers = buildMap {
+            put("User-Agent", android.webkit.WebSettings.getDefaultUserAgent(context))
+            put("Accept", "*/*")
+            if (resource.sourcePage.isNotBlank()) put("Referer", resource.sourcePage)
+        }
+        return OkHttpDataSource.Factory(okHttpClient).setDefaultRequestProperties(headers)
+    }
+
+    private fun createMediaItem(resource: SniffedResource): MediaItem =
+        MediaItem.Builder()
+            .setUri(resource.url)
+            .setMimeType(
+                when {
+                    resource.fileName.endsWith(".m3u8", ignoreCase = true) -> MimeTypes.APPLICATION_M3U8
+                    resource.fileName.endsWith(".mpd", ignoreCase = true) -> MimeTypes.APPLICATION_MPD
+                    else -> resource.mimeType
+                }
+            )
+            .build()
+
     private suspend fun prepareDownloadRequest(
         mediaItem: MediaItem,
-        dataSourceFactory: OkHttpDataSource.Factory
-    ) = suspendCancellableCoroutine { continuation ->
-        val trackSelection = DefaultTrackSelector.Parameters.Builder(context)
+        dataSourceFactory: OkHttpDataSource.Factory,
+        maxVideoHeight: Int?
+    ) = prepareHelper(mediaItem, dataSourceFactory, maxVideoHeight).let { helper ->
+        try {
+            helper.getDownloadRequest(null)
+        } finally {
+            helper.release()
+        }
+    }
+
+    private suspend fun prepareHelper(
+        mediaItem: MediaItem,
+        dataSourceFactory: OkHttpDataSource.Factory,
+        maxVideoHeight: Int?
+    ): DownloadHelper = suspendCancellableCoroutine { continuation ->
+        val parametersBuilder = DefaultTrackSelector.Parameters.Builder(context)
             .setForceHighestSupportedBitrate(true)
-            .build()
+        maxVideoHeight?.let { parametersBuilder.setMaxVideoSize(Int.MAX_VALUE, it) }
         val helper = DownloadHelper.Factory()
             .setDataSourceFactory(dataSourceFactory)
-            .setTrackSelectionParameters(trackSelection)
+            .setTrackSelectionParameters(parametersBuilder.build())
             .create(mediaItem)
 
         continuation.invokeOnCancellation {
@@ -158,15 +234,12 @@ class Media3AdaptiveProcessor @Inject constructor(
                     helper.release()
                     return
                 }
-                runCatching {
-                    helper.getDownloadRequest(null)
-                }.onSuccess { request ->
+                if (!tracksInfoAvailable) {
                     helper.release()
-                    continuation.resume(request)
-                }.onFailure { error ->
-                    helper.release()
-                    continuation.resumeWithException(error)
+                    continuation.resumeWithException(IOException("媒体清单没有可读取的轨道信息"))
+                    return
                 }
+                continuation.resume(helper)
             }
 
             override fun onPrepareError(helper: DownloadHelper, error: IOException) {
