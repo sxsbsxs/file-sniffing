@@ -163,8 +163,20 @@ private fun FileSniffingApp(sharedLink: String) {
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
     val storedTasksById = storedDownloadHistory.associateBy { it.id }
     val liveTasksWithStoredUri = downloadTasks.map { task ->
-        if (task.fileUri != null) task
-        else task.copy(fileUri = storedTasksById[task.id]?.destinationUri)
+        val stored = storedTasksById[task.id]
+        when {
+            stored?.state == "paused" -> task.copy(
+                state = "paused",
+                progress = stored.progress,
+                detail = stored.detail,
+                fileUri = task.fileUri ?: stored.destinationUri,
+                downloadedBytes = stored.downloadedBytes,
+                totalBytes = stored.totalBytes,
+                speedBytesPerSecond = stored.speedBytesPerSecond
+            )
+            task.fileUri != null -> task
+            else -> task.copy(fileUri = stored?.destinationUri)
+        }
     }
     val visibleDownloadTasks = (
         liveTasksWithStoredUri + storedDownloadHistory.map { record ->
@@ -176,7 +188,10 @@ private fun FileSniffingApp(sharedLink: String) {
                 detail = record.detail,
                 fileUri = record.destinationUri,
                 resourceKind = record.resourceKind,
-                mimeType = record.mimeType
+                mimeType = record.mimeType,
+                downloadedBytes = record.downloadedBytes,
+                totalBytes = record.totalBytes,
+                speedBytesPerSecond = record.speedBytesPerSecond
             )
         }
     ).distinctBy { it.id }
@@ -394,6 +409,9 @@ private fun FileSniffingApp(sharedLink: String) {
                                 }
                             }
                         }
+                    },
+                    onPauseTask = { task ->
+                        DownloadEngine.pause(context.applicationContext, task.id)
                     },
                     onCancelTask = { task ->
                         DownloadEngine.cancel(context.applicationContext, task.id)
@@ -674,6 +692,7 @@ private fun DownloadsScreen(
     onChooseFolder: () -> Unit,
     onBackToSniff: () -> Unit,
     onRetryTask: (DownloadTaskUi) -> Unit,
+    onPauseTask: (DownloadTaskUi) -> Unit,
     onCancelTask: (DownloadTaskUi) -> Unit,
     onOpenTask: (DownloadTaskUi) -> Unit
 ) {
@@ -880,6 +899,7 @@ private fun DownloadsScreen(
                             task = task,
                             onOpen = { onOpenTask(task) },
                             onRetry = { onRetryTask(task) },
+                            onPause = { onPauseTask(task) },
                             onCancel = { onCancelTask(task) }
                         )
                     }
@@ -894,6 +914,7 @@ private fun DownloadTaskCard(
     task: DownloadTaskUi,
     onOpen: () -> Unit,
     onRetry: () -> Unit,
+    onPause: () -> Unit,
     onCancel: () -> Unit
 ) {
     val finished = task.state == "completed"
@@ -904,6 +925,7 @@ private fun DownloadTaskCard(
     val statusLabel = when {
         finished -> "已完成"
         failed -> "下载失败"
+        task.state == "paused" -> "已暂停"
         task.state == "cancelled" -> "已取消"
         task.state == "downloading" -> "正在下载"
         else -> "等待中"
@@ -1054,13 +1076,17 @@ private fun DownloadTaskCard(
                 finished && task.fileUri != null -> TextButton(onClick = onOpen) {
                     Text("打开文件", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                 }
-                failed || task.state == "cancelled" -> TextButton(onClick = onRetry) {
+                failed || task.state == "cancelled" || task.state == "paused" -> TextButton(onClick = onRetry) {
                     Text(
-                        if (task.fileUri != null) "继续下载" else "重新下载",
+                        if (task.state == "paused" || task.fileUri != null) "继续下载" else "重新下载",
                         color = MaterialTheme.colorScheme.primary,
                         fontSize = 12.sp
                     )
                 }
+                task.state == "downloading" && task.resourceKind != ResourceKind.PLAYLIST.name ->
+                    TextButton(onClick = onPause) {
+                        Text("暂停", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                    }
                 task.state == "downloading" || task.state == "queued" -> TextButton(onClick = onCancel) {
                     Text("取消", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }

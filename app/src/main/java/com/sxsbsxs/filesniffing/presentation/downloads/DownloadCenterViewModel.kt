@@ -65,7 +65,13 @@ class DownloadCenterViewModel @Inject constructor(
                     createdAtMillis = previous?.createdAtMillis ?: System.currentTimeMillis(),
                     updatedAtMillis = System.currentTimeMillis(),
                     referer = resource?.sourcePage ?: previous?.referer.orEmpty(),
-                    destinationTreeUri = destinationTreeUri ?: previous?.destinationTreeUri
+                    destinationTreeUri = destinationTreeUri ?: previous?.destinationTreeUri,
+                    downloadedBytes = task.downloadedBytes.takeIf { it >= 0L }
+                        ?: previous?.downloadedBytes ?: -1L,
+                    totalBytes = task.totalBytes.takeIf { it >= 0L }
+                        ?: previous?.totalBytes ?: -1L,
+                    speedBytesPerSecond = task.speedBytesPerSecond.takeIf { it >= 0L }
+                        ?: previous?.speedBytesPerSecond ?: -1L
                 )
             )
         }

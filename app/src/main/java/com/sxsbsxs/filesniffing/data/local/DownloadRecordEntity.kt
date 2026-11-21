@@ -18,5 +18,8 @@ data class DownloadRecordEntity(
     val createdAtMillis: Long,
     val updatedAtMillis: Long,
     @ColumnInfo(defaultValue = "''") val referer: String = "",
-    val destinationTreeUri: String? = null
+    val destinationTreeUri: String? = null,
+    @ColumnInfo(defaultValue = "-1") val downloadedBytes: Long = -1L,
+    @ColumnInfo(defaultValue = "-1") val totalBytes: Long = -1L,
+    @ColumnInfo(defaultValue = "-1") val speedBytesPerSecond: Long = -1L
 )

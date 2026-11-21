@@ -227,15 +227,17 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 )
             )
         } catch (cancelled: CancellationException) {
+            val paused = consumePauseRequest()
             withContext(NonCancellable) {
+                val previous = downloadRepository.findById(id.toString())
                 persistRecord(
                     fileName = fileName,
                     sourceUrl = url,
                     kind = kind,
                     mimeType = mime,
-                    state = "cancelled",
-                    progress = 0,
-                    detail = "下载已取消，可继续断点下载",
+                    state = if (paused) "paused" else "cancelled",
+                    progress = if (paused) previous?.progress ?: 0 else 0,
+                    detail = if (paused) "已暂停，继续时将尝试从断点恢复" else "下载已取消，可重新下载",
                     documentUri = createdDocument?.toString()
                 )
             }
@@ -305,6 +307,19 @@ class PersistentDownloadWorker @AssistedInject constructor(
         }
     }
 
+    private fun consumePauseRequest(): Boolean {
+        val preferences = applicationContext.getSharedPreferences(
+            "download_pause_requests",
+            Context.MODE_PRIVATE
+        )
+        val key = id.toString()
+        val requested = preferences.getBoolean(key, false)
+        if (requested) {
+            preferences.edit().remove(key).apply()
+        }
+        return requested
+    }
+
     private suspend fun persistRecord(
         fileName: String,
         sourceUrl: String,
@@ -332,7 +347,10 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 createdAtMillis = previous?.createdAtMillis ?: now,
                 updatedAtMillis = now,
                 referer = inputData.getString(KEY_REFERER).orEmpty(),
-                destinationTreeUri = inputData.getString(KEY_TREE)
+                destinationTreeUri = inputData.getString(KEY_TREE),
+                downloadedBytes = previous?.downloadedBytes ?: -1L,
+                totalBytes = previous?.totalBytes ?: -1L,
+                speedBytesPerSecond = previous?.speedBytesPerSecond ?: -1L
             )
         )
     }

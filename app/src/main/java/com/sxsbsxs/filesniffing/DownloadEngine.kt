@@ -12,6 +12,7 @@ import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 
 object DownloadEngine {
     const val DOWNLOAD_TAG = "file-sniffing-download"
+    private const val PAUSE_REQUESTS_PREF = "download_pause_requests"
     private const val FILE_NAME_TAG_PREFIX = "file-name:"
     private const val RESOURCE_KIND_TAG_PREFIX = "resource-kind:"
     private const val MIME_TYPE_TAG_PREFIX = "mime-type:"
@@ -140,6 +141,17 @@ object DownloadEngine {
             }
         }
         liveData.observeForever(observer)
+    }
+
+    fun pause(context: Context, taskId: String) {
+        val appContext = context.applicationContext
+        runCatching {
+            appContext.getSharedPreferences(PAUSE_REQUESTS_PREF, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(taskId, true)
+                .apply()
+            WorkManager.getInstance(appContext).cancelWorkById(UUID.fromString(taskId))
+        }
     }
 
     fun cancel(context: Context, taskId: String) {
