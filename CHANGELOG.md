@@ -1,10 +1,16 @@
 # Changelog
 
+## 0.8.1
+
+- Fixed download task filename restoration by storing the encoded filename in a durable WorkManager tag rather than reading a nonexistent `WorkInfo.inputData` property.
+- Added HTTP and HTTPS `ACTION_VIEW` filters so users can open a webpage link in File Sniffing from other apps.
+- Kept external URL handling separate from page cookies; this does not grant authenticated download access.
+
 ## 0.8.0
 
 - Reused the original SAF document URI for direct-download retries so OkDownload can continue saved breakpoints.
 - Preserved partial document URIs in WorkManager progress and Room history.
-- Added legacy SharedPreferences-to-DataStore migration for the selected download folder.
+- Added legacy SharedPreferences-to-DataStore migration for the selected output folder.
 - Added explicit HLS/DASH MIME hints for extensionless adaptive manifest URLs.
 - Updated the task action label to distinguish continuing a breakpoint download from starting a fresh retry.
 
