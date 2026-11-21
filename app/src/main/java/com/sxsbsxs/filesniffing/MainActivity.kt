@@ -868,12 +868,20 @@ private fun DownloadTaskCard(task: DownloadTaskUi) {
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
-            LinearProgressIndicator(
-                progress = task.progress / 100f,
-                modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
-                color = if (failed) Color(0xFFD24B4B) else Accent,
-                trackColor = Color(0xFFEDEFF3)
-            )
+            if (task.progress < 0 && task.state == "downloading") {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
+                    color = Accent,
+                    trackColor = Color(0xFFEDEFF3)
+                )
+            } else {
+                LinearProgressIndicator(
+                    progress = task.progress.coerceAtLeast(0) / 100f,
+                    modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
+                    color = if (failed) Color(0xFFD24B4B) else Accent,
+                    trackColor = Color(0xFFEDEFF3)
+                )
+            }
             Spacer(modifier = Modifier.height(7.dp))
             Text(
                 text = task.detail,
