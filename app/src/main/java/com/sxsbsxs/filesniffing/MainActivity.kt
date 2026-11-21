@@ -705,6 +705,7 @@ private fun DownloadsScreen(
     var statusFilter by rememberSaveable { mutableStateOf("全部") }
     var kindFilter by rememberSaveable { mutableStateOf("全部") }
     val activeCount = tasks.count { it.state == "downloading" || it.state == "queued" }
+    val pausedCount = tasks.count { it.state == "paused" }
     val completedCount = tasks.count { it.state == "completed" }
     val failedCount = tasks.count { it.state == "failed" || it.state == "cancelled" }
     val availableKinds = tasks.mapNotNull { task ->
@@ -713,6 +714,7 @@ private fun DownloadsScreen(
     val statusFilteredTasks = tasks.filter { task ->
         when (statusFilter) {
             "进行中" -> task.state == "downloading" || task.state == "queued"
+            "已暂停" -> task.state == "paused"
             "已完成" -> task.state == "completed"
             "异常" -> task.state == "failed" || task.state == "cancelled"
             else -> true
@@ -759,6 +761,7 @@ private fun DownloadsScreen(
         ) {
             listOf(
                 activeCount to "进行中",
+                pausedCount to "已暂停",
                 completedCount to "已完成",
                 failedCount to "异常"
             ).forEach { pair ->
@@ -795,7 +798,7 @@ private fun DownloadsScreen(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            listOf("全部", "进行中", "已完成", "异常").forEach { filter ->
+            listOf("全部", "进行中", "已暂停", "已完成", "异常").forEach { filter ->
                 FilterChip(
                     selected = statusFilter == filter,
                     onClick = { statusFilter = filter },

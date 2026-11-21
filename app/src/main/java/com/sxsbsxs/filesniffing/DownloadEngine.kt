@@ -203,7 +203,7 @@ object DownloadEngine {
         }
         val progress = when {
             info.state == WorkInfo.State.SUCCEEDED -> 100
-            info.state == WorkInfo.State.RUNNING ->
+            info.state == WorkInfo.State.RUNNING || pauseWasRequested ->
                 info.progress.getInt(PersistentDownloadWorker.KEY_PROGRESS, -1)
             else -> 0
         }
