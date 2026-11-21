@@ -58,6 +58,75 @@ def validate_dash(path: pathlib.Path) -> None:
         raise ValueError(f"{path.name}: MPD has no Representation")
 
 
+def validate_manifest_link_intents() -> None:
+    manifest = ROOT / "app/src/main/AndroidManifest.xml"
+    root = ET.parse(manifest).getroot()
+    android_ns = "{http://schemas.android.com/apk/res/android}"
+    application = next(
+        (element for element in root if local_name(element.tag) == "application"),
+        None,
+    )
+    if application is None:
+        raise ValueError("AndroidManifest.xml: missing application")
+
+    main_activity = next(
+        (
+            element
+            for element in application
+            if local_name(element.tag) == "activity"
+            and element.get(android_ns + "name") == ".MainActivity"
+        ),
+        None,
+    )
+    if main_activity is None:
+        raise ValueError("AndroidManifest.xml: MainActivity not registered")
+
+    view_schemes: set[str] = set()
+    view_categories: set[str] = set()
+    send_plain_text = False
+    for intent_filter in main_activity:
+        if local_name(intent_filter.tag) != "intent-filter":
+            continue
+        actions = {
+            element.get(android_ns + "name")
+            for element in intent_filter
+            if local_name(element.tag) == "action"
+        }
+        categories = {
+            element.get(android_ns + "name")
+            for element in intent_filter
+            if local_name(element.tag) == "category"
+        }
+        data_elements = [
+            element for element in intent_filter
+            if local_name(element.tag) == "data"
+        ]
+
+        if "android.intent.action.VIEW" in actions:
+            view_categories.update(category for category in categories if category)
+            view_schemes.update(
+                element.get(android_ns + "scheme")
+                for element in data_elements
+                if element.get(android_ns + "scheme")
+            )
+        if "android.intent.action.SEND" in actions:
+            send_plain_text = any(
+                element.get(android_ns + "mimeType") == "text/plain"
+                for element in data_elements
+            )
+
+    required_categories = {
+        "android.intent.category.DEFAULT",
+        "android.intent.category.BROWSABLE",
+    }
+    if not required_categories.issubset(view_categories):
+        raise ValueError("MainActivity VIEW filter must be DEFAULT and BROWSABLE")
+    if not {"http", "https"}.issubset(view_schemes):
+        raise ValueError("MainActivity VIEW filter must accept both HTTP and HTTPS")
+    if not send_plain_text:
+        raise ValueError("MainActivity must retain its text/plain SEND filter")
+
+
 def validate_java_filename_policy() -> None:
     javac = shutil.which("javac")
     java = shutil.which("java")
@@ -135,6 +204,8 @@ def main() -> None:
     print("HLS fixture: OK")
     validate_dash(FIXTURES / "sample_dash.mpd")
     print("DASH fixture: OK")
+    validate_manifest_link_intents()
+    print("Android link intent filters: OK")
     validate_java_filename_policy()
     print("Java filename policy: OK")
     validate_native_probe()
