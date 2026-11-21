@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -573,8 +575,7 @@ private fun DownloadsScreen(
     onOpenTask: (DownloadTaskUi) -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp).padding(top = 22.dp, bottom = 28.dp)
+        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(top = 22.dp, bottom = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
@@ -586,12 +587,12 @@ private fun DownloadsScreen(
                 Text("${tasks.size}", modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(20.dp))
         FolderPickerCard(folderLabel = folderLabel, hasFolder = hasFolder, onClick = onChooseFolder)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(22.dp))
         if (tasks.isEmpty()) {
             Box(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                modifier = Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(18.dp))
                     .background(MaterialTheme.colorScheme.surface).padding(horizontal = 24.dp, vertical = 36.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -611,10 +612,19 @@ private fun DownloadsScreen(
                 Spacer(Modifier.weight(1f))
                 Text("共 ${tasks.size} 项", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
-            Spacer(Modifier.height(11.dp))
-            tasks.forEach { task ->
-                DownloadTaskCard(task, onOpen = { onOpenTask(task) }, onRetry = { onRetryTask(task) }, onCancel = { onCancelTask(task) })
-                Spacer(Modifier.height(9.dp))
+            Spacer(Modifier.height(10.dp))
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                items(tasks, key = { it.id }) { task ->
+                    DownloadTaskCard(
+                        task,
+                        onOpen = { onOpenTask(task) },
+                        onRetry = { onRetryTask(task) },
+                        onCancel = { onCancelTask(task) }
+                    )
+                }
             }
         }
     }
@@ -697,7 +707,7 @@ private fun DownloadTaskCard(
                     progress = task.progress.coerceAtLeast(0) / 100f,
                     modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
                     color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                    trackColor = Color(0xFFEDEFF3)
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             }
             Spacer(modifier = Modifier.height(7.dp))
