@@ -1,5 +1,7 @@
 package com.sxsbsxs.filesniffing
 
+import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
+
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.os.Handler
@@ -43,6 +45,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -58,11 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-
-private val BrowserInk = Color(0xFF17191F)
-private val BrowserMuted = Color(0xFF777D88)
-private val BrowserBlue = Color(0xFF4B66E8)
-private val BrowserLine = Color(0xFFE9EBEF)
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -92,12 +90,12 @@ fun SniffingResultScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF6F7F9))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.White)
+                .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -132,7 +130,7 @@ fun SniffingResultScreen(
         AndroidView(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
+                .height(190.dp)
                 .background(Color.White),
             factory = { context ->
                 WebView(context).apply {
@@ -217,9 +215,9 @@ fun SniffingResultScreen(
             modifier = Modifier
                 .weight(1f)
                 .background(Color(0xFFF6F7F9))
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 18.dp)
         ) {
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -241,10 +239,10 @@ fun SniffingResultScreen(
                     LinearProgressIndicator(
                         modifier = Modifier.width(42.dp),
                         color = BrowserBlue,
-                        trackColor = Color(0xFFE4E7F2)
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 } else {
-                    Surface(color = Color(0xFFECEFFB), shape = CircleShape) {
+                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
                         Text(
                             text = resources.size.toString(),
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -297,7 +295,7 @@ fun SniffingResultScreen(
                         Icon(
                             Icons.Rounded.PlayArrow,
                             contentDescription = null,
-                            tint = Color(0xFFB3B8C1),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                             modifier = Modifier.size(36.dp)
                         )
                         Spacer(Modifier.height(10.dp))
@@ -368,7 +366,7 @@ private fun ResourceRow(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFF0F2F8)),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, contentDescription = null, tint = BrowserBlue)
@@ -399,7 +397,7 @@ private fun ResourceRow(
                             item.fileName.endsWith(".mpd", ignoreCase = true) -> "DASH 自适应流 · Media3 导出 MP4"
                             else -> "媒体清单"
                         },
-                        color = Color(0xFFB07932),
+                        color = MaterialTheme.colorScheme.secondary,
                         fontSize = 10.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
