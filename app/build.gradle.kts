@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.sxsbsxs.filesniffing"
     compileSdk = 36
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "com.sxsbsxs.filesniffing"
@@ -16,6 +17,14 @@ android {
         targetSdk = 35
         versionCode = 8
         versionName = "0.8.0"
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+            }
+        }
     }
 
     buildTypes {
@@ -35,6 +44,13 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     packaging {
