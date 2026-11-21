@@ -11,7 +11,7 @@ The visual direction follows the clarity and polish of leading consumer apps (Do
 ## Implemented
 
 - [x] Android app foundation with Kotlin, Jetpack Compose and Gradle Wrapper.
-- [x] Minimal URL-entry home screen with paste, clear and URL validation.
+- [x] Minimal URL-entry home screen with paste, clear, URL validation and Android share-sheet link receiving.
 - [x] Embedded WebView for opening the supplied page.
 - [x] Request URL capture through WebViewClient resource callbacks.
 - [x] DOM and Performance API scanning for video, audio, image and source resources.
@@ -23,7 +23,7 @@ The visual direction follows the clarity and polish of leading consumer apps (Do
 - [x] Direct HTTP/HTTPS file transfer into the chosen folder.
 - [x] Content-Disposition filename and server MIME-type handling.
 - [x] Byte-based progress when Content-Length is available; indeterminate progress for chunked/unknown-length transfers.
-- [x] Download task list with success/failure state.
+- [x] Download task list with success/failure state and open-file action.
 - [x] Adaptive launcher icon and GitHub Actions debug-build workflow.
 
 ## Current limitations
