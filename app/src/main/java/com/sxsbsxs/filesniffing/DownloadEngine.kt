@@ -128,7 +128,8 @@ object DownloadEngine {
                     currentTask.copy(
                         progress = 100,
                         state = "completed",
-                        detail = "已保存到所选文件夹"
+                        detail = "已保存到所选文件夹",
+                        fileUri = createdDocument?.toString()
                     )
                 )
             } catch (error: Exception) {
