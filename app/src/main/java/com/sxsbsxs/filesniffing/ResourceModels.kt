@@ -6,12 +6,7 @@ enum class ResourceKind(val label: String) {
     AUDIO("音频"),
     IMAGE("图片"),
     PLAYLIST("媒体清单"),
-    DOCUMENT("文档"),
-    ARCHIVE("压缩包"),
-    APPLICATION("应用与安装包"),
-    FONT("字体"),
-    TEXT_DATA("代码与数据"),
-    OTHER("其他文件")
+    OTHER("文件")
 }
 
 data class SniffedResource(
@@ -30,11 +25,10 @@ object ResourceSniffer {
         rawUrl: String,
         hintedKind: String? = null,
         hintedMime: String? = null,
-        hintedFileName: String? = null,
         pageTitle: String = "",
         sourcePage: String = ""
     ): SniffedResource? {
-        val detection = ResourceClassifier.detect(rawUrl, hintedKind, hintedMime, hintedFileName) ?: return null
+        val detection = ResourceClassifier.detect(rawUrl, hintedKind, hintedMime) ?: return null
         val kind = runCatching {
             ResourceKind.valueOf(detection.kind.name)
         }.getOrNull() ?: return null

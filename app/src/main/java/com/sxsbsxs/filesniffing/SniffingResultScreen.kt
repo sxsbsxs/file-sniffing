@@ -11,6 +11,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +64,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+
+private val RESOURCE_FILTER_GROUPS = listOf(
+    "视频" to setOf(ResourceKind.VIDEO, ResourceKind.PLAYLIST),
+    "音频" to setOf(ResourceKind.AUDIO),
+    "图片" to setOf(ResourceKind.IMAGE),
+    "文档" to setOf(ResourceKind.DOCUMENT),
+    "压缩包" to setOf(ResourceKind.ARCHIVE),
+    "应用" to setOf(ResourceKind.APPLICATION),
+    "字体" to setOf(ResourceKind.FONT),
+    "代码/数据" to setOf(ResourceKind.TEXT_DATA),
+    "其他" to setOf(ResourceKind.OTHER)
+)
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -115,13 +129,19 @@ fun SniffingResultScreen(
             }
         }
     }
-    val filteredResources = resources.filter {
-        when (currentFilter) {
-            "视频" -> it.kind == ResourceKind.VIDEO || it.kind == ResourceKind.PLAYLIST || it.kind == ResourceKind.SEGMENT
-            "音频" -> it.kind == ResourceKind.AUDIO
-            "图片" -> it.kind == ResourceKind.IMAGE
-            else -> true
-        }
+    // Media segments are implementation details of adaptive streams, not standalone files.
+    val visibleResources = resources.filter { it.kind != ResourceKind.SEGMENT }
+    val availableFilters = listOf("全部") + RESOURCE_FILTER_GROUPS
+        .filter { (_, kinds) -> visibleResources.any { it.kind in kinds } }
+        .map { it.first }
+    val activeFilter = currentFilter.takeIf { it in availableFilters } ?: "全部"
+    val activeKinds = RESOURCE_FILTER_GROUPS
+        .firstOrNull { it.first == activeFilter }
+        ?.second
+    val filteredResources = if (activeKinds == null) {
+        visibleResources
+    } else {
+        visibleResources.filter { it.kind in activeKinds }
     }
 
     Column(
@@ -532,7 +552,7 @@ fun SniffingResultScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    resources.size.toString(),
+                    visibleResources.size.toString(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
@@ -552,20 +572,26 @@ fun SniffingResultScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf("全部", "视频", "音频", "图片").forEach { filter ->
-                    TextButton(onClick = { currentFilter = filter }) {
-                        Text(
-                            filter,
-                            color = if (currentFilter == filter) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp
-                        )
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    availableFilters.forEach { filter ->
+                        TextButton(onClick = { currentFilter = filter }) {
+                            Text(
+                                filter,
+                                color = if (activeFilter == filter) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
-                Spacer(Modifier.weight(1f))
                 if (selectionMode && selectedResourceIds.isNotEmpty()) {
                     TextButton(onClick = {
-                        onDownloadBatch(resources.filter { it.id in selectedResourceIds })
+                        onDownloadBatch(visibleResources.filter { it.id in selectedResourceIds })
                         selectedResourceIds = emptySet()
                         selectionMode = false
                     }) {
@@ -592,7 +618,8 @@ fun SniffingResultScreen(
                         when {
                             isLoading -> "正在扫描网页资源…"
                             pageError != null -> "网页加载失败"
-                            else -> "暂未发现媒体资源"
+                            resources.any { it.kind == ResourceKind.SEGMENT } -> "发现媒体分段，尚未发现完整媒体资源"
+                            else -> "暂未发现可下载资源"
                         },
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp,
@@ -600,7 +627,11 @@ fun SniffingResultScreen(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        if (pageError != null) "检查网络后点击刷新重试" else "网页加载并播放媒体后，识别结果会显示在这里",
+                        when {
+                            pageError != null -> "检查网络后点击刷新重试"
+                            resources.any { it.kind == ResourceKind.SEGMENT } -> "单个媒体分段不会作为完整视频列出"
+                            else -> "视频、音频、图片、文档、压缩包和下载链接会显示在这里"
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
