@@ -71,7 +71,7 @@ import com.sxsbsxs.filesniffing.FileNameSanitizer;
 public final class FileNameSanitizerTest {
     public static void main(String[] args) {
         check("video.mp4", FileNameSanitizer.sanitize("../video.mp4", "fallback.bin"));
-        check("movie_.mp4", FileNameSanitizer.sanitize("folder\\\\movie?.mp4", "fallback.bin"));
+        check("movie_.mp4", FileNameSanitizer.sanitize("folder/movie?.mp4", "fallback.bin"));
         check("fallback.bin", FileNameSanitizer.sanitize("..", "fallback.bin"));
     }
 
