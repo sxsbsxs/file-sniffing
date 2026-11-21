@@ -103,7 +103,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
             require(parsed.scheme == "http" || parsed.scheme == "https") {
                 "只支持 HTTP 或 HTTPS 资源"
             }
-            val mimeType = mime ?: defaultMimeType(kind)
+            val mimeType = mime ?: defaultMimeType(kind, fileName)
             val targetName = ensureExtension(fileName, mimeType, kind)
             val parent = DocumentsContract.buildDocumentUriUsingTree(
                 tree,
@@ -308,36 +308,132 @@ class PersistentDownloadWorker @AssistedInject constructor(
     }
 
     private fun ensureExtension(name: String, mime: String, kind: ResourceKind): String {
-        val safe = FileNameSanitizer.sanitize(name, "download.bin")
+        val safe = FileNameSanitizer.sanitize(name, "download")
         val ext = safe.substringAfterLast('.', "")
         if (ext.isNotBlank() && ext.length <= 8) return safe
         val inferred = when {
+            mime.contains("mpegurl", true) -> "m3u8"
+            mime.contains("dash+xml", true) -> "mpd"
+            mime.contains("pdf", true) -> "pdf"
+            mime.contains("epub", true) -> "epub"
+            mime.contains("wordprocessingml.document", true) -> "docx"
+            mime.contains("spreadsheetml.sheet", true) -> "xlsx"
+            mime.contains("presentationml.presentation", true) -> "pptx"
+            mime.contains("application/msword", true) -> "doc"
+            mime.contains("vnd.ms-excel", true) -> "xls"
+            mime.contains("vnd.ms-powerpoint", true) -> "ppt"
+            mime.contains("opendocument.text", true) -> "odt"
+            mime.contains("opendocument.spreadsheet", true) -> "ods"
+            mime.contains("opendocument.presentation", true) -> "odp"
+            mime.contains("rtf", true) -> "rtf"
+            mime.contains("x-7z-compressed", true) -> "7z"
+            mime.contains("rar", true) -> "rar"
+            mime.contains("zip", true) -> "zip"
+            mime.contains("gzip", true) -> "gz"
+            mime.contains("x-tar", true) -> "tar"
+            mime.contains("x-bzip2", true) -> "bz2"
+            mime.contains("x-xz", true) -> "xz"
+            mime.contains("android-package-archive", true) -> "apk"
+            mime.contains("java-archive", true) -> "jar"
+            mime.contains("x-msdownload", true) -> "exe"
+            mime.contains("woff2", true) -> "woff2"
+            mime.contains("woff", true) -> "woff"
+            mime.contains("font-ttf", true) -> "ttf"
+            mime.contains("font-otf", true) -> "otf"
+            mime.contains("json", true) -> "json"
+            mime.contains("csv", true) -> "csv"
+            mime.contains("xml", true) -> "xml"
+            mime.contains("yaml", true) -> "yaml"
+            mime.contains("plain", true) -> "txt"
             mime.contains("mp4", true) -> "mp4"
             mime.contains("webm", true) -> "webm"
             mime.contains("png", true) -> "png"
             mime.contains("webp", true) -> "webp"
             mime.contains("jpeg", true) -> "jpg"
             mime.contains("mpeg", true) -> "mp3"
+            mime.contains("quicktime", true) -> "mov"
+            mime.contains("matroska", true) -> "mkv"
             kind == ResourceKind.VIDEO -> "mp4"
             kind == ResourceKind.SEGMENT -> "ts"
             kind == ResourceKind.AUDIO -> "mp3"
             kind == ResourceKind.IMAGE -> "jpg"
-            kind == ResourceKind.PLAYLIST -> "m3u8"
-            else -> "bin"
+            kind == ResourceKind.PLAYLIST -> if (mime.contains("dash", true)) "mpd" else "m3u8"
+            else -> ""
         }
-        return "$safe.$inferred"
+        return if (inferred.isBlank()) safe else "$safe.$inferred"
     }
 
     private fun safeFileName(name: String): String =
         FileNameSanitizer.sanitize(name, "download.bin")
 
-    private fun defaultMimeType(kind: ResourceKind): String = when (kind) {
-        ResourceKind.VIDEO -> "video/mp4"
-        ResourceKind.SEGMENT -> "video/mp2t"
-        ResourceKind.AUDIO -> "audio/mpeg"
-        ResourceKind.IMAGE -> "image/jpeg"
-        ResourceKind.PLAYLIST -> "application/vnd.apple.mpegurl"
-        ResourceKind.OTHER -> "application/octet-stream"
+    private fun defaultMimeType(kind: ResourceKind, fileName: String): String {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        val extensionMime = when (extension) {
+            "pdf" -> "application/pdf"
+            "epub" -> "application/epub+zip"
+            "doc" -> "application/msword"
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "xls" -> "application/vnd.ms-excel"
+            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "ppt" -> "application/vnd.ms-powerpoint"
+            "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            "odt" -> "application/vnd.oasis.opendocument.text"
+            "ods" -> "application/vnd.oasis.opendocument.spreadsheet"
+            "odp" -> "application/vnd.oasis.opendocument.presentation"
+            "rtf" -> "application/rtf"
+            "zip" -> "application/zip"
+            "rar" -> "application/vnd.rar"
+            "7z" -> "application/x-7z-compressed"
+            "tar" -> "application/x-tar"
+            "gz", "tgz" -> "application/gzip"
+            "bz2" -> "application/x-bzip2"
+            "xz" -> "application/x-xz"
+            "apk", "aab", "apks", "xapk" -> "application/vnd.android.package-archive"
+            "jar", "war" -> "application/java-archive"
+            "woff" -> "font/woff"
+            "woff2" -> "font/woff2"
+            "ttf" -> "font/ttf"
+            "otf" -> "font/otf"
+            "eot" -> "application/vnd.ms-fontobject"
+            "json" -> "application/json"
+            "csv" -> "text/csv"
+            "xml" -> "application/xml"
+            "yaml", "yml" -> "application/yaml"
+            "txt", "md", "log" -> "text/plain"
+            "mp4", "m4v" -> "video/mp4"
+            "webm" -> "video/webm"
+            "mov" -> "video/quicktime"
+            "mkv" -> "video/x-matroska"
+            "mp3" -> "audio/mpeg"
+            "m4a" -> "audio/mp4"
+            "aac" -> "audio/aac"
+            "ogg", "oga" -> "audio/ogg"
+            "flac" -> "audio/flac"
+            "wav" -> "audio/wav"
+            "opus" -> "audio/opus"
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            "avif" -> "image/avif"
+            "svg" -> "image/svg+xml"
+            else -> null
+        }
+        if (extensionMime != null) return extensionMime
+
+        return when (kind) {
+            ResourceKind.VIDEO -> "video/mp4"
+            ResourceKind.SEGMENT -> "video/mp2t"
+            ResourceKind.AUDIO -> "audio/mpeg"
+            ResourceKind.IMAGE -> "image/jpeg"
+            ResourceKind.PLAYLIST -> "application/vnd.apple.mpegurl"
+            ResourceKind.DOCUMENT,
+            ResourceKind.ARCHIVE,
+            ResourceKind.APPLICATION,
+            ResourceKind.FONT,
+            ResourceKind.TEXT_DATA,
+            ResourceKind.OTHER -> "application/octet-stream"
+        }
     }
 
     private fun formatBytes(value: Long): String {
