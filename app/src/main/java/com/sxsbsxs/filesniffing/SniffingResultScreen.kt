@@ -44,6 +44,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -273,14 +274,14 @@ fun SniffingResultScreen(
                         .padding(horizontal = 16.dp)
                         .padding(top = 10.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(10.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     AndroidView(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(156.dp)
-                            .clip(RoundedCornerShape(4.dp)),
+                            .height(128.dp)
+                            .clip(RoundedCornerShape(10.dp)),
                         factory = { context ->
                             WebView(context).apply {
                                 webViewHolder.view = this
@@ -563,49 +564,50 @@ fun SniffingResultScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "资源",
+                    "发现的资源",
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 17.sp
                 )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    visibleResources.size.toString(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
+                Spacer(Modifier.width(9.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(7.dp)
+                ) {
+                    Text(
+                        visibleResources.size.toString(),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = {
                     selectionMode = !selectionMode
                     if (!selectionMode) selectedResourceIds = emptySet()
                 }) {
                     Text(
-                        if (selectionMode) "取消选择" else "多选",
+                        if (selectionMode) "完成" else "多选",
                         color = MaterialTheme.colorScheme.primary,
                         fontSize = 12.sp
                     )
                 }
             }
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    availableFilters.forEach { filter ->
-                        TextButton(onClick = { currentFilter = filter }) {
-                            Text(
-                                filter,
-                                color = if (activeFilter == filter) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
+                availableFilters.forEach { filter ->
+                    FilterChip(
+                        selected = activeFilter == filter,
+                        onClick = { currentFilter = filter },
+                        label = { Text(filter, fontSize = 11.sp) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
                 }
                 if (selectionMode && selectedResourceIds.isNotEmpty()) {
                     TextButton(onClick = {
@@ -614,7 +616,7 @@ fun SniffingResultScreen(
                         selectionMode = false
                     }) {
                         Text(
-                            "下载所选 " + selectedResourceIds.size,
+                            "下载 " + selectedResourceIds.size + " 项",
                             color = MaterialTheme.colorScheme.primary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
@@ -622,8 +624,7 @@ fun SniffingResultScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            if (filteredResources.isEmpty())            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(7.dp))
             if (filteredResources.isEmpty()) {
                 Column(
                     modifier = Modifier
@@ -635,7 +636,7 @@ fun SniffingResultScreen(
                     Text(
                         when {
                             isLoading -> "正在扫描网页资源…"
-                            pageError != null -> "网页加载失败"
+                            pageError != null -> "网页预览暂不可用"
                             resources.any { it.kind == ResourceKind.SEGMENT } -> "发现媒体分段，尚未发现完整媒体资源"
                             else -> "暂未发现可下载资源"
                         },
@@ -646,9 +647,9 @@ fun SniffingResultScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         when {
-                            pageError != null -> "检查网络后点击刷新重试"
+                            pageError != null -> "页面预览失败不代表资源解析失败，稍后可刷新重试"
                             resources.any { it.kind == ResourceKind.SEGMENT } -> "单个媒体分段不会作为完整视频列出"
-                            else -> "视频、音频、图片、文档、压缩包和下载链接会显示在这里"
+                            else -> "视频、音频、图片、文档和下载链接会显示在这里"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
@@ -717,43 +718,86 @@ private fun ResourceRow(
         ResourceKind.IMAGE -> Icons.Rounded.Image
         else -> Icons.Rounded.Download
     }
+    val sourceHost = item.url
+        .substringAfter("://", item.url)
+        .substringBefore('/')
+        .substringBefore('?')
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (selectionMode) {
                 Checkbox(checked = selected, onCheckedChange = onSelectionChange)
             }
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(13.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(9.dp),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(item.fileName, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(item.kind.label + " · " + (item.mimeType ?: item.url.substringBefore('?').takeLast(48)),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    item.fileName,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    listOfNotNull(item.kind.label, item.mimeType, sourceHost.takeIf { it.isNotBlank() })
+                        .distinct()
+                        .joinToString(" · "),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 if (item.kind == ResourceKind.PLAYLIST || item.kind == ResourceKind.SEGMENT) {
                     Text(
                         when {
                             item.kind == ResourceKind.SEGMENT -> "单个媒体分段，不是完整视频"
-                            item.fileName.endsWith(".m3u8", ignoreCase = true) -> "HLS 自适应流 · Media3 导出 MP4"
-                            item.fileName.endsWith(".mpd", ignoreCase = true) -> "DASH 自适应流 · Media3 导出 MP4"
+                            item.fileName.endsWith(".m3u8", ignoreCase = true) -> "HLS 自适应流 · 可导出 MP4"
+                            item.fileName.endsWith(".mpd", ignoreCase = true) -> "DASH 自适应流 · 可导出 MP4"
                             else -> "媒体清单"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
-            IconButton(onClick = onDownload, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Rounded.Download, contentDescription = "下载资源", tint = MaterialTheme.colorScheme.primary)
+            IconButton(onClick = onDownload, modifier = Modifier.size(42.dp)) {
+                Icon(
+                    Icons.Rounded.Download,
+                    contentDescription = "下载资源",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant)
+        )
     }
 }
 

@@ -54,6 +54,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -496,23 +497,31 @@ private fun HomeScreen(
             .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
-            .padding(top = 20.dp, bottom = 20.dp)
+            .padding(top = 24.dp, bottom = 24.dp)
     ) {
         Text(
-            "File Sniffing",
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold
+            "FILE SNIFFING",
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp
         )
-        Spacer(Modifier.height(38.dp))
+        Spacer(Modifier.height(42.dp))
         Text(
-            "输入网页链接",
+            "网页资源下载",
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 23.sp,
-            lineHeight = 29.sp,
+            fontSize = 27.sp,
+            lineHeight = 34.sp,
             fontWeight = FontWeight.SemiBold
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "粘贴网页链接，查找可下载的视频、音频和文件",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            lineHeight = 19.sp
+        )
+        Spacer(Modifier.height(26.dp))
         UrlInputCard(
             value = pageUrl,
             onValueChange = onUrlChange,
@@ -524,62 +533,34 @@ private fun HomeScreen(
             onClick = onStartSniffing,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(49.dp),
-            shape = RoundedCornerShape(6.dp),
+                .height(54.dp),
+            shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ),
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
         ) {
-            Text("开始解析", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Icon(
+                Icons.Rounded.Search,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("解析资源", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
-        Spacer(Modifier.height(26.dp))
+        Spacer(Modifier.height(32.dp))
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(1.dp)
                 .background(MaterialTheme.colorScheme.outlineVariant)
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Rounded.FolderOpen,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    "保存位置",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    folderLabel,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            TextButton(onClick = onPickFolder) {
-                Text(
-                    if (hasFolder) "更改" else "选择",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 12.sp
-                )
-            }
-        }
+        FolderPickerCard(
+            folderLabel = folderLabel,
+            hasFolder = hasFolder,
+            onClick = onPickFolder
+        )
     }
 }
 
@@ -593,16 +574,23 @@ private fun UrlInputCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(10.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
-                .padding(start = 14.dp, end = 4.dp),
+                .height(62.dp)
+                .padding(start = 16.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Icon(
+                Icons.Rounded.Link,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(19.dp)
+            )
+            Spacer(Modifier.width(12.dp))
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
@@ -655,24 +643,32 @@ private fun FolderPickerCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            Icons.Rounded.FolderOpen,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(19.dp)
-        )
-        Spacer(Modifier.width(10.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(9.dp),
+            modifier = Modifier.size(38.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Rounded.FolderOpen,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Text(
-                if (hasFolder) "保存位置" else "设置保存位置",
+                "保存位置",
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
@@ -686,7 +682,8 @@ private fun FolderPickerCard(
         Text(
             if (hasFolder) "更改" else "选择",
             color = MaterialTheme.colorScheme.primary,
-            fontSize = 12.sp
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -728,29 +725,58 @@ private fun DownloadsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 22.dp)
-            .padding(top = 22.dp, bottom = 8.dp)
+            .padding(horizontal = 20.dp)
+            .padding(top = 20.dp, bottom = 8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "下载",
+                "下载中心",
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 23.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.weight(1f))
-            Text(
-                tasks.size.toString() + " 项",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp
-            )
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(7.dp)
+            ) {
+                Text(
+                    tasks.size.toString() + " 个任务",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "进行中 $activeCount    已完成 $completedCount    异常 $failedCount",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp
-        )
+        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                activeCount to "进行中",
+                completedCount to "已完成",
+                failedCount to "异常"
+            ).forEach { pair ->
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        pair.first.toString(),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        pair.second,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
         FolderPickerCard(folderLabel, hasFolder, onChooseFolder)
         Box(
             Modifier
@@ -758,48 +784,45 @@ private fun DownloadsScreen(
                 .height(1.dp)
                 .background(MaterialTheme.colorScheme.outlineVariant)
         )
-
+        Spacer(Modifier.height(10.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             listOf("全部", "进行中", "已完成", "异常").forEach { filter ->
-                TextButton(onClick = { statusFilter = filter }) {
-                    Text(
-                        filter,
-                        color = if (statusFilter == filter) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
-                }
+                FilterChip(
+                    selected = statusFilter == filter,
+                    onClick = { statusFilter = filter },
+                    label = { Text(filter, fontSize = 12.sp) },
+                    shape = RoundedCornerShape(8.dp)
+                )
             }
         }
         if (availableKinds.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { kindFilter = "全部" }) {
-                    Text(
-                        "全部类型",
-                        color = if (kindFilter == "全部") MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
-                    )
-                }
+                FilterChip(
+                    selected = kindFilter == "全部",
+                    onClick = { kindFilter = "全部" },
+                    label = { Text("全部类型", fontSize = 11.sp) },
+                    shape = RoundedCornerShape(8.dp)
+                )
                 availableKinds.forEach { kind ->
-                    TextButton(onClick = { kindFilter = kind.name }) {
-                        Text(
-                            kind.label,
-                            color = if (kindFilter == kind.name) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp
-                        )
-                    }
+                    FilterChip(
+                        selected = kindFilter == kind.name,
+                        onClick = { kindFilter = kind.name },
+                        label = { Text(kind.label, fontSize = 11.sp) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
                 }
             }
         }
@@ -813,13 +836,28 @@ private fun DownloadsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.size(60.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Download,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
                     Text(
                         "暂无下载任务",
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(5.dp))
                     Text(
                         "解析网页并下载资源后，会显示在这里",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -884,101 +922,153 @@ private fun DownloadTaskCard(
     val failed = task.state == "failed"
     val kindLabel = task.resourceKind
         ?.let { raw -> runCatching { ResourceKind.valueOf(raw).label }.getOrNull() }
+        ?: "文件"
     val statusLabel = when {
         finished -> "已完成"
         failed -> "下载失败"
         task.state == "cancelled" -> "已取消"
         task.state == "downloading" -> "正在下载"
-        else -> "等待下载"
+        else -> "等待中"
     }
+    val statusColor = when {
+        failed -> MaterialTheme.colorScheme.error
+        finished -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val transferSummary = buildList {
+        if (task.downloadedBytes >= 0L && task.totalBytes > 0L) {
+            add(formatDownloadBytes(task.downloadedBytes) + " / " + formatDownloadBytes(task.totalBytes))
+        } else if (task.downloadedBytes > 0L) {
+            add("已下载 " + formatDownloadBytes(task.downloadedBytes) + " · 总大小未知")
+        } else if (task.totalBytes > 0L) {
+            add("文件大小 " + formatDownloadBytes(task.totalBytes))
+        }
+        if (task.state == "downloading" && task.totalBytes > task.downloadedBytes &&
+            task.speedBytesPerSecond > 0L
+        ) {
+            val remaining = (task.totalBytes - task.downloadedBytes) / task.speedBytesPerSecond
+            add("剩余 " + formatDownloadDuration(remaining))
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 13.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Rounded.Download,
-                contentDescription = null,
-                tint = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
-            )
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(9.dp),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Rounded.Download,
+                        contentDescription = null,
+                        tint = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
             Spacer(Modifier.width(12.dp))
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     task.fileName,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    listOfNotNull(
-                        kindLabel,
-                        statusLabel,
-                        task.detail.takeIf { !it.startsWith("已下载 ") }
-                    ).joinToString(" · "),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    kindLabel + " · " + statusLabel,
+                    color = statusColor,
                     fontSize = 11.sp,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                val transferSummary = buildList {
-                    if (task.downloadedBytes >= 0L && task.totalBytes > 0L) {
-                        add("${formatDownloadBytes(task.downloadedBytes)} / ${formatDownloadBytes(task.totalBytes)}")
-                    } else if (task.downloadedBytes > 0L) {
-                        add("已下载 ${formatDownloadBytes(task.downloadedBytes)}")
-                    }
-                    if (task.state == "downloading" && task.speedBytesPerSecond > 0L) {
-                        add("${formatDownloadBytes(task.speedBytesPerSecond)}/s")
-                    }
-                    if (task.state == "downloading" && task.totalBytes > task.downloadedBytes &&
-                        task.speedBytesPerSecond > 0L
-                    ) {
-                        val remaining = (task.totalBytes - task.downloadedBytes) / task.speedBytesPerSecond
-                        add("剩余 ${formatDownloadDuration(remaining)}")
-                    }
-                }
-                if (transferSummary.isNotEmpty()) {
+            }
+            if (task.state == "downloading" && task.speedBytesPerSecond > 0L) {
+                Text(
+                    formatDownloadBytes(task.speedBytesPerSecond) + "/s",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            } else {
+                Text(
+                    if (finished) "100%" else if (task.state == "downloading" && task.progress >= 0) {
+                        task.progress.coerceIn(0, 100).toString() + "%"
+                    } else " ",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+        if (transferSummary.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 52.dp, top = 8.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    transferSummary.joinToString(" · "),
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (task.state == "downloading" && task.speedBytesPerSecond > 0L) {
                     Text(
-                        transferSummary.joinToString(" · "),
+                        if (task.progress >= 0) task.progress.coerceIn(0, 100).toString() + "%" else "下载中",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        fontSize = 10.sp
                     )
                 }
             }
-            Text(
-                if (finished) "100%" else if (task.state == "downloading" && task.progress >= 0) {
-                    task.progress.coerceIn(0, 100).toString() + "%"
-                } else "—",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         if (task.progress < 0 && task.state == "downloading") {
             LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().height(2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 52.dp)
+                    .height(3.dp),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
         } else {
             LinearProgressIndicator(
                 progress = if (finished) 1f else task.progress.coerceIn(0, 100) / 100f,
-                modifier = Modifier.fillMaxWidth().height(2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 52.dp)
+                    .height(3.dp),
                 color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
         }
+        if (failed && task.detail.isNotBlank()) {
+            Text(
+                task.detail,
+                modifier = Modifier.padding(start = 52.dp, top = 7.dp),
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 11.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Spacer(Modifier.weight(1f))
