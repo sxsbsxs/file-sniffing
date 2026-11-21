@@ -155,6 +155,23 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 publishProgressAsync(progress, detail, targetName, destinationDocument.toString())
             }
 
+            val prefix = applicationContext.contentResolver
+                .openInputStream(destinationDocument)
+                ?.use { input ->
+                    val bytes = ByteArray(4096)
+                    val count = input.read(bytes)
+                    if (count > 0) bytes.copyOf(count) else ByteArray(0)
+                } ?: ByteArray(0)
+            val detectedContainer = NativeMediaProbe.detectContainer(prefix)
+            check(detectedContainer != "html") {
+                "下载地址返回了 HTML 页面，而不是媒体文件；资源可能需要登录或有效的 Referer"
+            }
+            val completedDetail = if (detectedContainer == "unknown") {
+                "已保存到所选文件夹"
+            } else {
+                "下载完成，检测格式：$detectedContainer"
+            }
+
             persistRecord(
                 fileName = targetName,
                 sourceUrl = url,
@@ -162,14 +179,14 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 mimeType = mimeType,
                 state = "completed",
                 progress = 100,
-                detail = "已保存到所选文件夹",
+                detail = completedDetail,
                 documentUri = createdDocument.toString()
             )
             Result.success(
                 workDataOf(
                     KEY_FILE_NAME to targetName,
                     KEY_FILE_URI to createdDocument.toString(),
-                    KEY_DETAIL to "已保存到所选文件夹"
+                    KEY_DETAIL to completedDetail
                 )
             )
         } catch (cancelled: CancellationException) {
