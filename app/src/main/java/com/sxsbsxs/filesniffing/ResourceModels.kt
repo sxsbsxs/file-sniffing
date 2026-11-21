@@ -104,5 +104,6 @@ data class DownloadTaskUi(
     val fileName: String,
     val progress: Int,
     val state: String,
-    val detail: String
+    val detail: String,
+    val fileUri: String? = null
 )
