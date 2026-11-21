@@ -25,11 +25,19 @@ object DownloadEngine {
         adaptiveVideoHeight: Int? = null,
         onUpdate: (DownloadTaskUi) -> Unit
     ) {
+        // Niconico HLS URLs are short-lived. Queue only the stable watch URL;
+        // PersistentDownloadWorker resolves a fresh manifest when the task actually starts.
+        val niconicoWatchUrl = resource.sourcePage.takeIf {
+            resource.kind == ResourceKind.PLAYLIST &&
+                NiconicoUrlParser.extractVideoId(it) != null
+        }
+        val workerUrl = niconicoWatchUrl ?: resource.url
+
         val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
             .setInputData(
                 androidx.work.workDataOf(
                     PersistentDownloadWorker.KEY_TASK_ID to UUID.randomUUID().toString(),
-                    PersistentDownloadWorker.KEY_URL to resource.url,
+                    PersistentDownloadWorker.KEY_URL to workerUrl,
                     PersistentDownloadWorker.KEY_TREE to destinationTree.toString(),
                     PersistentDownloadWorker.KEY_FILE_NAME to resource.fileName,
                     PersistentDownloadWorker.KEY_KIND to resource.kind.name,
