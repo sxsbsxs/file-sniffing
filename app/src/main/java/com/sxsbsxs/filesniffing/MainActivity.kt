@@ -63,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -170,6 +171,14 @@ private fun FileSniffingApp(sharedLink: String) {
     val sniffedResources = remember { mutableStateListOf<SniffedResource>() }
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
     val downloadResources = remember { mutableStateMapOf<String, SniffedResource>() }
+    DisposableEffect(context) {
+        val removeObserver = DownloadEngine.observeAll(context.applicationContext) { task ->
+            val index = downloadTasks.indexOfFirst { it.id == task.id }
+            if (index < 0) downloadTasks.add(0, task)
+            else downloadTasks[index] = task
+        }
+        onDispose { removeObserver() }
+    }
     var selectedFolderUri by rememberSaveable {
         mutableStateOf(
             context.getSharedPreferences("file_sniffing", Context.MODE_PRIVATE)
