@@ -35,6 +35,9 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -73,6 +76,7 @@ fun SniffingResultScreen(
     onDownload: (SniffedResource) -> Unit
 ) {
     var currentFilter by remember { mutableStateOf("全部") }
+    var selectedResourceIds by remember { mutableStateOf(emptySet<String>()) }
     var pageTitle by remember { mutableStateOf("") }
     val webViewHolder = remember { WebViewHolder() }
     val filteredResources = resources.filter {
@@ -261,6 +265,25 @@ fun SniffingResultScreen(
                 }
             }
             Spacer(Modifier.height(8.dp))
+            if (selectedResourceIds.isNotEmpty()) {
+                Button(
+                    onClick = {
+                        resources.filter { it.id in selectedResourceIds }.forEach(onDownload)
+                        selectedResourceIds = emptySet()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BrowserInk,
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("下载已选 ${selectedResourceIds.size} 项", fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(8.dp))
+            }
 
             if (filteredResources.isEmpty()) {
                 Box(
@@ -297,7 +320,18 @@ fun SniffingResultScreen(
                     verticalArrangement = Arrangement.spacedBy(9.dp)
                 ) {
                     items(filteredResources, key = { it.id }) { item ->
-                        ResourceRow(item = item, onDownload = { onDownload(item) })
+                        ResourceRow(
+                            item = item,
+                            selected = item.id in selectedResourceIds,
+                            onSelectionChange = { selected ->
+                                selectedResourceIds = if (selected) {
+                                    selectedResourceIds + item.id
+                                } else {
+                                    selectedResourceIds - item.id
+                                }
+                            },
+                            onDownload = { onDownload(item) }
+                        )
                     }
                     item { Spacer(Modifier.height(12.dp)) }
                 }
@@ -309,6 +343,8 @@ fun SniffingResultScreen(
 @Composable
 private fun ResourceRow(
     item: SniffedResource,
+    selected: Boolean,
+    onSelectionChange: (Boolean) -> Unit,
     onDownload: () -> Unit
 ) {
     val icon = when (item.kind) {
@@ -364,6 +400,10 @@ private fun ResourceRow(
                     )
                 }
             }
+            Checkbox(
+                checked = selected,
+                onCheckedChange = onSelectionChange
+            )
             IconButton(onClick = onDownload, modifier = Modifier.size(38.dp)) {
                 Icon(
                     Icons.Rounded.Download,
