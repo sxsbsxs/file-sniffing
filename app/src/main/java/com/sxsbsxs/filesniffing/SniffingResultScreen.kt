@@ -1,6 +1,5 @@
 package com.sxsbsxs.filesniffing
 
-import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
@@ -100,12 +99,12 @@ fun SniffingResultScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Rounded.ArrowBack, contentDescription = "返回", tint = BrowserInk)
+                Icon(Icons.Rounded.ArrowBack, contentDescription = "返回", tint = MaterialTheme.colorScheme.onSurface)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = pageTitle.ifBlank { "正在分析网页" },
-                    color = BrowserInk,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -113,7 +112,7 @@ fun SniffingResultScreen(
                 )
                 Text(
                     text = pageUrl,
-                    color = BrowserMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -123,7 +122,7 @@ fun SniffingResultScreen(
                 onLoadingChange(true)
                 webViewHolder.view?.reload()
             }) {
-                Icon(Icons.Rounded.Refresh, contentDescription = "刷新", tint = BrowserMuted)
+                Icon(Icons.Rounded.Refresh, contentDescription = "刷新", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -225,20 +224,20 @@ fun SniffingResultScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "发现的资源",
-                        color = BrowserInk,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold,
                         fontSize = 19.sp
                     )
                     Text(
                         text = if (isLoading) "正在扫描页面请求…" else "已捕获 ${resources.size} 项可识别资源",
-                        color = BrowserMuted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
                 }
                 if (isLoading) {
                     LinearProgressIndicator(
                         modifier = Modifier.width(42.dp),
-                        color = BrowserBlue,
+                        color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 } else {
@@ -246,7 +245,7 @@ fun SniffingResultScreen(
                         Text(
                             text = resources.size.toString(),
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            color = BrowserBlue,
+                            color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )
@@ -273,7 +272,7 @@ fun SniffingResultScreen(
                     modifier = Modifier.fillMaxWidth().height(44.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = BrowserInk,
+                        containerColor = MaterialTheme.colorScheme.onSurface,
                         contentColor = Color.White
                     )
                 ) {
@@ -301,14 +300,14 @@ fun SniffingResultScreen(
                         Spacer(Modifier.height(10.dp))
                         Text(
                             text = if (isLoading) "正在寻找媒体资源" else "暂未发现可识别的媒体资源",
-                            color = BrowserInk,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(5.dp))
                         Text(
                             text = "页面里的资源会在捕获到后显示在这里",
-                            color = BrowserMuted,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp
                         )
                     }
@@ -355,7 +354,7 @@ private fun ResourceRow(
     Surface(
         color = Color.White,
         shape = RoundedCornerShape(17.dp),
-        border = BorderStroke(1.dp, BrowserLine),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -369,13 +368,13 @@ private fun ResourceRow(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = BrowserBlue)
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.width(11.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.fileName,
-                    color = BrowserInk,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -384,7 +383,7 @@ private fun ResourceRow(
                 Spacer(Modifier.height(3.dp))
                 Text(
                     text = "${item.kind.label} · ${item.mimeType ?: item.url.substringBefore('?').takeLast(48)}",
-                    color = BrowserMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -412,7 +411,7 @@ private fun ResourceRow(
                 Icon(
                     Icons.Rounded.Download,
                     contentDescription = "下载资源",
-                    tint = BrowserBlue
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         }
