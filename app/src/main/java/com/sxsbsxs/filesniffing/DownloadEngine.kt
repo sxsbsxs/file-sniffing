@@ -192,7 +192,8 @@ object DownloadEngine {
         }
         return DownloadTaskUi(
             id = info.id.toString(),
-            fileName = progressName ?: outputName ?: inputName,
+            fileName = if (state == "completed") outputName ?: progressName ?: inputName
+                else progressName ?: outputName ?: inputName,
             progress = progress,
             state = state,
             detail = detail,

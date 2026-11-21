@@ -187,8 +187,8 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     if (renamed != null) {
                         destinationDocument = renamed
                         createdDocument = renamed
+                        targetName = finalName
                     }
-                    targetName = finalName
                 }
             }
 

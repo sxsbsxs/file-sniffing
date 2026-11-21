@@ -482,7 +482,7 @@ fun SniffingResultScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "检查网络后，点击右上角刷新重试",
+                        text = "这是网页预览错误，不等于资源解析失败。页面请求可能受站点限制、登录状态、证书或 WebView 兼容性影响；可点击右上角刷新重试。",
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         fontSize = 11.sp
                     )
