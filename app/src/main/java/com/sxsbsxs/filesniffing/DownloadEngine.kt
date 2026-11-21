@@ -2,23 +2,14 @@ package com.sxsbsxs.filesniffing
 
 import android.content.Context
 import android.net.Uri
-import android.os.Handler
-import android.os.Looper
-import android.provider.DocumentsContract
-import android.webkit.WebSettings
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
+import androidx.lifecycle.Observer
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import java.util.UUID
-import java.util.concurrent.Executors
-import kotlin.math.roundToInt
 
 object DownloadEngine {
-    private val workers = Executors.newFixedThreadPool(3)
-    private val mainHandler = Handler(Looper.getMainLooper())
+    const val DOWNLOAD_TAG = "file-sniffing-download"
 
     fun start(
         context: Context,
@@ -26,230 +17,91 @@ object DownloadEngine {
         resource: SniffedResource,
         onUpdate: (DownloadTaskUi) -> Unit
     ) {
-        val taskId = UUID.randomUUID().toString()
-        val initial = DownloadTaskUi(
-            id = taskId,
-            fileName = resource.fileName,
-            progress = 0,
-            state = "queued",
-            detail = "等待下载"
+        val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
+            .setInputData(
+                androidx.work.workDataOf(
+                    PersistentDownloadWorker.KEY_TASK_ID to UUID.randomUUID().toString(),
+                    PersistentDownloadWorker.KEY_URL to resource.url,
+                    PersistentDownloadWorker.KEY_TREE to destinationTree.toString(),
+                    PersistentDownloadWorker.KEY_FILE_NAME to resource.fileName,
+                    PersistentDownloadWorker.KEY_KIND to resource.kind.name,
+                    PersistentDownloadWorker.KEY_MIME to resource.mimeType,
+                    PersistentDownloadWorker.KEY_REFERER to resource.sourcePage
+                )
+            )
+            .addTag(DOWNLOAD_TAG)
+            .build()
+
+        onUpdate(
+            DownloadTaskUi(
+                id = request.id.toString(),
+                fileName = resource.fileName,
+                progress = 0,
+                state = "queued",
+                detail = "已加入后台下载队列"
+            )
         )
-        mainHandler.post { onUpdate(initial) }
 
-        workers.execute {
-            var connection: HttpURLConnection? = null
-            var createdDocument: Uri? = null
-            try {
-                val parsed = Uri.parse(resource.url)
-                val isHlsPlaylist = resource.kind == ResourceKind.PLAYLIST &&
-                    resource.fileName.endsWith(".m3u8", ignoreCase = true)
-                if (isHlsPlaylist) {
-                    postUpdate(
-                        onUpdate,
-                        initial.copy(
-                            progress = -1,
-                            state = "downloading",
-                            detail = "正在读取 HLS 清单"
-                        )
-                    )
-                    val hlsResult = HlsDownloader.download(
-                        context = context,
-                        destinationTree = destinationTree,
-                        resource = resource
-                    ) { progress, detail ->
-                        postUpdate(
-                            onUpdate,
-                            initial.copy(
-                                fileName = "正在合并：${resource.fileName}",
-                                progress = progress,
-                                state = "downloading",
-                                detail = detail
-                            )
-                        )
-                    }
-                    postUpdate(
-                        onUpdate,
-                        initial.copy(
-                            fileName = hlsResult.fileName,
-                            progress = 100,
-                            state = "completed",
-                            detail = "HLS 分段已合并保存",
-                            fileUri = hlsResult.documentUri.toString()
-                        )
-                    )
-                    return@execute
+        val manager = WorkManager.getInstance(context.applicationContext)
+        manager.enqueue(request)
+        val liveData = manager.getWorkInfoByIdLiveData(request.id)
+        val observer = object : Observer<WorkInfo> {
+            override fun onChanged(info: WorkInfo?) {
+                if (info == null) return
+                onUpdate(toTask(info))
+                if (info.state.isFinished) {
+                    liveData.removeObserver(this)
                 }
-                require(parsed.scheme == "http" || parsed.scheme == "https") {
-                    "只支持 HTTP 或 HTTPS 资源"
-                }
-
-                connection = (URL(resource.url).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 20_000
-                    readTimeout = 30_000
-                    instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", WebSettings.getDefaultUserAgent(context))
-                    setRequestProperty("Accept", "*/*")
-                    if (resource.sourcePage.isNotBlank()) {
-                        setRequestProperty("Referer", resource.sourcePage)
-                    }
-                }
-
-                val responseCode = connection.responseCode
-                if (responseCode !in 200..299) {
-                    error("服务器返回 HTTP $responseCode")
-                }
-
-                val responseMime = connection.contentType
-                    ?.substringBefore(';')
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                val mimeType = responseMime ?: resource.mimeType ?: defaultMimeType(resource.kind)
-                val serverName = parseContentDisposition(connection.getHeaderField("Content-Disposition"))
-                val targetName = ensureExtension(
-                    serverName ?: resource.fileName,
-                    mimeType,
-                    resource.kind
-                )
-
-                val parentDocument = DocumentsContract.buildDocumentUriUsingTree(
-                    destinationTree,
-                    DocumentsContract.getTreeDocumentId(destinationTree)
-                )
-                val resolver = context.contentResolver
-                createdDocument = DocumentsContract.createDocument(
-                    resolver,
-                    parentDocument,
-                    mimeType,
-                    targetName
-                ) ?: error("无法在所选文件夹创建文件")
-
-                val totalBytes = connection.contentLengthLong
-                var currentTask = initial.copy(
-                    fileName = targetName,
-                    progress = if (totalBytes > 0L) 0 else -1,
-                    state = "downloading",
-                    detail = if (totalBytes > 0L) "正在下载" else "正在下载 · 文件大小未知"
-                )
-                postUpdate(onUpdate, currentTask)
-
-                val input = BufferedInputStream(connection.inputStream)
-                val output = resolver.openOutputStream(createdDocument, "w")
-                    ?: error("无法写入目标文件")
-                input.use { source ->
-                    BufferedOutputStream(output).use { target ->
-                        val buffer = ByteArray(64 * 1024)
-                        var copied = 0L
-                        while (true) {
-                            val count = source.read(buffer)
-                            if (count < 0) break
-                            target.write(buffer, 0, count)
-                            copied += count
-                            if (totalBytes > 0L) {
-                                val progress = ((copied * 100.0) / totalBytes)
-                                    .roundToInt().coerceIn(0, 99)
-                                currentTask = currentTask.copy(
-                                    progress = progress,
-                                    detail = "${formatBytes(copied)} / ${formatBytes(totalBytes)}"
-                                )
-                                postUpdate(onUpdate, currentTask)
-                            } else if (copied % (512 * 1024L) < buffer.size) {
-                                currentTask = currentTask.copy(
-                                    detail = "已下载 ${formatBytes(copied)}"
-                                )
-                                postUpdate(onUpdate, currentTask)
-                            }
-                        }
-                    }
-                }
-                postUpdate(
-                    onUpdate,
-                    currentTask.copy(
-                        progress = 100,
-                        state = "completed",
-                        detail = "已保存到所选文件夹",
-                        fileUri = createdDocument?.toString()
-                    )
-                )
-            } catch (error: Exception) {
-                createdDocument?.let { uri ->
-                    runCatching { context.contentResolver.delete(uri, null, null) }
-                }
-                postUpdate(
-                    onUpdate,
-                    initial.copy(
-                        state = "failed",
-                        detail = error.message ?: "下载失败"
-                    )
-                )
-            } finally {
-                connection?.disconnect()
             }
         }
+        liveData.observeForever(observer)
     }
 
-    private fun parseContentDisposition(header: String?): String? {
-        if (header.isNullOrBlank()) return null
-        val encoded = Regex("filename\\*\\s*=\\s*UTF-8''([^;]+)", RegexOption.IGNORE_CASE)
-            .find(header)?.groupValues?.getOrNull(1)
-        val plain = Regex("filename\\s*=\\s*\\\"?([^\\\";]+)", RegexOption.IGNORE_CASE)
-            .find(header)?.groupValues?.getOrNull(1)
-        val raw = encoded ?: plain ?: return null
-        val decoded = runCatching {
-            URLDecoder.decode(raw.trim(), StandardCharsets.UTF_8.name())
-        }.getOrDefault(raw.trim())
-        return safeFileName(decoded).takeIf { it.isNotBlank() }
-    }
-
-    private fun ensureExtension(name: String, mime: String, kind: ResourceKind): String {
-        val safe = safeFileName(name)
-        val extension = safe.substringAfterLast('.', "")
-        if (extension.isNotBlank() && extension.length <= 8) return safe
-        val inferred = when {
-            mime.contains("mpegurl", ignoreCase = true) -> "m3u8"
-            mime.contains("dash+xml", ignoreCase = true) -> "mpd"
-            mime.contains("mp4", ignoreCase = true) -> "mp4"
-            mime.contains("webm", ignoreCase = true) -> "webm"
-            mime.contains("png", ignoreCase = true) -> "png"
-            mime.contains("webp", ignoreCase = true) -> "webp"
-            mime.contains("gif", ignoreCase = true) -> "gif"
-            mime.contains("jpeg", ignoreCase = true) -> "jpg"
-            mime.contains("mpeg", ignoreCase = true) -> "mp3"
-            mime.contains("ogg", ignoreCase = true) -> "ogg"
-            kind == ResourceKind.VIDEO -> "mp4"
-            kind == ResourceKind.SEGMENT -> "ts"
-            kind == ResourceKind.AUDIO -> "mp3"
-            kind == ResourceKind.IMAGE -> "jpg"
-            kind == ResourceKind.PLAYLIST -> "m3u8"
-            else -> "bin"
+    fun observeAll(context: Context, onUpdate: (DownloadTaskUi) -> Unit): () -> Unit {
+        val liveData = WorkManager.getInstance(context.applicationContext)
+            .getWorkInfosByTagLiveData(DOWNLOAD_TAG)
+        val observer = Observer<List<WorkInfo>> { infos ->
+            infos.orEmpty().forEach { info -> onUpdate(toTask(info)) }
         }
-        return "$safe.$inferred"
+        liveData.observeForever(observer)
+        return { liveData.removeObserver(observer) }
     }
 
-    private fun safeFileName(name: String): String {
-        val cleaned = name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
-        return cleaned.takeIf { it.isNotBlank() && it != "." } ?: "download"
-    }
-
-    private fun defaultMimeType(kind: ResourceKind): String = when (kind) {
-        ResourceKind.VIDEO -> "video/mp4"
-        ResourceKind.SEGMENT -> "video/mp2t"
-        ResourceKind.AUDIO -> "audio/mpeg"
-        ResourceKind.IMAGE -> "image/jpeg"
-        ResourceKind.PLAYLIST -> "application/vnd.apple.mpegurl"
-        ResourceKind.OTHER -> "application/octet-stream"
-    }
-
-    private fun formatBytes(value: Long): String {
-        if (value < 1024) return "${value} B"
-        val kb = value / 1024.0
-        if (kb < 1024) return String.format("%.1f KB", kb)
-        val mb = kb / 1024.0
-        if (mb < 1024) return String.format("%.1f MB", mb)
-        return String.format("%.2f GB", mb / 1024.0)
-    }
-
-    private fun postUpdate(callback: (DownloadTaskUi) -> Unit, task: DownloadTaskUi) {
-        mainHandler.post { callback(task) }
+    private fun toTask(info: WorkInfo): DownloadTaskUi {
+        val inputName = info.inputData.getString(PersistentDownloadWorker.KEY_FILE_NAME)
+            ?: "download"
+        val outputName = info.outputData.getString(PersistentDownloadWorker.KEY_FILE_NAME)
+        val progressName = info.progress.getString(PersistentDownloadWorker.KEY_FILE_NAME)
+        val state = when (info.state) {
+            WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> "queued"
+            WorkInfo.State.RUNNING -> "downloading"
+            WorkInfo.State.SUCCEEDED -> "completed"
+            WorkInfo.State.FAILED -> "failed"
+            WorkInfo.State.CANCELLED -> "cancelled"
+        }
+        val progress = when {
+            info.state == WorkInfo.State.SUCCEEDED -> 100
+            info.state == WorkInfo.State.RUNNING ->
+                info.progress.getInt(PersistentDownloadWorker.KEY_PROGRESS, -1)
+            else -> 0
+        }
+        val detail = when (info.state) {
+            WorkInfo.State.FAILED ->
+                info.outputData.getString(PersistentDownloadWorker.KEY_ERROR) ?: "下载失败"
+            WorkInfo.State.CANCELLED -> "下载已取消"
+            WorkInfo.State.SUCCEEDED ->
+                info.outputData.getString(PersistentDownloadWorker.KEY_DETAIL) ?: "下载完成"
+            else ->
+                info.progress.getString(PersistentDownloadWorker.KEY_DETAIL)
+                    ?: if (state == "queued") "等待后台任务执行" else "正在下载"
+        }
+        return DownloadTaskUi(
+            id = info.id.toString(),
+            fileName = progressName ?: outputName ?: inputName,
+            progress = progress,
+            state = state,
+            detail = detail,
+            fileUri = info.outputData.getString(PersistentDownloadWorker.KEY_FILE_URI)
+        )
     }
 }
