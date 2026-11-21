@@ -423,66 +423,105 @@ private fun HomeScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
-            .padding(top = 20.dp, bottom = 28.dp)
+            .padding(top = 26.dp, bottom = 24.dp)
     ) {
         HeaderBrand()
-        Spacer(Modifier.height(42.dp))
+        Spacer(Modifier.height(54.dp))
         Text(
             text = "粘贴网页链接",
             color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 29.sp,
-            lineHeight = 36.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.8).sp
+            fontSize = 28.sp,
+            lineHeight = 35.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.7).sp
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(9.dp))
         Text(
-            text = "自动识别页面中可访问的视频、音频和图片资源",
+            text = "发现网页中的视频、音频和图片资源",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp,
-            lineHeight = 21.sp
+            lineHeight = 22.sp
         )
-        Spacer(Modifier.height(25.dp))
-        UrlInputCard(value = pageUrl, onValueChange = onUrlChange, onPaste = onPaste, onClear = onClear)
+        Spacer(Modifier.height(27.dp))
+        UrlInputCard(
+            value = pageUrl,
+            onValueChange = onUrlChange,
+            onPaste = onPaste,
+            onClear = onClear
+        )
         Spacer(Modifier.height(14.dp))
         Button(
             onClick = onStartSniffing,
-            modifier = Modifier.fillMaxWidth().height(54.dp),
-            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 1.dp)
+            elevation = ButtonDefaults.buttonElevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 1.dp
+            )
         ) {
             Text("开始嗅探", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(9.dp))
-            Icon(Icons.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(
+                Icons.Rounded.ArrowForward,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
         }
         Spacer(Modifier.height(30.dp))
         Text(
             text = "保存位置",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.Medium
         )
-        Spacer(Modifier.height(9.dp))
-        FolderPickerCard(folderLabel = folderLabel, hasFolder = hasFolder, onClick = onPickFolder)
+        Spacer(Modifier.height(10.dp))
+        FolderPickerCard(
+            folderLabel = folderLabel,
+            hasFolder = hasFolder,
+            onClick = onPickFolder
+        )
     }
 }
 
 @Composable
 private fun HeaderBrand() {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Box(
-            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Rounded.CenterFocusStrong, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(21.dp))
+            Icon(
+                Icons.Rounded.CenterFocusStrong,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(22.dp)
+            )
         }
-        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text("FILE SNIFFING", color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.0.sp)
-            Text("媒体资源嗅探器", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "FILE SNIFFING",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.1.sp
+            )
+            Text(
+                "媒体资源嗅探器",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
+            )
         }
     }
 }
@@ -497,60 +536,72 @@ private fun UrlInputCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp)) {
-            Text("网页链接", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Rounded.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(19.dp))
-                Spacer(Modifier.width(10.dp))
+        Column(
+            modifier = Modifier.padding(horizontal = 17.dp, vertical = 16.dp)
+        ) {
+            Text(
+                "网页链接",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(Modifier.height(13.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    Icons.Rounded.Link,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(11.dp))
                 Box(modifier = Modifier.weight(1f)) {
                     BasicTextField(
                         value = value,
                         onValueChange = onValueChange,
                         singleLine = true,
-                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Uri,
+                            imeAction = ImeAction.Done
+                        ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         decorationBox = { innerTextField ->
-                            if (value.isEmpty()) Text("https://example.com/video", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (value.isEmpty()) {
+                                Text(
+                                    "粘贴或输入网页地址",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.68f),
+                                    fontSize = 14.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                             innerTextField()
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                IconButton(onClick = if (value.isEmpty()) onPaste else onClear, modifier = Modifier.size(36.dp)) {
+                IconButton(
+                    onClick = if (value.isEmpty()) onPaste else onClear,
+                    modifier = Modifier.size(38.dp)
+                ) {
                     Icon(
                         imageVector = if (value.isEmpty()) Icons.Rounded.ContentPaste else Icons.Rounded.Close,
                         contentDescription = if (value.isEmpty()) "粘贴链接" else "清空链接",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun FolderPickerCard(folderLabel: String, hasFolder: Boolean, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(if (hasFolder) "已选择文件夹" else "选择保存文件夹", color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(3.dp))
-                Text(folderLabel, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Text("更改", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
