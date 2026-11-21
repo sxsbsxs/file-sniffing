@@ -1,20 +1,33 @@
 # Changelog
 
+## 0.6.0
+
+- Refactored the download architecture around Hilt, MVVM and Kotlin Flow.
+- Added Room entities, DAOs and repositories for sniffed resources and download history.
+- Added DataStore-backed selected output folder preferences.
+- Added shared OkHttp configuration and an OkDownload SAF transfer adapter.
+- Migrated HLS/DASH adaptive exports to Media3 DownloadHelper + Transformer.
+- Added stream-key selection, highest-supported-bitrate preference and MP4 export to the selected SAF folder.
+- Kept WorkManager foreground jobs for persistent background execution and Room task history.
+- Removed the previous handwritten HLS/DASH segment-merging implementations.
+
+## 0.5.0
+
+- Added Hilt application/worker injection.
+- Added Room and DataStore foundations.
+- Added OkHttp and OkDownload dependencies and the direct-file transfer adapter.
+- Added Flow-based sniffing and download ViewModels.
+
 ## 0.4.0
 
 - Added persistent WorkManager-based download jobs with foreground notifications.
-- Restored task state from WorkManager after reopening the app.
 - Added cancel and retry actions for download tasks.
-- Added clear HLS playlist handling: master variant selection, TS segment concatenation, and fMP4 initialization/fragment concatenation.
-- Added static DASH MPD handling for SegmentList and SegmentTemplate with SegmentTimeline.
+- Added handwritten HLS and static DASH segment processing (superseded by Media3 in 0.6.0).
 - Added Android 13+ notification permission request for download progress.
-- Throttled byte-progress updates to reduce task database and notification churn.
-- Added clearer limits for encrypted HLS, byte ranges, dynamic DASH, and separate DASH audio/video tracks.
 
 ## 0.3.0
 
 - Added persistent-download worker foundation and background notification plumbing.
-- Added HLS segment downloader.
 
 ## 0.2.0
 
