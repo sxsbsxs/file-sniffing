@@ -177,6 +177,7 @@ object DownloadEngine {
             mime.contains("mpeg", ignoreCase = true) -> "mp3"
             mime.contains("ogg", ignoreCase = true) -> "ogg"
             kind == ResourceKind.VIDEO -> "mp4"
+            kind == ResourceKind.SEGMENT -> "ts"
             kind == ResourceKind.AUDIO -> "mp3"
             kind == ResourceKind.IMAGE -> "jpg"
             kind == ResourceKind.PLAYLIST -> "m3u8"
@@ -192,6 +193,7 @@ object DownloadEngine {
 
     private fun defaultMimeType(kind: ResourceKind): String = when (kind) {
         ResourceKind.VIDEO -> "video/mp4"
+        ResourceKind.SEGMENT -> "video/mp2t"
         ResourceKind.AUDIO -> "audio/mpeg"
         ResourceKind.IMAGE -> "image/jpeg"
         ResourceKind.PLAYLIST -> "application/vnd.apple.mpegurl"
