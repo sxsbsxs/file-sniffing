@@ -58,7 +58,7 @@ Sources:
 
 The official PO Token guide describes tokens for distinct request stages/clients, including GVS, Player and subtitle requests. The applicable requirement varies by YouTube client and format path. Tokens are not a permanent account-wide cookie replacement and should not be stored as a fixed application constant.
 
-The guide recommends using provider plugins rather than manually extracting/reusing tokens. The BgUtils provider project explicitly cautions that a PO Token does not guarantee that 403/bot checks will disappear. It has two pieces: a provider implementation and a yt-dlp provider plugin.
+The guide recommends using provider plugins rather than manually extracting/reusing tokens. It reports that tokens are bound to client/session/video contexts, that video-bound tokens need to be refreshed per video, and that token lifetimes are finite and can change. The current guide's client matrix notes that `web_safari` can expose HLS playlist formats whose GVS requests do not require a PO Token at this time; this is a testable fallback, not a universal guarantee. The BgUtils provider project explicitly cautions that a PO Token does not guarantee that 403/bot checks will disappear. It has two pieces: a provider implementation and a yt-dlp provider plugin.
 
 Security requirements for any local provider:
 - Bind an HTTP provider to loopback only.

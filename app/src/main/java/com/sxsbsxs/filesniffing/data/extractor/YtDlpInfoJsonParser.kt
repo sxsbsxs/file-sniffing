@@ -29,6 +29,14 @@ internal data class YtDlpVideoInfo(
                     .thenByDescending { it.bitrateKbps ?: 0.0 }
             )
 
+    val videoOnlyFormats: List<YtDlpFormat>
+        get() = formats
+            .filter { it.hasVideo && !it.hasAudio && !it.isDrm }
+            .sortedWith(
+                compareByDescending<YtDlpFormat> { it.height ?: 0 }
+                    .thenByDescending { it.bitrateKbps ?: 0.0 }
+            )
+
     val audioOnlyFormats: List<YtDlpFormat>
         get() = formats
             .filter { !it.hasVideo && it.hasAudio && !it.isDrm }
@@ -45,6 +53,7 @@ internal data class YtDlpVideoInfo(
 
 /** A safe subset of one yt-dlp format entry. No direct media URL or header is retained. */
 internal data class YtDlpFormat(
+    val videoId: String,
     val formatId: String,
     val extension: String?,
     val resolution: String?,
@@ -107,7 +116,7 @@ internal object YtDlpInfoJsonParser {
             ?: throw IllegalArgumentException("yt-dlp JSON 缺少视频标题")
 
         val formats = root.array("formats")
-            ?.mapNotNull(::parseFormat)
+            ?.mapNotNull { element -> parseFormat(element, videoId) }
             .orEmpty()
             .distinctBy { it.formatId }
 
@@ -130,7 +139,7 @@ internal object YtDlpInfoJsonParser {
         videoFormat: YtDlpFormat,
         audioFormat: YtDlpFormat? = null
     ): String {
-        require(videoFormat.hasVideo && !videoFormat.isDrm) {
+        require(videoFormat.hasVideo && !videoFormat.isDrm && safeFormatId.matches(videoFormat.formatId)) {
             "所选视频格式不可下载"
         }
         if (videoFormat.hasAudio) {
@@ -141,13 +150,17 @@ internal object YtDlpInfoJsonParser {
         val audio = requireNotNull(audioFormat) {
             "该画质只有视频轨道，请从当前视频的可用音频格式中选择音轨"
         }
-        require(!audio.hasVideo && audio.hasAudio && !audio.isDrm) {
-            "所选音频格式无效"
+        require(
+            audio.videoId == videoFormat.videoId &&
+                !audio.hasVideo && audio.hasAudio && !audio.isDrm &&
+                safeFormatId.matches(audio.formatId)
+        ) {
+            "所选音频格式无效，或不属于当前视频"
         }
         return "${videoFormat.formatId}+${audio.formatId}"
     }
 
-    private fun parseFormat(element: JsonElement): YtDlpFormat? {
+    private fun parseFormat(element: JsonElement, videoId: String): YtDlpFormat? {
         if (!element.isJsonObject) return null
         val item = element.asJsonObject
         val formatId = item.string("format_id")
@@ -169,6 +182,7 @@ internal object YtDlpInfoJsonParser {
             hasDrmFamily
 
         return YtDlpFormat(
+            videoId = videoId,
             formatId = formatId,
             extension = item.string("ext"),
             resolution = rawResolution ?: height?.let { "${it}p" },

@@ -14,13 +14,14 @@ class YtDlpInfoJsonParserTest {
 
         assertEquals("dQw4w9WgXcQ", info.videoId)
         assertEquals("Sample video", info.title)
-        assertEquals(listOf("137"), info.selectableVideoFormats.map { it.formatId })
+        assertEquals(listOf("137", "18"), info.selectableVideoFormats.map { it.formatId })
+        assertEquals(listOf("137"), info.videoOnlyFormats.map { it.formatId })
         assertEquals(listOf("140"), info.audioOnlyFormats.map { it.formatId })
         assertEquals(listOf("18"), info.muxedFormats.map { it.formatId })
         assertEquals(
             "137+140",
             YtDlpInfoJsonParser.buildFormatSelector(
-                info.selectableVideoFormats.single(),
+                info.videoOnlyFormats.single(),
                 info.audioOnlyFormats.single()
             )
         )
@@ -64,14 +65,35 @@ class YtDlpInfoJsonParserTest {
     @Test
     fun unsafeFormatIdsAreNotExposedAsSelectableOptions() {
         val unsafeAudioId = singleVideoJson.replace(
-            """"format_id":"140"""",
-            """"format_id":"140+best""""
+            "\"format_id\": \"140\"",
+            "\"format_id\": \"140+best\""
         )
         val info = YtDlpInfoJsonParser.parse(unsafeAudioId)
 
         assertTrue(info.audioOnlyFormats.isEmpty())
         assertThrows(IllegalArgumentException::class.java) {
-            YtDlpInfoJsonParser.buildFormatSelector(info.selectableVideoFormats.single())
+            YtDlpInfoJsonParser.buildFormatSelector(info.videoOnlyFormats.single())
+        }
+
+        val foreignAudio = YtDlpFormat(
+            videoId = "another-video",
+            formatId = "140",
+            extension = "m4a",
+            resolution = null,
+            width = null,
+            height = null,
+            framesPerSecond = null,
+            videoCodec = "none",
+            audioCodec = "mp4a.40.2",
+            bitrateKbps = null,
+            audioBitrateKbps = 128.0,
+            fileSizeBytes = null,
+            protocol = "https",
+            language = null,
+            isDrm = false
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            YtDlpInfoJsonParser.buildFormatSelector(info.videoOnlyFormats.single(), foreignAudio)
         }
     }
 
