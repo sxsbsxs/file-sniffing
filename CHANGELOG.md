@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2
+
+- Added redacted YouTube WebView diagnostics for Player API, Google Video, Performance API entries, subresource HTTP errors and network errors.
+- Added Java request classification that inspects URL host/path categories and sensitive header names only; it does not retain URL parameters or credential values.
+- Added offline Java regression tests for YouTube request classification and credential redaction.
+- Kept YouTube media requests out of the generic download list until a dedicated extractor can resolve real formats and authenticated media access.
+
+
 ## 0.8.1
 
 - Fixed download task filename restoration by storing the encoded filename in a durable WorkManager tag rather than reading a nonexistent `WorkInfo.inputData` property.

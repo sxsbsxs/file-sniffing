@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and local media download manager.
 
-**Current app version:** 0.8.1
+**Current app version:** 0.8.2
 
 ## Technology architecture
 
@@ -16,6 +16,7 @@ An Android-first webpage resource sniffer and local media download manager.
 | Local data | Room, DataStore | Sniff history, download history and selected output folder |
 | Background | WorkManager, foreground worker notification | Persistent download jobs, progress, cancel and retry |
 | Filename policy | Java | Shared safe filename normalization for URL-derived and downloaded names |
+| YouTube request diagnostics | Java + Kotlin | Classify Player API and Google Video requests; show redacted request/error counters in the inspection screen |
 | Native inspection | C++17 + JNI | Identify downloaded byte signatures and reject HTML error pages saved as media |
 | Developer validation | Python 3 | Validate HLS/DASH fixtures, Android link intent filters, Java filename rules and the native signature detector |
 
@@ -24,7 +25,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 ## Current implementation
 
 - [x] Compose + Material 3 app shell, minimal link-entry home, share-sheet URL receiving and external HTTP/HTTPS link opening.
-- [x] WebView inspection using `shouldInterceptRequest`, DOM scanning, Performance API and a MutationObserver, with main-frame network/HTTP errors shown separately from an empty resource result.
+- [x] WebView inspection using `shouldInterceptRequest`, DOM scanning, Performance API and a MutationObserver, with main-frame errors separated from empty results and YouTube subresource request diagnostics shown without retaining URLs or credential values.
 - [x] Resource types and filtering for video, audio, image, HLS and DASH manifest URLs.
 - [x] Multi-select resources and batch enqueue.
 - [x] OkHttp shared client, OkDownload adapter and SAF `content://` output.
@@ -48,6 +49,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - Blob-only URLs, service-worker-private responses, app-private media and sites that conceal media URLs may not be extractable as ordinary files.
 - Media3 handles clear HLS/DASH streams that its supported extractors and muxer can decode. DRM/protected streams are not decrypted or bypassed. Some live, unusual, encrypted or malformed manifests may fail with a descriptive export error.
 - Adaptive exports use a temporary file in the app cache before copying to the SAF destination. Large exports therefore need sufficient temporary storage.
+- YouTube diagnostics only classify visible WebView request callbacks and Performance API entries. They do not parse `youtubei/v1/player` response bodies, resolve signed media formats, acquire PO Tokens or make Google Video URLs downloadable. WebView callback coverage is incomplete by platform design; a zero count is not proof that YouTube sent no such request.
 - WebView login cookies are not yet bridged into OkHttp/OkDownload or Media3 requests. Authenticated resources may return HTTP 401/403.
 - OkDownload upstream 1.0.7 is old. It is isolated behind an adapter and should be reconsidered if a maintained alternative or a safe local fork is adopted.
 - The current Media3 path selects the highest supported bitrate by default. A user-facing per-resolution chooser is a follow-up task.
@@ -57,7 +59,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 - No account or backend server is required for the basic workflow.
 - Page inspection and downloads run on the device.
-- Credentials are not extracted or uploaded. WebView cookies are not shared with the download clients.
+- Credentials are not extracted or uploaded. Diagnostic metadata records only request categories, counters, status codes and whether header names were present; it never stores URL query strings, Cookie values, Authorization values or PO Tokens. WebView cookies are not shared with the download clients.
 - DRM circumvention, authentication bypass and protected-stream decryption are out of scope.
 - Cleartext HTTP remains permitted for user-entered pages for compatibility; HTTPS is preferred. Mixed content inside HTTPS pages remains blocked by WebView.
 

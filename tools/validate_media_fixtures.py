@@ -127,6 +127,74 @@ def validate_manifest_link_intents() -> None:
         raise ValueError("MainActivity must retain its text/plain SEND filter")
 
 
+def validate_youtube_request_diagnostics() -> None:
+    javac = shutil.which("javac")
+    java = shutil.which("java")
+    if javac is None or java is None:
+        raise RuntimeError("A JDK is required for YouTube request-diagnostics tests")
+
+    source = ROOT / "app/src/main/java/com/sxsbsxs/filesniffing/YouTubeRequestDiagnostics.java"
+    harness = """
+import com.sxsbsxs.filesniffing.YouTubeRequestDiagnostics;
+import java.util.Map;
+
+public final class YouTubeRequestDiagnosticsTest {
+    public static void main(String[] args) {
+        var headers = Map.of(
+            "Cookie", "COOKIE_SECRET_MUST_NOT_BE_STORED",
+            "Authorization", "TOKEN_SECRET_MUST_NOT_BE_STORED"
+        );
+        var media = YouTubeRequestDiagnostics.inspect(
+            "https://r2---sn-a5mekn6l.googlevideo.com/videoplayback?signature=PRIVATE_SIGNATURE",
+            headers
+        );
+        check(YouTubeRequestDiagnostics.RequestType.GOOGLE_VIDEO, media.getRequestType());
+        check(true, media.isCookieHeaderPresent());
+        check(true, media.isAuthorizationHeaderPresent());
+
+        var player = YouTubeRequestDiagnostics.inspect(
+            "https://www.youtube.com/youtubei/v1/player?key=PRIVATE_KEY",
+            Map.of()
+        );
+        check(YouTubeRequestDiagnostics.RequestType.PLAYER_API, player.getRequestType());
+
+        var shortLink = YouTubeRequestDiagnostics.inspect("https://youtu.be/abc123", Map.of());
+        check(true, YouTubeRequestDiagnostics.isYouTubePageUrl("https://youtu.be/abc123"));
+        check(YouTubeRequestDiagnostics.RequestType.YOUTUBE_PAGE, shortLink.getRequestType());
+
+        var unrelated = YouTubeRequestDiagnostics.inspect(
+            "https://example.com/videoplayback?signature=not-youtube",
+            Map.of()
+        );
+        check(YouTubeRequestDiagnostics.RequestType.NOT_RELATED, unrelated.getRequestType());
+        if (media.toString().contains("PRIVATE_SIGNATURE")
+                || media.toString().contains("COOKIE_SECRET")
+                || media.toString().contains("TOKEN_SECRET")) {
+            throw new AssertionError("diagnostic observation leaked request secrets");
+        }
+    }
+
+    private static void check(Object expected, Object actual) {
+        if (!expected.equals(actual)) {
+            throw new AssertionError("expected " + expected + ", got " + actual);
+        }
+    }
+}
+"""
+    with tempfile.TemporaryDirectory(prefix="file-sniffing-youtube-diagnostics-") as temp_dir:
+        temp = pathlib.Path(temp_dir)
+        harness_file = temp / "YouTubeRequestDiagnosticsTest.java"
+        harness_file.write_text(harness, encoding="utf-8")
+        subprocess.run(
+            [javac, "-d", str(temp), str(source), str(harness_file)],
+            check=True,
+        )
+        subprocess.run(
+            [java, "-cp", str(temp), "YouTubeRequestDiagnosticsTest"],
+            check=True,
+        )
+
+
 def validate_java_filename_policy() -> None:
     javac = shutil.which("javac")
     java = shutil.which("java")
@@ -206,6 +274,8 @@ def main() -> None:
     print("DASH fixture: OK")
     validate_manifest_link_intents()
     print("Android link intent filters: OK")
+    validate_youtube_request_diagnostics()
+    print("YouTube request diagnostics: OK")
     validate_java_filename_policy()
     print("Java filename policy: OK")
     validate_native_probe()
