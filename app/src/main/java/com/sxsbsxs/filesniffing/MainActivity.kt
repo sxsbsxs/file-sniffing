@@ -51,6 +51,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -64,6 +65,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -129,7 +131,10 @@ private fun FileSniffingApp() {
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var pageUrl by rememberSaveable { mutableStateOf("") }
-    var showEngineNotice by rememberSaveable { mutableStateOf(false) }
+    var activeInspectionUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    var isPageLoading by rememberSaveable { mutableStateOf(false) }
+    val sniffedResources = remember { mutableStateListOf<SniffedResource>() }
+    val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
     var selectedFolderUri by rememberSaveable {
         mutableStateOf(
             context.getSharedPreferences("file_sniffing", Context.MODE_PRIVATE)
@@ -181,7 +186,49 @@ private fun FileSniffingApp() {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (selectedTab == 0) {
+            if (selectedTab == 0 && activeInspectionUrl != null) {
+                SniffingResultScreen(
+                    pageUrl = activeInspectionUrl.orEmpty(),
+                    resources = sniffedResources.toList(),
+                    isLoading = isPageLoading,
+                    onLoadingChange = { isPageLoading = it },
+                    onResourceFound = { resource ->
+                        val index = sniffedResources.indexOfFirst { it.id == resource.id }
+                        if (index < 0) sniffedResources.add(resource)
+                        else sniffedResources[index] = resource
+                    },
+                    onBack = {
+                        activeInspectionUrl = null
+                        isPageLoading = false
+                    },
+                    onDownload = { resource ->
+                        val folder = selectedFolderUri
+                        if (folder == null) {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("请先选择保存文件夹")
+                            }
+                        } else {
+                            DownloadEngine.start(
+                                context = context.applicationContext,
+                                destinationTree = Uri.parse(folder),
+                                resource = resource
+                            ) { task ->
+                                val index = downloadTasks.indexOfFirst { it.id == task.id }
+                                if (index < 0) downloadTasks.add(0, task)
+                                else downloadTasks[index] = task
+                                if (task.state == "failed") {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(task.detail)
+                                    }
+                                }
+                            }
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("已加入下载队列")
+                            }
+                        }
+                    }
+                )
+            } else if (selectedTab == 0) {
                 HomeScreen(
                     pageUrl = pageUrl,
                     onUrlChange = { pageUrl = it },
@@ -207,7 +254,11 @@ private fun FileSniffingApp() {
                             !valid -> coroutineScope.launch {
                                 snackbarHostState.showSnackbar("请输入有效的 http 或 https 链接")
                             }
-                            else -> showEngineNotice = true
+                            else -> {
+                                sniffedResources.clear()
+                                activeInspectionUrl = pageUrl.trim()
+                                isPageLoading = true
+                            }
                         }
                     }
                 )
@@ -215,6 +266,7 @@ private fun FileSniffingApp() {
                 DownloadsScreen(
                     folderLabel = folderLabel,
                     hasFolder = selectedFolderUri != null,
+                    tasks = downloadTasks.toList(),
                     onChooseFolder = { folderPicker.launch(null) },
                     onBackToSniff = { selectedTab = 0 }
                 )
@@ -222,38 +274,6 @@ private fun FileSniffingApp() {
         }
     }
 
-    if (showEngineNotice) {
-        AlertDialog(
-            onDismissRequest = { showEngineNotice = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Rounded.Info,
-                    contentDescription = null,
-                    tint = Accent
-                )
-            },
-            title = {
-                Text(
-                    text = "嗅探引擎正在接入",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    text = "链接格式检查已通过。真实资源识别、资源筛选和下载队列会在下一阶段接入；当前版本不会展示虚构的解析结果。",
-                    color = SecondaryText,
-                    lineHeight = 22.sp
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showEngineNotice = false }) {
-                    Text("知道了", color = Ink, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            containerColor = Color.White,
-            shape = RoundedCornerShape(24.dp)
-        )
-    }
 }
 
 @Composable
@@ -683,6 +703,7 @@ private fun ResourceTypePill(
 private fun DownloadsScreen(
     folderLabel: String,
     hasFolder: Boolean,
+    tasks: List<DownloadTaskUi>,
     onChooseFolder: () -> Unit,
     onBackToSniff: () -> Unit
 ) {
@@ -714,58 +735,153 @@ private fun DownloadsScreen(
             onClick = onChooseFolder
         )
 
-        Spacer(modifier = Modifier.height(76.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color.White)
-                .padding(horizontal = 26.dp, vertical = 38.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(0.dp)
+        Spacer(modifier = Modifier.height(24.dp))
+        if (tasks.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.White)
+                    .padding(horizontal = 26.dp, vertical = 38.dp),
+                contentAlignment = Alignment.Center
             ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        modifier = Modifier
+                            .size(76.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF1F2F5)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Download,
+                            contentDescription = null,
+                            tint = Color(0xFF9AA1AC),
+                            modifier = Modifier.size(33.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = "还没有下载任务",
+                        color = Ink,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "嗅探到资源并开始下载后，任务进度会显示在这里。",
+                        color = SecondaryText,
+                        fontSize = 13.sp,
+                        lineHeight = 21.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(22.dp))
+                    TextButton(onClick = onBackToSniff) {
+                        Text("去嗅探资源", color = Accent, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "下载任务",
+                    color = Ink,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "${tasks.size} 项",
+                    color = SecondaryText,
+                    fontSize = 12.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            tasks.forEach { task ->
+                DownloadTaskCard(task)
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun DownloadTaskCard(task: DownloadTaskUi) {
+    val finished = task.state == "completed"
+    val failed = task.state == "failed"
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.White,
+        shape = RoundedCornerShape(17.dp),
+        border = BorderStroke(1.dp, Hairline)
+    ) {
+        Column(modifier = Modifier.padding(15.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(76.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF1F2F5)),
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(SoftAccent),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Download,
                         contentDescription = null,
-                        tint = Color(0xFF9AA1AC),
-                        modifier = Modifier.size(33.dp)
+                        tint = Accent,
+                        modifier = Modifier.size(19.dp)
                     )
                 }
-                Spacer(modifier = Modifier.height(20.dp))
-                Text(
-                    text = "还没有下载任务",
-                    color = Ink,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "嗅探到资源并开始下载后，
-任务进度会显示在这里。",
-                    color = SecondaryText,
-                    fontSize = 13.sp,
-                    lineHeight = 21.sp,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(22.dp))
-                TextButton(onClick = onBackToSniff) {
+                Spacer(modifier = Modifier.width(11.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "去嗅探资源",
-                        color = Accent,
-                        fontWeight = FontWeight.SemiBold
+                        text = task.fileName,
+                        color = Ink,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = when {
+                            finished -> "已完成"
+                            failed -> "下载失败"
+                            task.state == "downloading" -> "正在下载"
+                            else -> "等待下载"
+                        },
+                        color = when {
+                            finished -> Color(0xFF299B68)
+                            failed -> Color(0xFFD24B4B)
+                            else -> SecondaryText
+                        },
+                        fontSize = 11.sp
                     )
                 }
+                Text(
+                    text = if (finished) "100%" else if (task.state == "downloading") "${task.progress}%" else "—",
+                    color = Ink,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
+            Spacer(modifier = Modifier.height(12.dp))
+            LinearProgressIndicator(
+                progress = { task.progress / 100f },
+                modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
+                color = if (failed) Color(0xFFD24B4B) else Accent,
+                trackColor = Color(0xFFEDEFF3)
+            )
+            Spacer(modifier = Modifier.height(7.dp))
+            Text(
+                text = task.detail,
+                color = SecondaryText,
+                fontSize = 11.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
