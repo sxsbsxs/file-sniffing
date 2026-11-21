@@ -167,6 +167,7 @@ private fun FileSniffingApp(sharedLink: String) {
     val downloadCenterViewModel: DownloadCenterViewModel = hiltViewModel()
     val sniffingState by sniffingViewModel.uiState.collectAsState()
     val selectedFolderUri by downloadCenterViewModel.selectedDownloadFolder.collectAsState()
+    val storedDownloadHistory by downloadCenterViewModel.downloadHistory.collectAsState()
 
     var askedForNotificationPermission by rememberSaveable { mutableStateOf(false) }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -183,6 +184,18 @@ private fun FileSniffingApp(sharedLink: String) {
         }
     }
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
+    val visibleDownloadTasks = (
+        downloadTasks.toList() + storedDownloadHistory.map { record ->
+            DownloadTaskUi(
+                id = record.id,
+                fileName = record.fileName,
+                progress = record.progress,
+                state = record.state,
+                detail = record.detail,
+                fileUri = record.destinationUri
+            )
+        }
+    ).distinctBy { it.id }
     DisposableEffect(context) {
         val removeObserver = DownloadEngine.observeAll(context.applicationContext) { task ->
             val index = downloadTasks.indexOfFirst { it.id == task.id }
@@ -320,7 +333,7 @@ private fun FileSniffingApp(sharedLink: String) {
                 DownloadsScreen(
                     folderLabel = folderLabel,
                     hasFolder = selectedFolderUri != null,
-                    tasks = downloadTasks.toList(),
+                    tasks = visibleDownloadTasks,
                     onChooseFolder = { folderPicker.launch(null) },
                     onBackToSniff = { selectedTab = 0 },
                     onRetryTask = { task ->
