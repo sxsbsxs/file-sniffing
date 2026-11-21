@@ -395,8 +395,8 @@ private fun ResourceRow(
                     Text(
                         text = when {
                             item.kind == ResourceKind.SEGMENT -> "单个媒体分段，不是完整视频"
-                            item.fileName.endsWith(".m3u8", ignoreCase = true) -> "HLS 清单 · 支持明文分段合并"
-                            item.fileName.endsWith(".mpd", ignoreCase = true) -> "DASH 清单 · 支持静态分段合并"
+                            item.fileName.endsWith(".m3u8", ignoreCase = true) -> "HLS 自适应流 · Media3 导出 MP4"
+                            item.fileName.endsWith(".mpd", ignoreCase = true) -> "DASH 自适应流 · Media3 导出 MP4"
                             else -> "媒体清单"
                         },
                         color = Color(0xFFB07932),
