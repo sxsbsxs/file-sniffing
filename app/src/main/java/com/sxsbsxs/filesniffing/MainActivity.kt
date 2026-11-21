@@ -67,6 +67,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -123,9 +124,11 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_VIEW -> source.dataString.orEmpty()
             else -> ""
         }.trim()
-        val match = Regex("https?://[^\\\\s]+", RegexOption.IGNORE_CASE)
-            .find(sharedText)?.value
-            ?.trimEnd(')', ']', '}', ',', '.', '!', '?', ';')
+        val prefixes = listOf("https://", "http://")
+        val match = prefixes.mapNotNull { prefix ->
+            val index = sharedText.indexOf(prefix, ignoreCase = true)
+            if (index >= 0) sharedText.substring(index).takeWhile { !it.isWhitespace() } else null
+        }.firstOrNull()?.trimEnd(')', ']', '}', ',', '.', '!', '?', ';')
         return match ?: sharedText
     }
 }
@@ -166,6 +169,7 @@ private fun FileSniffingApp(sharedLink: String) {
     }
     val sniffedResources = remember { mutableStateListOf<SniffedResource>() }
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
+    val downloadResources = remember { mutableStateMapOf<String, SniffedResource>() }
     var selectedFolderUri by rememberSaveable {
         mutableStateOf(
             context.getSharedPreferences("file_sniffing", Context.MODE_PRIVATE)
@@ -196,6 +200,28 @@ private fun FileSniffingApp(sharedLink: String) {
     val folderLabel = selectedFolderUri
         ?.let { folderNameFromUri(Uri.parse(it)) }
         ?: "选择手机文件夹"
+
+    val enqueueDownload: (SniffedResource) -> Unit = { resource ->
+        val folder = selectedFolderUri
+        if (folder == null) {
+            coroutineScope.launch { snackbarHostState.showSnackbar("请先选择保存文件夹") }
+        } else {
+            DownloadEngine.start(
+                context = context.applicationContext,
+                destinationTree = Uri.parse(folder),
+                resource = resource
+            ) { task ->
+                downloadResources[task.id] = resource
+                val index = downloadTasks.indexOfFirst { it.id == task.id }
+                if (index < 0) downloadTasks.add(0, task)
+                else downloadTasks[index] = task
+                if (task.state == "failed") {
+                    coroutineScope.launch { snackbarHostState.showSnackbar(task.detail) }
+                }
+            }
+            coroutineScope.launch { snackbarHostState.showSnackbar("已加入下载队列") }
+        }
+    }
 
     Scaffold(
         containerColor = AppBackground,
@@ -232,32 +258,7 @@ private fun FileSniffingApp(sharedLink: String) {
                         activeInspectionUrl = null
                         isPageLoading = false
                     },
-                    onDownload = { resource ->
-                        val folder = selectedFolderUri
-                        if (folder == null) {
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("请先选择保存文件夹")
-                            }
-                        } else {
-                            DownloadEngine.start(
-                                context = context.applicationContext,
-                                destinationTree = Uri.parse(folder),
-                                resource = resource
-                            ) { task ->
-                                val index = downloadTasks.indexOfFirst { it.id == task.id }
-                                if (index < 0) downloadTasks.add(0, task)
-                                else downloadTasks[index] = task
-                                if (task.state == "failed") {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(task.detail)
-                                    }
-                                }
-                            }
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("已加入下载队列")
-                            }
-                        }
-                    }
+                    onDownload = enqueueDownload
                 )
             } else if (selectedTab == 0) {
                 HomeScreen(
@@ -300,6 +301,9 @@ private fun FileSniffingApp(sharedLink: String) {
                     tasks = downloadTasks.toList(),
                     onChooseFolder = { folderPicker.launch(null) },
                     onBackToSniff = { selectedTab = 0 },
+                    onRetryTask = { task ->
+                        downloadResources[task.id]?.let(enqueueDownload)
+                    },
                     onOpenTask = { task ->
                         val uri = task.fileUri?.let(Uri::parse)
                         if (uri != null) {
@@ -754,6 +758,7 @@ private fun DownloadsScreen(
     tasks: List<DownloadTaskUi>,
     onChooseFolder: () -> Unit,
     onBackToSniff: () -> Unit,
+    onRetryTask: (DownloadTaskUi) -> Unit,
     onOpenTask: (DownloadTaskUi) -> Unit
 ) {
     Column(
@@ -850,7 +855,11 @@ private fun DownloadsScreen(
             }
             Spacer(modifier = Modifier.height(12.dp))
             tasks.forEach { task ->
-                DownloadTaskCard(task, onOpen = { onOpenTask(task) })
+                DownloadTaskCard(
+                    task,
+                    onOpen = { onOpenTask(task) },
+                    onRetry = { onRetryTask(task) }
+                )
                 Spacer(modifier = Modifier.height(10.dp))
             }
         }
@@ -859,7 +868,11 @@ private fun DownloadsScreen(
 
 
 @Composable
-private fun DownloadTaskCard(task: DownloadTaskUi, onOpen: () -> Unit) {
+private fun DownloadTaskCard(
+    task: DownloadTaskUi,
+    onOpen: () -> Unit,
+    onRetry: () -> Unit
+) {
     val finished = task.state == "completed"
     val failed = task.state == "failed"
     Surface(
@@ -939,10 +952,14 @@ private fun DownloadTaskCard(task: DownloadTaskUi, onOpen: () -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            if (finished && task.fileUri != null) {
+            if ((finished && task.fileUri != null) || failed) {
                 Spacer(modifier = Modifier.height(6.dp))
-                TextButton(onClick = onOpen) {
-                    Text("打开文件", color = Accent, fontWeight = FontWeight.SemiBold)
+                TextButton(onClick = if (finished) onOpen else onRetry) {
+                    Text(
+                        text = if (finished) "打开文件" else "重新下载",
+                        color = Accent,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
