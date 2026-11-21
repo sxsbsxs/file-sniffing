@@ -58,6 +58,41 @@ def validate_dash(path: pathlib.Path) -> None:
         raise ValueError(f"{path.name}: MPD has no Representation")
 
 
+def validate_java_filename_policy() -> None:
+    javac = shutil.which("javac")
+    java = shutil.which("java")
+    if javac is None or java is None:
+        raise RuntimeError("A JDK is required for Java filename-policy tests")
+
+    source = ROOT / "app/src/main/java/com/sxsbsxs/filesniffing/FileNameSanitizer.java"
+    harness = """
+import com.sxsbsxs.filesniffing.FileNameSanitizer;
+
+public final class FileNameSanitizerTest {
+    public static void main(String[] args) {
+        check("video.mp4", FileNameSanitizer.sanitize("../video.mp4", "fallback.bin"));
+        check("movie_.mp4", FileNameSanitizer.sanitize("folder\\\\movie?.mp4", "fallback.bin"));
+        check("fallback.bin", FileNameSanitizer.sanitize("..", "fallback.bin"));
+    }
+
+    private static void check(String expected, String actual) {
+        if (!expected.equals(actual)) {
+            throw new AssertionError("expected " + expected + ", got " + actual);
+        }
+    }
+}
+"""
+    with tempfile.TemporaryDirectory(prefix="file-sniffing-java-test-") as temp_dir:
+        temp = pathlib.Path(temp_dir)
+        harness_file = temp / "FileNameSanitizerTest.java"
+        harness_file.write_text(harness, encoding="utf-8")
+        subprocess.run(
+            [javac, "-d", str(temp), str(source), str(harness_file)],
+            check=True,
+        )
+        subprocess.run([java, "-cp", str(temp), "FileNameSanitizerTest"], check=True)
+
+
 def validate_native_probe() -> None:
     compiler = shutil.which("c++") or shutil.which("g++")
     if compiler is None:
@@ -100,6 +135,8 @@ def main() -> None:
     print("HLS fixture: OK")
     validate_dash(FIXTURES / "sample_dash.mpd")
     print("DASH fixture: OK")
+    validate_java_filename_policy()
+    print("Java filename policy: OK")
     validate_native_probe()
     print("C++ media signature probe: OK")
 
