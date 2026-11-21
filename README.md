@@ -17,7 +17,7 @@ An Android-first webpage resource sniffer and local media download manager.
 | Background | WorkManager, foreground worker notification | Persistent download jobs, progress, cancel and retry |
 | Filename policy | Java | Shared safe filename normalization for URL-derived and downloaded names |
 | Native inspection | C++17 + JNI | Identify downloaded byte signatures and reject HTML error pages saved as media |
-| Developer validation | Python 3 | Validate local HLS/DASH fixtures and regression-test the native signature detector |
+| Developer validation | Python 3 | Validate HLS/DASH fixtures, Android link intent filters, Java filename rules and the native signature detector |
 
 OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it is an older upstream library, so the rest of the app depends on the adapter contract rather than on its API directly.
 
