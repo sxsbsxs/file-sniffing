@@ -27,6 +27,18 @@ class AppPreferences @Inject constructor(
             preferences[selectedFolderKey]
         }
 
+    suspend fun migrateLegacyFolderIfNeeded() {
+        context.fileSniffingDataStore.edit { preferences ->
+            if (preferences[selectedFolderKey] == null) {
+                val legacyUri = context.getSharedPreferences("file_sniffing", Context.MODE_PRIVATE)
+                    .getString("download_tree_uri", null)
+                if (!legacyUri.isNullOrBlank()) {
+                    preferences[selectedFolderKey] = legacyUri
+                }
+            }
+        }
+    }
+
     suspend fun setSelectedDownloadFolder(uri: String) {
         context.fileSniffingDataStore.edit { preferences ->
             preferences[selectedFolderKey] = uri
