@@ -109,26 +109,50 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 tree,
                 DocumentsContract.getTreeDocumentId(tree)
             )
-            val destinationDocument = DocumentsContract.createDocument(
+            val reusableDocument = inputData.getString(KEY_PARTIAL_URI)
+                ?.let { rawUri ->
+                    val candidate = Uri.parse(rawUri)
+                    runCatching {
+                        applicationContext.contentResolver.openFileDescriptor(candidate, "rw")?.use { }
+                            ?: error("断点文件不可写")
+                        candidate
+                    }.getOrNull()
+                }
+            val destinationDocument = reusableDocument ?: DocumentsContract.createDocument(
                 applicationContext.contentResolver,
                 parent,
                 mimeType,
                 targetName
             ) ?: error("无法在所选文件夹创建文件")
             createdDocument = destinationDocument
+            persistRecord(
+                fileName = targetName,
+                sourceUrl = url,
+                kind = kind,
+                mimeType = mimeType,
+                state = "downloading",
+                progress = 0,
+                detail = if (reusableDocument != null) "正在从断点继续下载" else "正在下载",
+                documentUri = destinationDocument.toString()
+            )
 
             val headers = buildMap<String, List<String>> {
                 put("User-Agent", listOf(android.webkit.WebSettings.getDefaultUserAgent(applicationContext)))
                 put("Accept", listOf("*/*"))
                 if (referer.isNotBlank()) put("Referer", listOf(referer))
             }
-            publishProgressAsync(-1, "正在下载（OkDownload）", targetName)
+            publishProgressAsync(
+                -1,
+                if (reusableDocument != null) "正在恢复断点下载" else "正在下载（OkDownload）",
+                targetName,
+                destinationDocument.toString()
+            )
             okDownloadTransferEngine.downloadToDocument(
                 url = url,
                 destinationDocument = destinationDocument,
                 headers = headers
             ) { progress, detail ->
-                publishProgressAsync(progress, detail, targetName)
+                publishProgressAsync(progress, detail, targetName, destinationDocument.toString())
             }
 
             persistRecord(
@@ -149,7 +173,6 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 )
             )
         } catch (cancelled: CancellationException) {
-            createdDocument?.let { runCatching { applicationContext.contentResolver.delete(it, null, null) } }
             withContext(NonCancellable) {
                 persistRecord(
                     fileName = fileName,
@@ -158,13 +181,12 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     mimeType = mime,
                     state = "cancelled",
                     progress = 0,
-                    detail = "下载已取消",
-                    documentUri = null
+                    detail = "下载已取消，可继续断点下载",
+                    documentUri = createdDocument?.toString()
                 )
             }
             throw cancelled
         } catch (error: Exception) {
-            createdDocument?.let { runCatching { applicationContext.contentResolver.delete(it, null, null) } }
             persistRecord(
                 fileName = fileName,
                 sourceUrl = url,
@@ -172,15 +194,28 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 mimeType = mime,
                 state = "failed",
                 progress = 0,
-                detail = error.message ?: "下载失败",
-                documentUri = null
+                detail = error.message ?: "下载失败，可重试",
+                documentUri = createdDocument?.toString()
             )
             Result.failure(workDataOf(KEY_ERROR to (error.message ?: "下载失败")))
         }
     }
 
-    private fun publishProgressAsync(progress: Int, detail: String, fileName: String) {
-        setProgressAsync(workDataOf(KEY_PROGRESS to progress, KEY_DETAIL to detail, KEY_FILE_NAME to fileName))
+    private fun publishProgressAsync(
+        progress: Int,
+        detail: String,
+        fileName: String,
+        partialUri: String? = null
+    ) {
+        val data = androidx.work.Data.Builder()
+            .putInt(KEY_PROGRESS, progress)
+            .putString(KEY_DETAIL, detail)
+            .putString(KEY_FILE_NAME, fileName)
+            .apply {
+                if (!partialUri.isNullOrBlank()) putString(KEY_PARTIAL_URI, partialUri)
+            }
+            .build()
+        setProgressAsync(data)
         setForegroundAsync(createForegroundInfo(fileName, progress, detail))
     }
 
@@ -303,6 +338,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
         const val KEY_PROGRESS = "progress"
         const val KEY_DETAIL = "detail"
         const val KEY_FILE_URI = "file_uri"
+        const val KEY_PARTIAL_URI = "partial_uri"
         const val KEY_ERROR = "error"
         private const val CHANNEL_ID = "file_sniffing_downloads"
         private const val NOTIFICATION_ID = 4107
