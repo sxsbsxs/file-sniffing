@@ -9,6 +9,8 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
@@ -42,20 +44,6 @@ object DownloadEngine {
                     "只支持 HTTP 或 HTTPS 资源"
                 }
 
-                val parentDocument = DocumentsContract.buildDocumentUriUsingTree(
-                    destinationTree,
-                    DocumentsContract.getTreeDocumentId(destinationTree)
-                )
-                val resolver = context.contentResolver
-                val mimeType = resource.mimeType ?: defaultMimeType(resource.kind)
-                val safeName = safeFileName(resource.fileName)
-                createdDocument = DocumentsContract.createDocument(
-                    resolver,
-                    parentDocument,
-                    mimeType,
-                    safeName
-                ) ?: error("无法在所选文件夹创建文件")
-
                 connection = (URL(resource.url).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = 20_000
@@ -72,8 +60,39 @@ object DownloadEngine {
                 if (responseCode !in 200..299) {
                     error("服务器返回 HTTP $responseCode")
                 }
+
+                val responseMime = connection.contentType
+                    ?.substringBefore(';')
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                val mimeType = responseMime ?: resource.mimeType ?: defaultMimeType(resource.kind)
+                val serverName = parseContentDisposition(connection.getHeaderField("Content-Disposition"))
+                val targetName = ensureExtension(
+                    serverName ?: resource.fileName,
+                    mimeType,
+                    resource.kind
+                )
+
+                val parentDocument = DocumentsContract.buildDocumentUriUsingTree(
+                    destinationTree,
+                    DocumentsContract.getTreeDocumentId(destinationTree)
+                )
+                val resolver = context.contentResolver
+                createdDocument = DocumentsContract.createDocument(
+                    resolver,
+                    parentDocument,
+                    mimeType,
+                    targetName
+                ) ?: error("无法在所选文件夹创建文件")
+
                 val totalBytes = connection.contentLengthLong
-                postUpdate(onUpdate, initial.copy(state = "downloading", detail = "正在下载"))
+                var currentTask = initial.copy(
+                    fileName = targetName,
+                    progress = if (totalBytes > 0L) 0 else -1,
+                    state = "downloading",
+                    detail = if (totalBytes > 0L) "正在下载" else "正在下载 · 文件大小未知"
+                )
+                postUpdate(onUpdate, currentTask)
 
                 val input = BufferedInputStream(connection.inputStream)
                 val output = resolver.openOutputStream(createdDocument, "w")
@@ -90,29 +109,23 @@ object DownloadEngine {
                             if (totalBytes > 0L) {
                                 val progress = ((copied * 100.0) / totalBytes)
                                     .roundToInt().coerceIn(0, 99)
-                                postUpdate(
-                                    onUpdate,
-                                    initial.copy(
-                                        progress = progress,
-                                        state = "downloading",
-                                        detail = "${formatBytes(copied)} / ${formatBytes(totalBytes)}"
-                                    )
+                                currentTask = currentTask.copy(
+                                    progress = progress,
+                                    detail = "${formatBytes(copied)} / ${formatBytes(totalBytes)}"
                                 )
+                                postUpdate(onUpdate, currentTask)
                             } else if (copied % (512 * 1024L) < buffer.size) {
-                                postUpdate(
-                                    onUpdate,
-                                    initial.copy(
-                                        state = "downloading",
-                                        detail = "已下载 ${formatBytes(copied)}"
-                                    )
+                                currentTask = currentTask.copy(
+                                    detail = "已下载 ${formatBytes(copied)}"
                                 )
+                                postUpdate(onUpdate, currentTask)
                             }
                         }
                     }
                 }
                 postUpdate(
                     onUpdate,
-                    initial.copy(
+                    currentTask.copy(
                         progress = 100,
                         state = "completed",
                         detail = "已保存到所选文件夹"
@@ -135,16 +148,46 @@ object DownloadEngine {
         }
     }
 
-    private fun postUpdate(
-        callback: (DownloadTaskUi) -> Unit,
-        task: DownloadTaskUi
-    ) {
-        mainHandler.post { callback(task) }
+    private fun parseContentDisposition(header: String?): String? {
+        if (header.isNullOrBlank()) return null
+        val encoded = Regex("filename\\*\\s*=\\s*UTF-8''([^;]+)", RegexOption.IGNORE_CASE)
+            .find(header)?.groupValues?.getOrNull(1)
+        val plain = Regex("filename\\s*=\\s*\\\"?([^\\\";]+)", RegexOption.IGNORE_CASE)
+            .find(header)?.groupValues?.getOrNull(1)
+        val raw = encoded ?: plain ?: return null
+        val decoded = runCatching {
+            URLDecoder.decode(raw.trim(), StandardCharsets.UTF_8.name())
+        }.getOrDefault(raw.trim())
+        return safeFileName(decoded).takeIf { it.isNotBlank() }
+    }
+
+    private fun ensureExtension(name: String, mime: String, kind: ResourceKind): String {
+        val safe = safeFileName(name)
+        val extension = safe.substringAfterLast('.', "")
+        if (extension.isNotBlank() && extension.length <= 8) return safe
+        val inferred = when {
+            mime.contains("mpegurl", ignoreCase = true) -> "m3u8"
+            mime.contains("dash+xml", ignoreCase = true) -> "mpd"
+            mime.contains("mp4", ignoreCase = true) -> "mp4"
+            mime.contains("webm", ignoreCase = true) -> "webm"
+            mime.contains("png", ignoreCase = true) -> "png"
+            mime.contains("webp", ignoreCase = true) -> "webp"
+            mime.contains("gif", ignoreCase = true) -> "gif"
+            mime.contains("jpeg", ignoreCase = true) -> "jpg"
+            mime.contains("mpeg", ignoreCase = true) -> "mp3"
+            mime.contains("ogg", ignoreCase = true) -> "ogg"
+            kind == ResourceKind.VIDEO -> "mp4"
+            kind == ResourceKind.AUDIO -> "mp3"
+            kind == ResourceKind.IMAGE -> "jpg"
+            kind == ResourceKind.PLAYLIST -> "m3u8"
+            else -> "bin"
+        }
+        return "$safe.$inferred"
     }
 
     private fun safeFileName(name: String): String {
         val cleaned = name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
-        return cleaned.takeIf { it.isNotBlank() && it != "." } ?: "download.bin"
+        return cleaned.takeIf { it.isNotBlank() && it != "." } ?: "download"
     }
 
     private fun defaultMimeType(kind: ResourceKind): String = when (kind) {
@@ -162,5 +205,9 @@ object DownloadEngine {
         val mb = kb / 1024.0
         if (mb < 1024) return String.format("%.1f MB", mb)
         return String.format("%.2f GB", mb / 1024.0)
+    }
+
+    private fun postUpdate(callback: (DownloadTaskUi) -> Unit, task: DownloadTaskUi) {
+        mainHandler.post { callback(task) }
     }
 }
