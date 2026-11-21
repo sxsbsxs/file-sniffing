@@ -226,7 +226,7 @@ fun SniffingResultScreen(
                                     pageError = error?.description
                                         ?.toString()
                                         ?.take(160)
-                                        ?.ifBlank { null }
+                                        ?.takeIf { it.isNotBlank() }
                                         ?: "网页加载失败，请检查网络或链接"
                                     onLoadingChange(false)
                                 }
