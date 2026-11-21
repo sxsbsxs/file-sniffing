@@ -13,14 +13,17 @@ The visual direction takes cues from the clarity and polish of leading consumer 
 **Milestone 0 — Android UI foundation**
 
 - [x] Create the Android project structure.
-- [ ] Build the URL entry and sniffing home screen.
-- [ ] Add a native Android folder picker using the Storage Access Framework.
-- [ ] Add the downloads destination and empty states.
+- [x] Build the URL entry and sniffing home screen.
+- [x] Add a native Android folder picker using the Storage Access Framework.
+- [x] Persist the user's selected destination folder permission.
+- [x] Add the downloads destination and empty state.
+- [x] Add a minimal adaptive launcher icon.
+- [x] Add a GitHub Actions debug-build workflow.
 - [ ] Connect a real page/resource inspection engine.
-- [ ] Add resource filtering, quality/type selection and download queue.
-- [ ] Add pause, resume, retry, progress, notifications and storage management.
+- [ ] Add resource filtering, quality/type selection and a real download queue.
+- [ ] Add pause, resume, retry, progress notifications and storage management.
 
-The first UI milestone intentionally does not fabricate sniff results or pretend downloads are working before the inspection and transfer engines are integrated.
+The UI foundation is interactive, but it does not fabricate sniff results or pretend downloads are working before the inspection and transfer engines are integrated. The URL is currently validated locally and the app explains that real inspection is the next milestone.
 
 ## Planned architecture
 
@@ -39,4 +42,4 @@ The first UI milestone intentionally does not fabricate sniff results or pretend
 
 ## Build
 
-Open the project in Android Studio (JDK 17+, Android SDK 35) and run the `app` configuration. The GitHub Actions workflow also builds the debug APK.
+Open the project in Android Studio (JDK 17+, Android SDK 35). The project uses Gradle 8.9 and Android Gradle Plugin 8.7.3. GitHub Actions runs the Gradle assembleDebug task and publishes the debug APK as a workflow artifact.
