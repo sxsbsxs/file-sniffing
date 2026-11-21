@@ -74,6 +74,7 @@ fun SniffingResultScreen(
     var currentFilter by remember { mutableStateOf("全部") }
     var selectedResourceIds by remember { mutableStateOf(emptySet<String>()) }
     var pageTitle by remember { mutableStateOf("") }
+    var pageError by remember { mutableStateOf<String?>(null) }
     val webViewHolder = remember { WebViewHolder() }
     val filteredResources = resources.filter {
         when (currentFilter) {
@@ -125,6 +126,7 @@ fun SniffingResultScreen(
             }
             IconButton(
                 onClick = {
+                    pageError = null
                     onLoadingChange(true)
                     webViewHolder.view?.reload()
                 }
@@ -191,6 +193,7 @@ fun SniffingResultScreen(
                         }
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                pageError = null
                                 onLoadingChange(true)
                             }
 
@@ -219,7 +222,32 @@ fun SniffingResultScreen(
                                 request: WebResourceRequest?,
                                 error: android.webkit.WebResourceError?
                             ) {
-                                if (request?.isForMainFrame == true) onLoadingChange(false)
+                                if (request?.isForMainFrame == true) {
+                                    pageError = error?.description
+                                        ?.toString()
+                                        ?.take(160)
+                                        ?.ifBlank { null }
+                                        ?: "网页加载失败，请检查网络或链接"
+                                    onLoadingChange(false)
+                                }
+                            }
+
+                            override fun onReceivedHttpError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                errorResponse: android.webkit.WebResourceResponse?
+                            ) {
+                                if (request?.isForMainFrame == true) {
+                                    val statusCode = errorResponse?.statusCode
+                                    val reason = errorResponse?.reasonPhrase.orEmpty()
+                                    pageError = if (statusCode != null) {
+                                        "网页返回 HTTP $statusCode" +
+                                            reason.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+                                    } else {
+                                        "网页响应异常"
+                                    }
+                                    onLoadingChange(false)
+                                }
                             }
                         }
                         loadUrl(pageUrl)
@@ -229,6 +257,41 @@ fun SniffingResultScreen(
                     if (view.url != pageUrl) view.loadUrl(pageUrl)
                 }
             )
+        }
+
+        if (pageError != null) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp)
+                    .padding(top = 10.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "网页加载失败",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = pageError.orEmpty(),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 12.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "检查网络后，点击右上角刷新重试",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 11.sp
+                    )
+                }
+            }
         }
 
         DisposableEffect(Unit) {
