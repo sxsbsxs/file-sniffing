@@ -57,6 +57,13 @@ object DownloadEngine {
         liveData.observeForever(observer)
     }
 
+    fun cancel(context: Context, taskId: String) {
+        runCatching {
+            WorkManager.getInstance(context.applicationContext)
+                .cancelWorkById(UUID.fromString(taskId))
+        }
+    }
+
     fun observeAll(context: Context, onUpdate: (DownloadTaskUi) -> Unit): () -> Unit {
         val liveData = WorkManager.getInstance(context.applicationContext)
             .getWorkInfosByTagLiveData(DOWNLOAD_TAG)
