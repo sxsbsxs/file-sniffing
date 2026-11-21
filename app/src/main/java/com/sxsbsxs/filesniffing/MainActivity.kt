@@ -1,13 +1,13 @@
 package com.sxsbsxs.filesniffing
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
+import dagger.hilt.android.AndroidEntryPoint
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -67,6 +67,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -94,6 +95,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
+import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
 
 private val AppBackground = Color(0xFFF6F7F9)
 private val Ink = Color(0xFF17191F)
@@ -102,6 +106,7 @@ private val Hairline = Color(0xFFE9EBEF)
 private val Accent = Color(0xFF4B66E8)
 private val SoftAccent = Color(0xFFEEF1FF)
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val sharedLink = mutableStateOf("")
 
@@ -158,6 +163,11 @@ private fun FileSniffingApp(sharedLink: String) {
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    val sniffingViewModel: SniffingViewModel = hiltViewModel()
+    val downloadCenterViewModel: DownloadCenterViewModel = hiltViewModel()
+    val sniffingState by sniffingViewModel.uiState.collectAsState()
+    val selectedFolderUri by downloadCenterViewModel.selectedDownloadFolder.collectAsState()
+
     var askedForNotificationPermission by rememberSaveable { mutableStateOf(false) }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -165,31 +175,22 @@ private fun FileSniffingApp(sharedLink: String) {
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var pageUrl by rememberSaveable { mutableStateOf(sharedLink) }
-    var activeInspectionUrl by rememberSaveable { mutableStateOf<String?>(null) }
-    var isPageLoading by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(sharedLink) {
         if (sharedLink.isNotBlank()) {
             pageUrl = sharedLink
-            activeInspectionUrl = null
-            isPageLoading = false
+            sniffingViewModel.closeInspection()
             selectedTab = 0
         }
     }
-    val sniffedResources = remember { mutableStateListOf<SniffedResource>() }
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
     DisposableEffect(context) {
         val removeObserver = DownloadEngine.observeAll(context.applicationContext) { task ->
             val index = downloadTasks.indexOfFirst { it.id == task.id }
             if (index < 0) downloadTasks.add(0, task)
             else downloadTasks[index] = task
+            downloadCenterViewModel.persistTask(task)
         }
         onDispose { removeObserver() }
-    }
-    var selectedFolderUri by rememberSaveable {
-        mutableStateOf(
-            context.getSharedPreferences("file_sniffing", Context.MODE_PRIVATE)
-                .getString("download_tree_uri", null)
-        )
     }
 
     val folderPicker = rememberLauncherForActivityResult(
@@ -201,11 +202,7 @@ private fun FileSniffingApp(sharedLink: String) {
             runCatching {
                 context.contentResolver.takePersistableUriPermission(uri, permissionFlags)
             }
-            selectedFolderUri = uri.toString()
-            context.getSharedPreferences("file_sniffing", Context.MODE_PRIVATE)
-                .edit()
-                .putString("download_tree_uri", uri.toString())
-                .apply()
+            downloadCenterViewModel.setDownloadFolder(uri.toString())
             coroutineScope.launch {
                 snackbarHostState.showSnackbar("保存位置已更新")
             }
@@ -267,21 +264,14 @@ private fun FileSniffingApp(sharedLink: String) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (selectedTab == 0 && activeInspectionUrl != null) {
+            if (selectedTab == 0 && sniffingState.activePageUrl != null) {
                 SniffingResultScreen(
-                    pageUrl = activeInspectionUrl.orEmpty(),
-                    resources = sniffedResources.toList(),
-                    isLoading = isPageLoading,
-                    onLoadingChange = { isPageLoading = it },
-                    onResourceFound = { resource ->
-                        val index = sniffedResources.indexOfFirst { it.id == resource.id }
-                        if (index < 0) sniffedResources.add(resource)
-                        else sniffedResources[index] = resource
-                    },
-                    onBack = {
-                        activeInspectionUrl = null
-                        isPageLoading = false
-                    },
+                    pageUrl = sniffingState.activePageUrl.orEmpty(),
+                    resources = sniffingState.resources,
+                    isLoading = sniffingState.isPageLoading,
+                    onLoadingChange = sniffingViewModel::setPageLoading,
+                    onResourceFound = sniffingViewModel::addResource,
+                    onBack = { sniffingViewModel.closeInspection() },
                     onDownload = { resource -> enqueueDownload(resource, true) },
                     onDownloadBatch = { selected ->
                         if (selectedFolderUri == null) {
@@ -321,9 +311,7 @@ private fun FileSniffingApp(sharedLink: String) {
                                 snackbarHostState.showSnackbar("请输入有效的 http 或 https 链接")
                             }
                             else -> {
-                                sniffedResources.clear()
-                                activeInspectionUrl = pageUrl.trim()
-                                isPageLoading = true
+                                sniffingViewModel.beginInspection(pageUrl.trim())
                             }
                         }
                     }
