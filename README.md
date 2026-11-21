@@ -33,7 +33,7 @@ The visual direction follows the clarity and polish of leading consumer apps (Do
 - HLS support currently covers clear playlists without byte-range segments. AES-128 encrypted playlists, SAMPLE-AES, DRM, encrypted keys, alternate audio rendition selection, and BYTERANGE are not handled.
 - HLS MPEG-TS segments are saved as a .ts file. Fragmented MP4 playlists are assembled from the initialization segment and media fragments into an .mp4 container; unusual discontinuities, codec switches or malformed manifests may still require a dedicated remuxer.
 - A live HLS playlist is downloaded as the currently available segment snapshot; the worker does not follow the live stream indefinitely.
-- Dynamic DASH live MPDs, SegmentBase, negative SegmentTimeline repeats, byte-range segments, and MPDs without SegmentTimeline for SegmentTemplate are not yet supported.
+- Dynamic DASH live MPDs, SegmentBase, negative SegmentTimeline repeats, byte-range segments, MPDs without SegmentTimeline for SegmentTemplate, and automatic muxing of separate DASH audio/video AdaptationSets are not yet supported.
 - Downloads do not yet reuse WebView login cookies. A resource that requires an authenticated browser session may return HTTP 401/403.
 - WorkManager jobs survive ordinary app process recreation and expose task notifications. Pause/resume and byte-level HTTP range continuation are not implemented yet.
 - Cross-origin restrictions, service workers, blob-only URLs, encrypted media, app-private resources and sites that conceal media URLs can limit results.
