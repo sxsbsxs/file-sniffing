@@ -12,6 +12,7 @@ import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 
 object DownloadEngine {
     const val DOWNLOAD_TAG = "file-sniffing-download"
+    private const val FILE_NAME_TAG_PREFIX = "file-name:"
 
     fun start(
         context: Context,
@@ -32,6 +33,7 @@ object DownloadEngine {
                 )
             )
             .addTag(DOWNLOAD_TAG)
+            .addTag(fileNameTag(resource.fileName))
             .build()
 
         onUpdate(
@@ -46,17 +48,7 @@ object DownloadEngine {
 
         val manager = WorkManager.getInstance(context.applicationContext)
         manager.enqueue(request)
-        val liveData = manager.getWorkInfoByIdLiveData(request.id)
-        val observer = object : Observer<WorkInfo?> {
-            override fun onChanged(info: WorkInfo?) {
-                if (info == null) return
-                onUpdate(toTask(info))
-                if (info.state.isFinished) {
-                    liveData.removeObserver(this)
-                }
-            }
-        }
-        liveData.observeForever(observer)
+        observeRequest(manager, request.id, onUpdate)
     }
 
     fun retry(
@@ -97,6 +89,7 @@ object DownloadEngine {
         val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
             .setInputData(retryData)
             .addTag(DOWNLOAD_TAG)
+            .addTag(fileNameTag(record.fileName))
             .build()
 
         onUpdate(
@@ -113,6 +106,9 @@ object DownloadEngine {
         manager.enqueue(request)
         observeRequest(manager, request.id, onUpdate)
     }
+
+    private fun fileNameTag(fileName: String): String =
+        FILE_NAME_TAG_PREFIX + Uri.encode(fileName)
 
     private fun observeRequest(
         manager: WorkManager,
@@ -148,8 +144,11 @@ object DownloadEngine {
     }
 
     private fun toTask(info: WorkInfo): DownloadTaskUi {
-        val inputName = info.inputData.getString(PersistentDownloadWorker.KEY_FILE_NAME)
-            ?: "download"
+        val taggedName = info.tags
+            .firstOrNull { it.startsWith(FILE_NAME_TAG_PREFIX) }
+            ?.removePrefix(FILE_NAME_TAG_PREFIX)
+            ?.let { Uri.decode(it) }
+        val inputName = taggedName ?: "download"
         val outputName = info.outputData.getString(PersistentDownloadWorker.KEY_FILE_NAME)
         val progressName = info.progress.getString(PersistentDownloadWorker.KEY_FILE_NAME)
         val state = when (info.state) {
