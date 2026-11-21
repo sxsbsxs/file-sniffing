@@ -22,6 +22,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +40,7 @@ data class Media3ExportResult(
 @OptIn(UnstableApi::class)
 @Singleton
 class Media3AdaptiveProcessor @Inject constructor(
-    private val context: Context,
+    @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
