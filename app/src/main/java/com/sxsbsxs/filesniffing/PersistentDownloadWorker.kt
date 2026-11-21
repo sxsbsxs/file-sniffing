@@ -75,6 +75,23 @@ class PersistentDownloadWorker(
                 )
             }
 
+            if (kind == ResourceKind.PLAYLIST && fileName.endsWith(".mpd", ignoreCase = true)) {
+                val result = DashDownloader.download(
+                    context = applicationContext,
+                    destinationTree = tree,
+                    resource = resource
+                ) { progress, detail ->
+                    publishProgressAsync(progress, detail, fileName)
+                }
+                return@withContext Result.success(
+                    workDataOf(
+                        KEY_FILE_NAME to result.fileName,
+                        KEY_FILE_URI to result.documentUri.toString(),
+                        KEY_DETAIL to "DASH 分段已合并保存（${result.segmentCount} 段）"
+                    )
+                )
+            }
+
             val parsed = Uri.parse(url)
             require(parsed.scheme == "http" || parsed.scheme == "https") {
                 "只支持 HTTP 或 HTTPS 资源"
