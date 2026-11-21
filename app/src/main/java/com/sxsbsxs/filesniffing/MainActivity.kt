@@ -99,13 +99,6 @@ import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
 import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
 import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
 
-private val MaterialTheme.colorScheme.background = Color(0xFFF6F7F9)
-private val MaterialTheme.colorScheme.onSurface = Color(0xFF17191F)
-private val MaterialTheme.colorScheme.onSurfaceVariant = Color(0xFF777D88)
-private val MaterialTheme.colorScheme.outlineVariant = Color(0xFFE9EBEF)
-private val MaterialTheme.colorScheme.primary = Color(0xFF4B66E8)
-private val MaterialTheme.colorScheme.primaryContainer = Color(0xFFEEF1FF)
-
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val sharedLink = mutableStateOf("")
@@ -370,7 +363,7 @@ private fun MainNavigationBar(
     onSelect: (Int) -> Unit
 ) {
     NavigationBar(
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
         windowInsets = WindowInsets.navigationBars
@@ -638,8 +631,8 @@ private fun DownloadTaskCard(
     val failed = task.state == "failed"
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(17.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(modifier = Modifier.padding(15.dp)) {
@@ -677,8 +670,8 @@ private fun DownloadTaskCard(
                             else -> "等待下载"
                         },
                         color = when {
-                            finished -> Color(0xFF299B68)
-                            failed -> Color(0xFFD24B4B)
+                            finished -> MaterialTheme.colorScheme.secondary
+                            failed -> MaterialTheme.colorScheme.error
                             task.state == "cancelled" -> MaterialTheme.colorScheme.onSurfaceVariant
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         },
@@ -697,13 +690,13 @@ private fun DownloadTaskCard(
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
                     color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color(0xFFEDEFF3)
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             } else {
                 LinearProgressIndicator(
                     progress = task.progress.coerceAtLeast(0) / 100f,
                     modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
-                    color = if (failed) Color(0xFFD24B4B) else MaterialTheme.colorScheme.primary,
+                    color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     trackColor = Color(0xFFEDEFF3)
                 )
             }
@@ -735,7 +728,7 @@ private fun DownloadTaskCard(
                 task.state == "downloading" || task.state == "queued" -> {
                     Spacer(modifier = Modifier.height(6.dp))
                     TextButton(onClick = onCancel) {
-                        Text("取消任务", color = Color(0xFFD24B4B), fontWeight = FontWeight.SemiBold)
+                        Text("取消任务", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
