@@ -1,15 +1,17 @@
 package com.sxsbsxs.filesniffing.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
- * Shared visual language for every screen in File Sniffing.
- * Keep semantic colors here so pages do not grow their own palettes.
+ * Shared semantic palette for every screen in File Sniffing.
+ * Pages should consume MaterialTheme.colorScheme instead of defining local colors.
  */
-private val FileSniffingColorScheme = lightColorScheme(
+private val LightColors = lightColorScheme(
     primary = Color(0xFF315E59),
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFFE2EFEB),
@@ -32,10 +34,33 @@ private val FileSniffingColorScheme = lightColorScheme(
     onErrorContainer = Color(0xFF410E0B)
 )
 
+private val DarkColors = darkColorScheme(
+    primary = Color(0xFFA4C9C1),
+    onPrimary = Color(0xFF123731),
+    primaryContainer = Color(0xFF2C514B),
+    onPrimaryContainer = Color(0xFFD0E8E2),
+    secondary = Color(0xFFB7CBC5),
+    onSecondary = Color(0xFF263B37),
+    secondaryContainer = Color(0xFF3C514C),
+    onSecondaryContainer = Color(0xFFD3E4DE),
+    background = Color(0xFF111715),
+    onBackground = Color(0xFFE1E9E5),
+    surface = Color(0xFF171E1B),
+    onSurface = Color(0xFFE1E9E5),
+    surfaceVariant = Color(0xFF26312D),
+    onSurfaceVariant = Color(0xFFB8C5BF),
+    outline = Color(0xFF84918B),
+    outlineVariant = Color(0xFF35423C),
+    error = Color(0xFFF2B8B5),
+    onError = Color(0xFF601410),
+    errorContainer = Color(0xFF8C1D18),
+    onErrorContainer = Color(0xFFF9DEDC)
+)
+
 @Composable
 fun FileSniffingTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = FileSniffingColorScheme,
+        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
         content = content
     )
 }
