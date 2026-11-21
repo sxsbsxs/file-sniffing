@@ -18,12 +18,13 @@ The visual direction follows the clarity and polish of leading consumer apps (Do
 - [x] Resource classification for common media extensions and MIME hints.
 - [x] Separate labels for HLS/DASH playlists and individual media segments.
 - [x] Resource filters for all, video, audio and image categories.
+- [x] Multi-select resources and enqueue batch downloads.
 - [x] Native folder selection via Android Storage Access Framework.
 - [x] Persisted destination-folder permission.
 - [x] Direct HTTP/HTTPS file transfer into the chosen folder.
 - [x] Content-Disposition filename and server MIME-type handling.
 - [x] Byte-based progress when Content-Length is available; indeterminate progress for chunked/unknown-length transfers.
-- [x] Download task list with success/failure state and open-file action.
+- [x] Download task list with success/failure state, retry for failed transfers, and open-file action.
 - [x] Adaptive launcher icon and GitHub Actions debug-build workflow.
 
 ## Current limitations
