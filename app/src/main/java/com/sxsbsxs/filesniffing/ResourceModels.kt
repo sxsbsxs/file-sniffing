@@ -77,11 +77,10 @@ object ResourceSniffer {
                 else -> "bin"
             }
         }
-        val baseName = decodedName
-            .substringAfterLast('/')
-            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            .takeIf { it.isNotBlank() && it != "." }
-            ?: "media_resource"
+        val baseName = FileNameSanitizer.sanitize(
+            decodedName.substringAfterLast('/'),
+            "media_resource"
+        )
         val fileName = if (baseName.substringAfterLast('.', "").isBlank()) {
             "$baseName.$inferredExtension"
         } else {
