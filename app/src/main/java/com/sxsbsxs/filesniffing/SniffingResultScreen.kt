@@ -11,6 +11,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +46,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,6 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.sxsbsxs.filesniffing.data.media.AdaptiveQualityOption
 
 private val RESOURCE_FILTER_GROUPS = listOf(
     "视频" to setOf(ResourceKind.VIDEO, ResourceKind.PLAYLIST),
@@ -88,7 +92,8 @@ fun SniffingResultScreen(
     onLoadingChange: (Boolean) -> Unit,
     onResourceFound: (SniffedResource) -> Unit,
     onBack: () -> Unit,
-    onDownload: (SniffedResource) -> Unit,
+    onDownload: (SniffedResource, Int?) -> Unit,
+    onInspectAdaptiveQualities: (SniffedResource, (List<AdaptiveQualityOption>, String?) -> Unit) -> Unit,
     onDownloadBatch: (List<SniffedResource>) -> Unit
 ) {
     var currentFilter by remember { mutableStateOf("全部") }
@@ -98,6 +103,11 @@ fun SniffingResultScreen(
     var pageTitle by remember { mutableStateOf("") }
     var pageError by remember { mutableStateOf<String?>(null) }
     var rendererCrashed by remember(pageUrl) { mutableStateOf(false) }
+    var qualityResource by remember { mutableStateOf<SniffedResource?>(null) }
+    var qualityOptions by remember { mutableStateOf<List<AdaptiveQualityOption>>(emptyList()) }
+    var selectedQualityHeight by remember { mutableStateOf<Int?>(null) }
+    var qualityLoading by remember { mutableStateOf(false) }
+    var qualityError by remember { mutableStateOf<String?>(null) }
     var webViewGeneration by remember(pageUrl) { mutableIntStateOf(0) }
     val webViewHolder = remember { WebViewHolder() }
     val diagnosticHandler = remember { Handler(Looper.getMainLooper()) }
@@ -119,6 +129,26 @@ fun SniffingResultScreen(
         val observation = YouTubeRequestDiagnostics.inspect(rawUrl, headers)
         if (observation.isYouTubeRelated) {
             postYouTubeDiagnosticUpdate { it.recordRequest(observation) }
+        }
+    }
+
+    fun requestResourceDownload(resource: SniffedResource) {
+        val isAdaptive = resource.kind == ResourceKind.PLAYLIST &&
+            (resource.fileName.endsWith(".m3u8", true) || resource.fileName.endsWith(".mpd", true))
+        if (!isAdaptive) {
+            onDownload(resource, null)
+            return
+        }
+        qualityResource = resource
+        qualityOptions = emptyList()
+        selectedQualityHeight = null
+        qualityError = null
+        qualityLoading = true
+        onInspectAdaptiveQualities(resource) { options, error ->
+            qualityOptions = options
+            selectedQualityHeight = options.firstOrNull()?.height
+            qualityError = error
+            qualityLoading = false
         }
     }
 
@@ -672,7 +702,7 @@ fun SniffingResultScreen(
                                     selectedResourceIds - item.id
                                 }
                             },
-                            onDownload = { onDownload(item) }
+                            onDownload = { requestResourceDownload(item) }
                         )
                     }
                     item { Spacer(Modifier.height(12.dp)) }
@@ -680,6 +710,89 @@ fun SniffingResultScreen(
             }
         }
     }
+    if (qualityResource != null) {
+        val resource = qualityResource
+        AlertDialog(
+            onDismissRequest = { qualityResource = null },
+            title = { Text("选择下载画质") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        resource?.fileName.orEmpty(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    when {
+                        qualityLoading -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text("正在读取清单中的真实画质…", fontSize = 12.sp)
+                            }
+                        }
+                        qualityOptions.isNotEmpty() -> {
+                            qualityOptions.forEach { option ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { selectedQualityHeight = option.height },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = selectedQualityHeight == option.height,
+                                        onClick = { selectedQualityHeight = option.height }
+                                    )
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(option.label, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        option.bitrateLabel?.let {
+                                            Text(
+                                                it,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            Text(
+                                qualityError ?: "没有读取到可用的画质列表，可以使用自动最高画质。",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                            TextButton(onClick = { selectedQualityHeight = null }) {
+                                Text("自动选择最高画质")
+                            }
+                        }
+                    }
+                    Text(
+                        "只显示当前清单提供的分辨率；设备解码与封装能力仍会影响最终导出。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !qualityLoading,
+                    onClick = {
+                        resource?.let { onDownload(it, selectedQualityHeight) }
+                        qualityResource = null
+                    }
+                ) { Text("下载") }
+            },
+            dismissButton = {
+                TextButton(onClick = { qualityResource = null }) { Text("取消") }
+            }
+        )
+    }
+
     if (showDiagnostics && youtubeDiagnostics.isYouTubePage) {
         AlertDialog(
             onDismissRequest = { showDiagnostics = false },

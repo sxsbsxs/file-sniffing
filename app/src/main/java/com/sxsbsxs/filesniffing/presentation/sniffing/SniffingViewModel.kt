@@ -6,6 +6,8 @@ import com.sxsbsxs.filesniffing.ResourceKind
 import com.sxsbsxs.filesniffing.SniffedResource
 import com.sxsbsxs.filesniffing.data.local.SniffedResourceEntity
 import com.sxsbsxs.filesniffing.data.repository.SniffedResourceRepository
+import com.sxsbsxs.filesniffing.data.media.AdaptiveQualityOption
+import com.sxsbsxs.filesniffing.data.media.Media3AdaptiveProcessor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -18,7 +20,8 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class SniffingViewModel @Inject constructor(
-    private val resourceRepository: SniffedResourceRepository
+    private val resourceRepository: SniffedResourceRepository,
+    private val media3AdaptiveProcessor: Media3AdaptiveProcessor
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SniffingUiState())
@@ -58,6 +61,21 @@ class SniffingViewModel @Inject constructor(
                         state
                     }
                 }
+            }
+        }
+    }
+
+    fun inspectAdaptiveQualities(
+        resource: SniffedResource,
+        onResult: (List<AdaptiveQualityOption>, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                onResult(media3AdaptiveProcessor.inspectAdaptiveQualities(resource), null)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                onResult(emptyList(), error.message?.take(180)?.ifBlank { null } ?: "读取视频画质失败")
             }
         }
     }

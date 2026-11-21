@@ -77,7 +77,8 @@ class PersistentDownloadWorker @AssistedInject constructor(
             if (isAdaptiveManifest) {
                 val result = media3AdaptiveProcessor.exportAdaptiveStream(
                     resource = resource,
-                    destinationTree = tree
+                    destinationTree = tree,
+                    maxVideoHeight = inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
                 ) { progress, detail ->
                     publishProgressAsync(progress, detail, fileName)
                 }
@@ -350,7 +351,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 destinationTreeUri = inputData.getString(KEY_TREE),
                 downloadedBytes = previous?.downloadedBytes ?: -1L,
                 totalBytes = previous?.totalBytes ?: -1L,
-                speedBytesPerSecond = previous?.speedBytesPerSecond ?: -1L
+                speedBytesPerSecond = previous?.speedBytesPerSecond ?: -1L,
+                adaptiveVideoHeight = previous?.adaptiveVideoHeight
+                    ?: inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
             )
         )
     }
@@ -521,6 +524,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
         const val KEY_DOWNLOADED_BYTES = "downloaded_bytes"
         const val KEY_TOTAL_BYTES = "total_bytes"
         const val KEY_SPEED_BYTES_PER_SECOND = "speed_bytes_per_second"
+        const val KEY_ADAPTIVE_VIDEO_HEIGHT = "adaptive_video_height"
         const val KEY_ERROR = "error"
         private const val CHANNEL_ID = "file_sniffing_downloads"
         private const val NOTIFICATION_ID = 4107

@@ -191,7 +191,8 @@ private fun FileSniffingApp(sharedLink: String) {
                 mimeType = record.mimeType,
                 downloadedBytes = record.downloadedBytes,
                 totalBytes = record.totalBytes,
-                speedBytesPerSecond = record.speedBytesPerSecond
+                speedBytesPerSecond = record.speedBytesPerSecond,
+                adaptiveVideoHeight = record.adaptiveVideoHeight
             )
         }
     ).distinctBy { it.id }
@@ -270,7 +271,8 @@ private fun FileSniffingApp(sharedLink: String) {
         )
     }
 
-    val enqueueDownload: (SniffedResource, Boolean) -> Unit = { resource, showQueuedMessage ->
+    val enqueueDownload: (SniffedResource, Boolean, Int?) -> Unit =
+        { resource, showQueuedMessage, adaptiveVideoHeight ->
         if (
             Build.VERSION.SDK_INT >= 33 &&
             !askedForNotificationPermission &&
@@ -286,7 +288,8 @@ private fun FileSniffingApp(sharedLink: String) {
             DownloadEngine.start(
                 context = context.applicationContext,
                 destinationTree = Uri.parse(folder),
-                resource = resource
+                resource = resource,
+                adaptiveVideoHeight = adaptiveVideoHeight
             ) { task ->
                 val index = downloadTasks.indexOfFirst { it.id == task.id }
                 if (index < 0) downloadTasks.add(0, task)
@@ -331,12 +334,15 @@ private fun FileSniffingApp(sharedLink: String) {
                     onLoadingChange = sniffingViewModel::setPageLoading,
                     onResourceFound = sniffingViewModel::addResource,
                     onBack = { sniffingViewModel.closeInspection() },
-                    onDownload = { resource -> enqueueDownload(resource, true) },
+                    onDownload = { resource, height -> enqueueDownload(resource, true, height) },
+                    onInspectAdaptiveQualities = { resource, callback ->
+                        sniffingViewModel.inspectAdaptiveQualities(resource, callback)
+                    },
                     onDownloadBatch = { selected ->
                         if (selectedFolderUri == null) {
                             coroutineScope.launch { snackbarHostState.showSnackbar("请先选择保存文件夹") }
                         } else {
-                            selected.forEach { resource -> enqueueDownload(resource, false) }
+                            selected.forEach { resource -> enqueueDownload(resource, false, null) }
                             coroutineScope.launch {
                                 snackbarHostState.showSnackbar("已将 ${selected.size} 项加入下载队列")
                             }

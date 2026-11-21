@@ -30,6 +30,7 @@ abstract class FileSniffDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE download_records ADD COLUMN downloadedBytes INTEGER NOT NULL DEFAULT -1")
                 db.execSQL("ALTER TABLE download_records ADD COLUMN totalBytes INTEGER NOT NULL DEFAULT -1")
                 db.execSQL("ALTER TABLE download_records ADD COLUMN speedBytesPerSecond INTEGER NOT NULL DEFAULT -1")
+                db.execSQL("ALTER TABLE download_records ADD COLUMN adaptiveVideoHeight INTEGER")
             }
         }
     }

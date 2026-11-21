@@ -21,5 +21,6 @@ data class DownloadRecordEntity(
     val destinationTreeUri: String? = null,
     @ColumnInfo(defaultValue = "-1") val downloadedBytes: Long = -1L,
     @ColumnInfo(defaultValue = "-1") val totalBytes: Long = -1L,
-    @ColumnInfo(defaultValue = "-1") val speedBytesPerSecond: Long = -1L
+    @ColumnInfo(defaultValue = "-1") val speedBytesPerSecond: Long = -1L,
+    val adaptiveVideoHeight: Int? = null
 )

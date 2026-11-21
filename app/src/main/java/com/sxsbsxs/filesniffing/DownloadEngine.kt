@@ -16,11 +16,13 @@ object DownloadEngine {
     private const val FILE_NAME_TAG_PREFIX = "file-name:"
     private const val RESOURCE_KIND_TAG_PREFIX = "resource-kind:"
     private const val MIME_TYPE_TAG_PREFIX = "mime-type:"
+    private const val ADAPTIVE_HEIGHT_TAG_PREFIX = "adaptive-height:"
 
     fun start(
         context: Context,
         destinationTree: Uri,
         resource: SniffedResource,
+        adaptiveVideoHeight: Int? = null,
         onUpdate: (DownloadTaskUi) -> Unit
     ) {
         val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
@@ -32,13 +34,15 @@ object DownloadEngine {
                     PersistentDownloadWorker.KEY_FILE_NAME to resource.fileName,
                     PersistentDownloadWorker.KEY_KIND to resource.kind.name,
                     PersistentDownloadWorker.KEY_MIME to resource.mimeType,
-                    PersistentDownloadWorker.KEY_REFERER to resource.sourcePage
+                    PersistentDownloadWorker.KEY_REFERER to resource.sourcePage,
+                    PersistentDownloadWorker.KEY_ADAPTIVE_VIDEO_HEIGHT to (adaptiveVideoHeight ?: -1)
                 )
             )
             .addTag(DOWNLOAD_TAG)
             .addTag(fileNameTag(resource.fileName))
             .addTag(resourceKindTag(resource.kind.name))
             .addTag(mimeTypeTag(resource.mimeType))
+            .addTag(adaptiveHeightTag(adaptiveVideoHeight))
             .build()
 
         onUpdate(
@@ -49,7 +53,8 @@ object DownloadEngine {
                 state = "queued",
                 detail = "已加入后台下载队列",
                 resourceKind = resource.kind.name,
-                mimeType = resource.mimeType
+                mimeType = resource.mimeType,
+                adaptiveVideoHeight = adaptiveVideoHeight
             )
         )
 
@@ -87,6 +92,7 @@ object DownloadEngine {
             .putString(PersistentDownloadWorker.KEY_REFERER, record.referer)
             .apply {
                 record.mimeType?.let { putString(PersistentDownloadWorker.KEY_MIME, it) }
+                putInt(PersistentDownloadWorker.KEY_ADAPTIVE_VIDEO_HEIGHT, record.adaptiveVideoHeight ?: -1)
                 (partialUri ?: record.destinationUri)
                     ?.takeIf { it.isNotBlank() }
                     ?.let { putString(PersistentDownloadWorker.KEY_PARTIAL_URI, it) }
@@ -99,6 +105,7 @@ object DownloadEngine {
             .addTag(fileNameTag(record.fileName))
             .addTag(resourceKindTag(record.resourceKind))
             .addTag(mimeTypeTag(record.mimeType))
+            .addTag(adaptiveHeightTag(record.adaptiveVideoHeight))
             .build()
 
         onUpdate(
@@ -109,7 +116,8 @@ object DownloadEngine {
                 state = "queued",
                 detail = "正在重新加入后台队列",
                 resourceKind = record.resourceKind,
-                mimeType = record.mimeType
+                mimeType = record.mimeType,
+                adaptiveVideoHeight = record.adaptiveVideoHeight
             )
         )
 
@@ -126,6 +134,9 @@ object DownloadEngine {
 
     private fun mimeTypeTag(mimeType: String?): String =
         MIME_TYPE_TAG_PREFIX + (mimeType?.let(Uri::encode) ?: "none")
+
+    private fun adaptiveHeightTag(height: Int?): String =
+        ADAPTIVE_HEIGHT_TAG_PREFIX + (height?.toString() ?: "auto")
 
     private fun observeRequest(
         manager: WorkManager,
@@ -219,7 +230,11 @@ object DownloadEngine {
                 ?.let { Uri.decode(it) },
             downloadedBytes = info.progress.getLong(PersistentDownloadWorker.KEY_DOWNLOADED_BYTES, -1L),
             totalBytes = info.progress.getLong(PersistentDownloadWorker.KEY_TOTAL_BYTES, -1L),
-            speedBytesPerSecond = info.progress.getLong(PersistentDownloadWorker.KEY_SPEED_BYTES_PER_SECOND, -1L)
+            speedBytesPerSecond = info.progress.getLong(PersistentDownloadWorker.KEY_SPEED_BYTES_PER_SECOND, -1L),
+            adaptiveVideoHeight = info.tags
+                .firstOrNull { it.startsWith(ADAPTIVE_HEIGHT_TAG_PREFIX) }
+                ?.removePrefix(ADAPTIVE_HEIGHT_TAG_PREFIX)
+                ?.toIntOrNull()
         )
     }
 }

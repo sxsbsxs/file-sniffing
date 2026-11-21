@@ -71,7 +71,8 @@ class DownloadCenterViewModel @Inject constructor(
                     totalBytes = task.totalBytes.takeIf { it >= 0L }
                         ?: previous?.totalBytes ?: -1L,
                     speedBytesPerSecond = task.speedBytesPerSecond.takeIf { it >= 0L }
-                        ?: previous?.speedBytesPerSecond ?: -1L
+                        ?: previous?.speedBytesPerSecond ?: -1L,
+                    adaptiveVideoHeight = task.adaptiveVideoHeight ?: previous?.adaptiveVideoHeight
                 )
             )
         }
