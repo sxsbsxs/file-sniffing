@@ -21,6 +21,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 @HiltWorker
@@ -149,16 +150,18 @@ class PersistentDownloadWorker @AssistedInject constructor(
             )
         } catch (cancelled: CancellationException) {
             createdDocument?.let { runCatching { applicationContext.contentResolver.delete(it, null, null) } }
-            persistRecord(
-                fileName = fileName,
-                sourceUrl = url,
-                kind = kind,
-                mimeType = mime,
-                state = "cancelled",
-                progress = 0,
-                detail = "下载已取消",
-                documentUri = null
-            )
+            withContext(NonCancellable) {
+                persistRecord(
+                    fileName = fileName,
+                    sourceUrl = url,
+                    kind = kind,
+                    mimeType = mime,
+                    state = "cancelled",
+                    progress = 0,
+                    detail = "下载已取消",
+                    documentUri = null
+                )
+            }
             throw cancelled
         } catch (error: Exception) {
             createdDocument?.let { runCatching { applicationContext.contentResolver.delete(it, null, null) } }
