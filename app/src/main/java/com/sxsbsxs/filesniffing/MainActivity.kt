@@ -99,12 +99,12 @@ import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
 import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
 import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
 
-private val AppBackground = Color(0xFFF6F7F9)
-private val Ink = Color(0xFF17191F)
-private val SecondaryText = Color(0xFF777D88)
-private val Hairline = Color(0xFFE9EBEF)
-private val Accent = Color(0xFF4B66E8)
-private val SoftAccent = Color(0xFFEEF1FF)
+private val MaterialTheme.colorScheme.background = Color(0xFFF6F7F9)
+private val MaterialTheme.colorScheme.onSurface = Color(0xFF17191F)
+private val MaterialTheme.colorScheme.onSurfaceVariant = Color(0xFF777D88)
+private val MaterialTheme.colorScheme.outlineVariant = Color(0xFFE9EBEF)
+private val MaterialTheme.colorScheme.primary = Color(0xFF4B66E8)
+private val MaterialTheme.colorScheme.primaryContainer = Color(0xFFEEF1FF)
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -248,7 +248,7 @@ private fun FileSniffingApp(sharedLink: String) {
     }
 
     Scaffold(
-        containerColor = AppBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
@@ -371,7 +371,7 @@ private fun MainNavigationBar(
 ) {
     NavigationBar(
         containerColor = Color.White,
-        contentColor = Ink,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
         windowInsets = WindowInsets.navigationBars
     ) {
@@ -389,11 +389,11 @@ private fun MainNavigationBar(
                 Text("嗅探", fontSize = 11.sp, fontWeight = FontWeight.Medium)
             },
             colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = Accent,
-                selectedTextColor = Accent,
-                unselectedIconColor = SecondaryText,
-                unselectedTextColor = SecondaryText,
-                indicatorColor = SoftAccent
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                indicatorColor = MaterialTheme.colorScheme.primaryContainer
             )
         )
         NavigationBarItem(
@@ -410,11 +410,11 @@ private fun MainNavigationBar(
                 Text("下载", fontSize = 11.sp, fontWeight = FontWeight.Medium)
             },
             colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = Accent,
-                selectedTextColor = Accent,
-                unselectedIconColor = SecondaryText,
-                unselectedTextColor = SecondaryText,
-                indicatorColor = SoftAccent
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                indicatorColor = MaterialTheme.colorScheme.primaryContainer
             )
         )
     }
@@ -640,7 +640,7 @@ private fun DownloadTaskCard(
         modifier = Modifier.fillMaxWidth(),
         color = Color.White,
         shape = RoundedCornerShape(17.dp),
-        border = BorderStroke(1.dp, Hairline)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(modifier = Modifier.padding(15.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -648,13 +648,13 @@ private fun DownloadTaskCard(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(11.dp))
-                        .background(SoftAccent),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Download,
                         contentDescription = null,
-                        tint = Accent,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(19.dp)
                     )
                 }
@@ -662,7 +662,7 @@ private fun DownloadTaskCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = task.fileName,
-                        color = Ink,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -679,15 +679,15 @@ private fun DownloadTaskCard(
                         color = when {
                             finished -> Color(0xFF299B68)
                             failed -> Color(0xFFD24B4B)
-                            task.state == "cancelled" -> SecondaryText
-                            else -> SecondaryText
+                            task.state == "cancelled" -> MaterialTheme.colorScheme.onSurfaceVariant
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
                         },
                         fontSize = 11.sp
                     )
                 }
                 Text(
                     text = if (finished) "100%" else if (task.state == "downloading" && task.progress >= 0) "${task.progress}%" else "—",
-                    color = Ink,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -696,21 +696,21 @@ private fun DownloadTaskCard(
             if (task.progress < 0 && task.state == "downloading") {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
-                    color = Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     trackColor = Color(0xFFEDEFF3)
                 )
             } else {
                 LinearProgressIndicator(
                     progress = task.progress.coerceAtLeast(0) / 100f,
                     modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
-                    color = if (failed) Color(0xFFD24B4B) else Accent,
+                    color = if (failed) Color(0xFFD24B4B) else MaterialTheme.colorScheme.primary,
                     trackColor = Color(0xFFEDEFF3)
                 )
             }
             Spacer(modifier = Modifier.height(7.dp))
             Text(
                 text = task.detail,
-                color = SecondaryText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -719,7 +719,7 @@ private fun DownloadTaskCard(
                 finished && task.fileUri != null -> {
                     Spacer(modifier = Modifier.height(6.dp))
                     TextButton(onClick = onOpen) {
-                        Text("打开文件", color = Accent, fontWeight = FontWeight.SemiBold)
+                        Text("打开文件", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 failed || task.state == "cancelled" -> {
@@ -727,7 +727,7 @@ private fun DownloadTaskCard(
                     TextButton(onClick = onRetry) {
                         Text(
                             text = if (task.fileUri != null) "继续断点下载" else "重新下载",
-                            color = Accent,
+                            color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
