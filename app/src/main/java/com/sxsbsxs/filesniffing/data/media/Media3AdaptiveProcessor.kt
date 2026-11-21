@@ -10,8 +10,15 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.Clock
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.NoOpCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.exoplayer.offline.DefaultDownloaderFactory
 import androidx.media3.exoplayer.offline.DownloadHelper
+import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.transformer.DefaultDecoderFactory
@@ -23,10 +30,12 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.Executors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -114,19 +123,36 @@ class Media3AdaptiveProcessor @Inject constructor(
 
         val dataSourceFactory = createDataSourceFactory(resource)
         val sourceMediaItem = createMediaItem(resource)
-
-        onProgress(-1, "Media3 正在分析播放轨道")
-        val downloadRequest = prepareDownloadRequest(
-            sourceMediaItem,
-            dataSourceFactory,
-            maxVideoHeight
-        )
-        val selectedMediaItem = downloadRequest.toMediaItem()
+        val cacheDirectory = adaptiveCacheDirectory(resource, destinationTree, maxVideoHeight)
+        val databaseProvider = StandaloneDatabaseProvider(context)
+        val cache = SimpleCache(cacheDirectory, NoOpCacheEvictor(), databaseProvider)
+        var exportCompleted = false
 
         val tempFile = File(context.cacheDir, "media3-${UUID.randomUUID()}.mp4")
         try {
-            onProgress(-1, "已选择自适应音视频轨道，正在转封装")
-            runTransformer(selectedMediaItem, dataSourceFactory, tempFile, onProgress)
+            onProgress(-1, "Media3 正在分析播放轨道")
+            val downloadRequest = prepareDownloadRequest(
+                sourceMediaItem,
+                dataSourceFactory,
+                maxVideoHeight
+            )
+            val selectedMediaItem = downloadRequest.toMediaItem()
+            val cacheDataSourceFactory = CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(dataSourceFactory)
+
+            onProgress(0, "正在缓存已选音视频轨道，暂停后可从已缓存分片继续")
+            downloadSelectedTracks(downloadRequest, cacheDataSourceFactory, onProgress)
+
+            onProgress(55, "分片缓存完成，正在合并并转封装")
+            runTransformer(
+                selectedMediaItem,
+                cacheDataSourceFactory,
+                tempFile,
+                progressBase = 55,
+                progressRange = 35,
+                onProgress = onProgress
+            )
 
             require(tempFile.exists() && tempFile.length() > 0L) {
                 "Media3 导出结束，但没有生成有效文件"
@@ -172,9 +198,100 @@ class Media3AdaptiveProcessor @Inject constructor(
                 throw error
             }
             onProgress(100, "Media3 已导出 MP4")
+            exportCompleted = true
             Media3ExportResult(destination, outputName)
         } finally {
             runCatching { tempFile.delete() }
+            runCatching { cache.release() }
+            if (exportCompleted) {
+                runCatching { SimpleCache.delete(cacheDirectory, databaseProvider) }
+            }
+        }
+    }
+
+    suspend fun discardAdaptiveCache(
+        resource: SniffedResource,
+        destinationTree: Uri,
+        maxVideoHeight: Int? = null
+    ) = withContext(Dispatchers.IO) {
+        val directory = adaptiveCacheDirectory(resource, destinationTree, maxVideoHeight)
+        if (directory.exists() && !SimpleCache.isCacheFolderLocked(directory)) {
+            SimpleCache.delete(directory, StandaloneDatabaseProvider(context))
+        }
+    }
+
+    private fun adaptiveCacheDirectory(
+        resource: SniffedResource,
+        destinationTree: Uri,
+        maxVideoHeight: Int?
+    ): File {
+        // Cookie contents remain in memory; only a digest is used to isolate cache sessions.
+        val sessionCookie = runCatching {
+            android.webkit.CookieManager.getInstance().getCookie(resource.url).orEmpty()
+        }.getOrDefault("")
+        val key = AdaptiveCacheKey.create(
+            sourceUrl = resource.url,
+            referer = resource.sourcePage,
+            fileName = resource.fileName,
+            destinationTree = destinationTree.toString(),
+            maxVideoHeight = maxVideoHeight,
+            sessionCookies = sessionCookie
+        )
+        return File(File(context.noBackupFilesDir, "media3-adaptive-cache"), key)
+    }
+
+    private suspend fun downloadSelectedTracks(
+        request: DownloadRequest,
+        cacheDataSourceFactory: CacheDataSource.Factory,
+        onProgress: (Int, String) -> Unit
+    ) {
+        val executor = Executors.newFixedThreadPool(3) { runnable ->
+            Thread(runnable, "media3-segment-fetch").apply { isDaemon = true }
+        }
+        val downloader = DefaultDownloaderFactory(cacheDataSourceFactory, executor)
+            .createDownloader(request)
+        var downloadThread: Thread? = null
+
+        try {
+            suspendCancellableCoroutine<Unit> { continuation ->
+                val thread = Thread({
+                    try {
+                        downloader.download { contentLength, bytesDownloaded, percentDownloaded ->
+                            val percent = if (percentDownloaded.isFinite() && percentDownloaded >= 0f) {
+                                (percentDownloaded * 0.55f).toInt().coerceIn(0, 54)
+                            } else {
+                                -1
+                            }
+                            val size = if (contentLength > 0L) {
+                                "${bytesDownloaded} / ${contentLength} 字节"
+                            } else {
+                                "${bytesDownloaded} 字节"
+                            }
+                            onProgress(percent, "正在缓存 HLS/DASH 分片：$size")
+                        }
+                        if (continuation.isActive) runCatching { continuation.resume(Unit) }
+                    } catch (error: Exception) {
+                        if (continuation.isActive) runCatching {
+                            continuation.resumeWithException(error)
+                        }
+                    } finally {
+                        executor.shutdown()
+                    }
+                }, "media3-adaptive-downloader").apply { isDaemon = true }
+                downloadThread = thread
+                continuation.invokeOnCancellation {
+                    runCatching { downloader.cancel() }
+                    thread.interrupt()
+                    executor.shutdownNow()
+                }
+                thread.start()
+            }
+        } finally {
+            // Wait for segment writers before releasing SimpleCache after a pause/cancel.
+            withContext(NonCancellable + Dispatchers.IO) {
+                runCatching { downloadThread?.join() }
+            }
+            executor.shutdownNow()
         }
     }
 
@@ -251,8 +368,10 @@ class Media3AdaptiveProcessor @Inject constructor(
 
     private suspend fun runTransformer(
         mediaItem: MediaItem,
-        dataSourceFactory: OkHttpDataSource.Factory,
+        dataSourceFactory: DataSource.Factory,
         outputFile: File,
+        progressBase: Int,
+        progressRange: Int,
         onProgress: (Int, String) -> Unit
     ) = withContext(Dispatchers.Main.immediate) {
         suspendCancellableCoroutine { continuation ->
@@ -271,9 +390,12 @@ class Media3AdaptiveProcessor @Inject constructor(
                     if (!continuation.isActive) return
                     val state = transformer.getProgress(progressHolder)
                     if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
+                        val mappedProgress = (
+                            progressBase + progressHolder.progress * progressRange / 100
+                        ).coerceIn(progressBase, progressBase + progressRange)
                         onProgress(
-                            (progressHolder.progress * 0.9f).toInt().coerceIn(0, 89),
-                            "Media3 正在转封装：${progressHolder.progress}%"
+                            mappedProgress,
+                            "Media3 正在合并并转封装：${progressHolder.progress}%"
                         )
                     }
                     mainHandler.postDelayed(this, 500L)

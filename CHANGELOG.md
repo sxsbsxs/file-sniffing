@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.4
+
+- Added persistent per-request Media3 segment caching for HLS/DASH exports. Selected segments are downloaded into a private app cache before remuxing; a paused or interrupted job can reuse already-completed segments when retried.
+- Changed Media3 export to read from the same cache used by the segment downloader, avoiding a second full network transfer during remux; successful exports clear their temporary adaptive cache.
+- Enabled pause controls for HLS/DASH tasks and discard their partial segment cache only on an explicit cancellation; ordinary pause preserves it for continuation.
+- Increased app version to 0.9.4 (versionCode 22).
+
 ## 0.9.3
 
 - Fixed a wiring bug: the existing URL-scoped WebView cookie interceptor is now installed on the shared OkHttp client used by OkDownload and Media3, including redirect exchanges.

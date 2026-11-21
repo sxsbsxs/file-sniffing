@@ -28,7 +28,8 @@ flowchart TD
     P --> V[NativeMediaProbe · C++ JNI]
     V -->|Reject HTML error payload| P
     O -->|HLS / DASH| R[Media3 DownloadHelper]
-    R --> S[Media3 Transformer]
+    R --> R1[HLS/DASH Downloader + persistent SimpleCache]
+    R1 --> S[Media3 Transformer reading cache]
     S --> T[Temporary MP4]
     P --> U[SAF content URI]
     T --> U
@@ -40,7 +41,7 @@ flowchart TD
 - `presentation.sniffing`: sniffing screen state and WebView callbacks.
 - `presentation.downloads`: DataStore output-folder state and Room-backed download history.
 - `data.network`: OkDownload adapter, using the app's shared OkHttp configuration.
-- `data.media`: Media3 DownloadHelper track preparation and Transformer export.
+- `data.media`: Media3 DownloadHelper track selection, persistent HLS/DASH segment cache, resumable segment download and Transformer export.
 - `data.local`: Room entities, DAOs and database.
 - `data.preferences`: DataStore preferences.
 - `data.repository`: repository interfaces and implementations.

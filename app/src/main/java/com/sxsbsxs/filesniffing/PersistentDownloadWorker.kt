@@ -55,6 +55,10 @@ class PersistentDownloadWorker @AssistedInject constructor(
             sourcePage = referer
         )
         val tree = Uri.parse(treeValue)
+        val adaptiveVideoHeight = inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
+        val isAdaptiveManifest = kind == ResourceKind.PLAYLIST &&
+            (fileName.endsWith(".m3u8", ignoreCase = true) ||
+                fileName.endsWith(".mpd", ignoreCase = true))
         var createdDocument: Uri? = null
 
         try {
@@ -71,14 +75,11 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 documentUri = null
             )
 
-            val isAdaptiveManifest = kind == ResourceKind.PLAYLIST &&
-                (fileName.endsWith(".m3u8", ignoreCase = true) ||
-                    fileName.endsWith(".mpd", ignoreCase = true))
             if (isAdaptiveManifest) {
                 val result = media3AdaptiveProcessor.exportAdaptiveStream(
                     resource = resource,
                     destinationTree = tree,
-                    maxVideoHeight = inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
+                    maxVideoHeight = adaptiveVideoHeight
                 ) { progress, detail ->
                     publishProgressAsync(progress, detail, fileName)
                 }
@@ -230,6 +231,15 @@ class PersistentDownloadWorker @AssistedInject constructor(
         } catch (cancelled: CancellationException) {
             val paused = isPauseRequested()
             withContext(NonCancellable) {
+                if (!paused && isAdaptiveManifest) {
+                    runCatching {
+                        media3AdaptiveProcessor.discardAdaptiveCache(
+                            resource = resource,
+                            destinationTree = tree,
+                            maxVideoHeight = adaptiveVideoHeight
+                        )
+                    }
+                }
                 val previous = downloadRepository.findById(id.toString())
                 persistRecord(
                     fileName = fileName,

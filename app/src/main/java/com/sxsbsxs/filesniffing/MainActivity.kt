@@ -1092,7 +1092,7 @@ private fun DownloadTaskCard(
                         fontSize = 12.sp
                     )
                 }
-                task.state == "downloading" && task.resourceKind != ResourceKind.PLAYLIST.name ->
+                task.state == "downloading" ->
                     TextButton(onClick = onPause) {
                         Text("暂停", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                     }
