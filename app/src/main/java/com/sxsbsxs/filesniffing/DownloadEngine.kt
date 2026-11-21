@@ -13,6 +13,8 @@ import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 object DownloadEngine {
     const val DOWNLOAD_TAG = "file-sniffing-download"
     private const val FILE_NAME_TAG_PREFIX = "file-name:"
+    private const val RESOURCE_KIND_TAG_PREFIX = "resource-kind:"
+    private const val MIME_TYPE_TAG_PREFIX = "mime-type:"
 
     fun start(
         context: Context,
@@ -34,6 +36,8 @@ object DownloadEngine {
             )
             .addTag(DOWNLOAD_TAG)
             .addTag(fileNameTag(resource.fileName))
+            .addTag(resourceKindTag(resource.kind.name))
+            .addTag(mimeTypeTag(resource.mimeType))
             .build()
 
         onUpdate(
@@ -92,6 +96,8 @@ object DownloadEngine {
             .setInputData(retryData)
             .addTag(DOWNLOAD_TAG)
             .addTag(fileNameTag(record.fileName))
+            .addTag(resourceKindTag(record.resourceKind))
+            .addTag(mimeTypeTag(record.mimeType))
             .build()
 
         onUpdate(
@@ -113,6 +119,12 @@ object DownloadEngine {
 
     private fun fileNameTag(fileName: String): String =
         FILE_NAME_TAG_PREFIX + Uri.encode(fileName)
+
+    private fun resourceKindTag(kind: String): String =
+        RESOURCE_KIND_TAG_PREFIX + kind
+
+    private fun mimeTypeTag(mimeType: String?): String =
+        MIME_TYPE_TAG_PREFIX + (mimeType?.let(Uri::encode) ?: "none")
 
     private fun observeRequest(
         manager: WorkManager,
@@ -186,8 +198,12 @@ object DownloadEngine {
             detail = detail,
             fileUri = info.outputData.getString(PersistentDownloadWorker.KEY_FILE_URI)
                 ?: info.progress.getString(PersistentDownloadWorker.KEY_PARTIAL_URI),
-            resourceKind = info.inputData.getString(PersistentDownloadWorker.KEY_KIND),
-            mimeType = info.inputData.getString(PersistentDownloadWorker.KEY_MIME),
+            resourceKind = info.tags.firstOrNull { it.startsWith(RESOURCE_KIND_TAG_PREFIX) }
+                ?.removePrefix(RESOURCE_KIND_TAG_PREFIX),
+            mimeType = info.tags.firstOrNull { it.startsWith(MIME_TYPE_TAG_PREFIX) }
+                ?.removePrefix(MIME_TYPE_TAG_PREFIX)
+                ?.takeUnless { it == "none" }
+                ?.let { Uri.decode(it) },
             downloadedBytes = info.progress.getLong(PersistentDownloadWorker.KEY_DOWNLOADED_BYTES, -1L),
             totalBytes = info.progress.getLong(PersistentDownloadWorker.KEY_TOTAL_BYTES, -1L),
             speedBytesPerSecond = info.progress.getLong(PersistentDownloadWorker.KEY_SPEED_BYTES_PER_SECOND, -1L)
