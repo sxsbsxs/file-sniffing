@@ -2,6 +2,8 @@
 
 An Android-first webpage resource sniffer and local media download manager.
 
+**Current app version:** 0.7.0
+
 ## Technology architecture
 
 | Layer | Technology | Responsibility |
@@ -23,7 +25,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Resource types and filtering for video, audio, image, HLS and DASH manifest URLs.
 - [x] Multi-select resources and batch enqueue.
 - [x] OkHttp shared client, OkDownload adapter and SAF `content://` output.
-- [x] Media3 `DownloadHelper` prepares adaptive streams and derives the selected stream keys.
+- [x] Media3 `DownloadHelper` prepares adaptive streams and derives the selected stream keys, preferring the highest supported bitrate.
 - [x] Media3 `Transformer` exports selected HLS/DASH streams to an MP4 file, then copies it into the chosen SAF folder.
 - [x] Hilt application and Hilt-aware WorkManager worker.
 - [x] MVVM + StateFlow for sniffing state and download-center preferences/history.
@@ -53,7 +55,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 ## Build
 
-Open the project in Android Studio with JDK 17 and Android SDK 35, or run:
+Open the project in Android Studio with JDK 17 and Android SDK 36, or run:
 
 ```bash
 ./gradlew :app:assembleDebug
