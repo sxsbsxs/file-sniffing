@@ -16,9 +16,9 @@ There is no WebView screen, webpage navigation flow, DOM injection, browser requ
 
 ## Package responsibilities
 
-- MainActivity.kt: URL-first home, share-sheet URL intake, resolver results, download center and local files.
+- MainActivity.kt: URL-first shell, share-sheet URL intake, tab routing and download orchestration.\n- presentation.sniffing.DownloadOptionsSheet: grouped media configuration; it exposes only real extractor formats and sends the user's selected format selector to the download queue.\n- Resolver result cards use safe yt-dlp metadata (thumbnail, duration, uploader, codec, frame rate and file size) for preview; signed media URLs and authorization headers are never retained.
 - presentation.sniffing: direct URL resolution state; calls yt-dlp and does not observe webpage or WebView state.
-- presentation.downloads: DataStore output-folder/performance preferences and Room-backed download history.
+- presentation.downloads: DataStore output-folder/performance preferences and Room-backed download history; Download Center supports filename/error search and recent/name/progress sorting.
 - Download source metadata is committed to Room before WorkManager enqueue; PersistentDownloadWorker owns subsequent durable state transitions. WorkManager UI observers only render live state. Legacy rows that already lost their source URL require re-parsing because WorkInfo does not expose inputData.
 - DownloadQueuePolicy: prevents duplicate active tasks for the same URL while allowing a later retry after the task finishes.
 - data.extractor.YtDlpRuntime: initializes the Android yt-dlp/FFmpeg runtime, refreshes the separate yt-dlp executable from the Nightly channel at startup and weekly thereafter, inspects metadata and downloads/merges media. Failed/offline update attempts leave the bundled executable intact and are retried after a six-hour cooldown.
