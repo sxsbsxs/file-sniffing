@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DownloadRecordEntity::class,
         SniffedResourceEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class FileSniffDatabase : RoomDatabase() {
@@ -31,6 +31,12 @@ abstract class FileSniffDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE download_records ADD COLUMN totalBytes INTEGER NOT NULL DEFAULT -1")
                 db.execSQL("ALTER TABLE download_records ADD COLUMN speedBytesPerSecond INTEGER NOT NULL DEFAULT -1")
                 db.execSQL("ALTER TABLE download_records ADD COLUMN adaptiveVideoHeight INTEGER")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE download_records ADD COLUMN formatSelector TEXT")
             }
         }
     }
