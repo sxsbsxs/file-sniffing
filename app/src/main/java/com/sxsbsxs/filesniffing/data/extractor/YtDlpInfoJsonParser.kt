@@ -12,7 +12,7 @@ import java.util.Locale
  * Signed media URLs and request headers are intentionally not represented in this model.
  * They are ephemeral credentials and must never be copied into Room, logs or UI state.
  */
-internal data class YtDlpVideoInfo(
+data class YtDlpVideoInfo(
     val videoId: String,
     val title: String,
     val webpageUrl: String?,
@@ -52,7 +52,7 @@ internal data class YtDlpVideoInfo(
 }
 
 /** A safe subset of one yt-dlp format entry. No direct media URL or header is retained. */
-internal data class YtDlpFormat(
+data class YtDlpFormat(
     val videoId: String,
     val formatId: String,
     val extension: String?,
