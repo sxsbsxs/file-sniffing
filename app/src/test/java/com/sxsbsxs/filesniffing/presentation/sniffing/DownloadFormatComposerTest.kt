@@ -17,12 +17,13 @@ class DownloadFormatComposerTest {
             embeddedAudio = true,
             size = 120L
         )
-        val result = DownloadFormatComposer.video(video, audio("140"))
+        val result = DownloadFormatComposer.video(video)
 
         assertEquals("18", result?.formatSelector)
         assertEquals(120L, result?.fileSizeBytes)
         assertEquals(null, result?.audioFormatId)
         assertTrue(result?.qualityLabel?.contains("内嵌音轨") == true)
+        assertNull(DownloadFormatComposer.video(video, audio("140")))
     }
 
     @Test
