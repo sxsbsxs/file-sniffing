@@ -19,6 +19,8 @@ There is no WebView screen, webpage navigation flow, DOM injection, browser requ
 - MainActivity.kt: URL-first home, share-sheet URL intake, resolver results, download center and local files.
 - presentation.sniffing: direct URL resolution state; calls yt-dlp and does not observe webpage or WebView state.
 - presentation.downloads: DataStore output-folder/performance preferences and Room-backed download history.
+- PersistentDownloadWorker: the single writer of durable download task state; WorkManager UI observers only render live state. Retry recovery reconstructs missing legacy metadata from the original WorkManager inputData.
+- DownloadQueuePolicy: prevents duplicate active tasks for the same URL while allowing a later retry after the task finishes.
 - data.extractor.YtDlpRuntime: initializes the Android yt-dlp/FFmpeg runtime, refreshes the separate yt-dlp executable from the Nightly channel at startup and weekly thereafter, inspects metadata and downloads/merges media. Failed/offline update attempts leave the bundled executable intact and are retried after a six-hour cooldown.
 - data.extractor.YtDlpUpdatePolicy: pure scheduling rules for first-run, weekly refresh and failed-update retry.
 - data.extractor.YouTubeUrlParser and NiconicoUrlParser: validate known URL shapes before selecting site-specific handling.
