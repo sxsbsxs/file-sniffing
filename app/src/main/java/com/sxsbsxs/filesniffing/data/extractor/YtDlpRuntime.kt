@@ -133,7 +133,7 @@ class YtDlpRuntime @Inject constructor(
             safe.isNullOrBlank() -> "yt-dlp 解析或下载失败"
             safe.contains("Sign in to confirm", true) ||
                 safe.contains("not a bot", true) ->
-                "YouTube 要求登录或人机验证；请检查应用内网页登录状态，或稍后更新 yt-dlp"
+                "YouTube 要求登录或人机验证；当前版本不提供网页登录，请尝试公开可访问的视频，或稍后更新 yt-dlp"
             safe.contains("Unsupported URL", true) -> "当前 yt-dlp 版本不支持此链接"
             else -> safe
         }
