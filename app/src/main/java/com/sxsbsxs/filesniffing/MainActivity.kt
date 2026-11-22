@@ -467,23 +467,25 @@ private fun FileSniffingApp(sharedLink: String) {
                         }
                     },
                     onPauseTask = { task ->
-                        coroutineScope.launch {
-                            downloadCenterViewModel.updateTaskState(
-                                task.id,
-                                state = "paused",
-                                detail = "已暂停，继续时将尝试从断点恢复"
-                            )
-                            DownloadEngine.pause(context.applicationContext, task.id)
+                        DownloadEngine.pause(context.applicationContext, task.id) {
+                            coroutineScope.launch {
+                                downloadCenterViewModel.updateTaskState(
+                                    task.id,
+                                    state = "paused",
+                                    detail = "已暂停，可继续下载"
+                                )
+                            }
                         }
                     },
                     onCancelTask = { task ->
-                        coroutineScope.launch {
-                            downloadCenterViewModel.updateTaskState(
-                                task.id,
-                                state = "cancelled",
-                                detail = "下载已取消，可重新下载"
-                            )
-                            DownloadEngine.cancel(context.applicationContext, task.id)
+                        DownloadEngine.cancel(context.applicationContext, task.id) {
+                            coroutineScope.launch {
+                                downloadCenterViewModel.updateTaskState(
+                                    task.id,
+                                    state = "cancelled",
+                                    detail = "下载已取消，可重新下载"
+                                )
+                            }
                         }
                     },
                     onOpenTask = { task ->
