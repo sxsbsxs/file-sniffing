@@ -44,6 +44,11 @@ class PersistentDownloadWorker @AssistedInject constructor(
     private val downloadSpeedLimiter: DownloadSpeedLimiter
 ) : CoroutineWorker(appContext, parameters) {
 
+    @Volatile private var latestProgress = -1
+    @Volatile private var latestDownloadedBytes = -1L
+    @Volatile private var latestTotalBytes = -1L
+    @Volatile private var latestSpeedBytesPerSecond = -1L
+
     override suspend fun doWork(): Result {
         return try {
             executeDownload()
@@ -151,6 +156,21 @@ class PersistentDownloadWorker @AssistedInject constructor(
         )
         val recordSourceUrl = ytDlpPageUrl ?: requestedUrl
         val tree = treeValue.takeIf { it.isNotBlank() }?.let(Uri::parse)
+        val ytDlpFormatSelector = inputData.getString(KEY_FORMAT_SELECTOR)
+            ?.takeIf { it.isNotBlank() }
+            ?: if (requestedKind == ResourceKind.AUDIO) "bestaudio/best" else "bv*+ba/b"
+        val ytDlpSessionId = ytDlpPageUrl?.let {
+            YtDlpSessionKey.create(
+                sourceUrl = it,
+                resourceKind = requestedKind,
+                formatSelector = ytDlpFormatSelector,
+                fileName = requestedFileName,
+                destinationTreeUri = treeValue
+            )
+        }
+        val ytDlpTempDirectory = ytDlpSessionId?.let {
+            java.io.File(applicationContext.cacheDir, "yt-dlp-$it")
+        }
         val adaptiveVideoHeight = inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
         val tuning = appPreferences.downloadTuning.first()
         downloadSpeedLimiter.setLimitBytesPerSecond(tuning.speedLimitBytesPerSecond)
@@ -182,15 +202,13 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     else -> "视频站"
                 }
                 publishProgressAsync(-1, "正在通过 yt-dlp 提取 $providerName 媒体流", fileName)
-                val tempDirectory = java.io.File(applicationContext.cacheDir, "yt-dlp-${id}")
+                val tempDirectory = requireNotNull(ytDlpTempDirectory)
                 val downloadedFile = ytDlpRuntime.download(
                     url = ytDlpPageUrl,
                     outputDirectory = tempDirectory,
-                    formatSelector = inputData.getString(KEY_FORMAT_SELECTOR)
-                        ?.takeIf { it.isNotBlank() }
-                        ?: if (kind == ResourceKind.AUDIO) "bestaudio/best" else "bv*+ba/b",
+                    formatSelector = ytDlpFormatSelector,
                     audioOnly = kind == ResourceKind.AUDIO,
-                    processId = id.toString()
+                    processId = requireNotNull(ytDlpSessionId)
                 ) { progress, _, line ->
                     val percent = progress.takeIf { it.isFinite() && it >= 0f }
                         ?.toInt()?.coerceIn(0, 100) ?: -1
@@ -375,9 +393,14 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     if (count > 0) bytes.copyOf(count) else ByteArray(0)
                 } ?: ByteArray(0)
             val detectedContainer = NativeMediaProbe.detectContainer(prefix)
-            check(detectedContainer != "html") {
-                "下载地址返回了 HTML 页面，而不是媒体文件；资源可能需要登录或有效的 Referer"
-            }
+            val integrityFailure = DownloadIntegrityPolicy.failureReason(
+                kind = kind,
+                downloadedBytes = transferResult.downloadedBytes,
+                totalBytes = transferResult.totalBytes,
+                responseMimeType = responseMime,
+                detectedContainer = detectedContainer
+            )
+            check(integrityFailure == null) { requireNotNull(integrityFailure) }
             DownloadOutput.markComplete(applicationContext, destinationDocument)
             val completedDetail = if (detectedContainer == "unknown") {
                 if (tree == null) "已保存到 Download 文件夹" else "已保存到所选文件夹"
@@ -405,11 +428,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
         } catch (cancelled: CancellationException) {
             val paused = isPauseRequested()
             if (ytDlpPageUrl != null) {
-                ytDlpRuntime.cancel(id.toString())
+                ytDlpRuntime.cancel(requireNotNull(ytDlpSessionId))
                 if (!paused) {
-                    runCatching {
-                        java.io.File(applicationContext.cacheDir, "yt-dlp-${id}").deleteRecursively()
-                    }
+                    runCatching { ytDlpTempDirectory?.deleteRecursively() }
                 }
             }
             withContext(NonCancellable) {
@@ -437,9 +458,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
             throw cancelled
         } catch (error: Exception) {
             if (ytDlpPageUrl != null) {
-                runCatching {
-                    java.io.File(applicationContext.cacheDir, "yt-dlp-${id}").deleteRecursively()
-                }
+                runCatching { ytDlpTempDirectory?.deleteRecursively() }
             }
             var rootCause: Throwable = error
             while (rootCause.cause != null) {
@@ -478,6 +497,11 @@ class PersistentDownloadWorker @AssistedInject constructor(
         totalBytes: Long = -1L,
         speedBytesPerSecond: Long = -1L
     ) {
+        if (progress >= 0) latestProgress = progress
+        if (downloadedBytes >= 0L) latestDownloadedBytes = downloadedBytes
+        if (totalBytes >= 0L) latestTotalBytes = totalBytes
+        if (speedBytesPerSecond >= 0L) latestSpeedBytesPerSecond = speedBytesPerSecond
+
         val data = androidx.work.Data.Builder()
             .putInt(KEY_PROGRESS, progress)
             .putString(KEY_DETAIL, detail)
@@ -553,9 +577,15 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 updatedAtMillis = now,
                 referer = inputData.getString(KEY_REFERER).orEmpty(),
                 destinationTreeUri = inputData.getString(KEY_TREE)?.takeIf { it.isNotBlank() },
-                downloadedBytes = previous?.downloadedBytes ?: -1L,
-                totalBytes = previous?.totalBytes ?: -1L,
-                speedBytesPerSecond = previous?.speedBytesPerSecond ?: -1L,
+                downloadedBytes = latestDownloadedBytes.takeIf { it >= 0L }
+                    ?: previous?.downloadedBytes ?: -1L,
+                totalBytes = latestTotalBytes.takeIf { it >= 0L }
+                    ?: previous?.totalBytes ?: -1L,
+                speedBytesPerSecond = if (state == "downloading") {
+                    latestSpeedBytesPerSecond
+                } else {
+                    -1L
+                },
                 adaptiveVideoHeight = previous?.adaptiveVideoHeight
                     ?: inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 },
                 formatSelector = inputData.getString(KEY_FORMAT_SELECTOR)
