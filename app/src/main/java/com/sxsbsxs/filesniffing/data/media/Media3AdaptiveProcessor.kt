@@ -26,6 +26,7 @@ import androidx.media3.transformer.ExoPlayerAssetLoader
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.sxsbsxs.filesniffing.SniffedResource
+import com.sxsbsxs.filesniffing.NativeMediaProbe
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -163,6 +164,15 @@ class Media3AdaptiveProcessor @Inject constructor(
             require(tempFile.exists() && tempFile.length() > 0L) {
                 "Media3 导出结束，但没有生成有效文件"
             }
+            val outputPrefix = FileInputStream(tempFile).use { source ->
+                val bytes = ByteArray(4096)
+                val count = source.read(bytes)
+                if (count > 0) bytes.copyOf(count) else ByteArray(0)
+            }
+            val detectedContainer = NativeMediaProbe.detectContainer(outputPrefix)
+            check(detectedContainer == "mp4") {
+                "Media3 输出文件头无效：预期 MP4，实际为 $detectedContainer"
+            }
             val outputName = buildOutputName(resource.fileName)
             val destination = DownloadOutput.create(
                 context = context,
@@ -191,6 +201,9 @@ class Media3AdaptiveProcessor @Inject constructor(
                                 -1
                             }
                             onProgress(progress, "正在保存 MP4：$copied / $total 字节")
+                        }
+                        check(copied == total) {
+                            "Media3 MP4 保存未写完整：已写入 $copied / $total 字节"
                         }
                         sink.flush()
                     }
