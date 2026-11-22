@@ -7,5 +7,6 @@ interface DownloadRepository {
     fun observeAll(): Flow<List<DownloadRecordEntity>>
     suspend fun findById(id: String): DownloadRecordEntity?
     suspend fun save(record: DownloadRecordEntity)
+    suspend fun replaceForRetry(previous: DownloadRecordEntity, retry: DownloadRecordEntity)
     suspend fun delete(id: String)
 }
