@@ -24,6 +24,18 @@ class DownloadConnectionPolicyTest {
     }
 
     @Test
+    fun preferredConnectionCeilingCanBeChanged() {
+        try {
+            DownloadConnectionPolicy.setPreferredMaximumConnections(4)
+            assertEquals(4, DownloadConnectionPolicy.connectionsFor(512L * 1024L * 1024L))
+            DownloadConnectionPolicy.setPreferredMaximumConnections(16)
+            assertEquals(16, DownloadConnectionPolicy.connectionsFor(512L * 1024L * 1024L))
+        } finally {
+            DownloadConnectionPolicy.setPreferredMaximumConnections(12)
+        }
+    }
+
+    @Test
     fun largeFilesAreCappedAtTwelveConnections() {
         assertEquals(12, DownloadConnectionPolicy.connectionsFor(256L * 1024L * 1024L))
         assertEquals(12, DownloadConnectionPolicy.connectionsFor(4L * 1024L * 1024L * 1024L))
