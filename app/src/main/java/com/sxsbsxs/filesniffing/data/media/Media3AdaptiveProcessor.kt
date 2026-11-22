@@ -249,7 +249,9 @@ class Media3AdaptiveProcessor @Inject constructor(
         maxConcurrentConnections: Int,
         onProgress: (Int, String) -> Unit
     ) {
-        val executor = Executors.newFixedThreadPool(maxConcurrentConnections.coerceIn(1, 16)) { runnable ->
+        // HLS/DASH work is segment-based, not byte-range splitting. Keep a separate
+        // bounded pool so a 256/512 direct-file setting cannot spawn that many threads here.
+        val executor = Executors.newFixedThreadPool(maxConcurrentConnections.coerceIn(1, 32)) { runnable ->
             Thread(runnable, "media3-segment-fetch").apply { isDaemon = true }
         }
         val downloader = DefaultDownloaderFactory(cacheDataSourceFactory, executor)
