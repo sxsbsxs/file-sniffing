@@ -224,7 +224,7 @@ object DownloadEngine {
         val detail = when (info.state) {
             WorkInfo.State.FAILED ->
                 info.outputData.getString(PersistentDownloadWorker.KEY_ERROR)
-                    ?: "任务异常退出（未返回错误详情）；可以直接重试，应用会尝试从后台任务恢复原始链接"
+                    ?: "任务异常退出（未返回错误详情）；可以尝试重试，若提示缺少原始参数，请重新解析链接"
             WorkInfo.State.CANCELLED -> if (pauseWasRequested) "已暂停，可继续下载" else "下载已取消"
             WorkInfo.State.SUCCEEDED ->
                 info.outputData.getString(PersistentDownloadWorker.KEY_DETAIL) ?: "下载完成"
