@@ -38,7 +38,7 @@ The app does not open supplied URLs in a WebView, inject scripts into pages, sca
 - Direct HTTP(S) file and media URLs recognized by the resource classifier.
 - Audio-only output through yt-dlp and FFmpeg.
 - Public Download folder by default on Android 10+; optional SAF destination override. Android 9 and earlier require a chosen SAF directory.
-- Persistent download queue, Worker-owned task history, direct-file pause/resume, retry with WorkManager input recovery and local file browsing.
+- Persistent download queue, Worker-owned task history, direct-file pause/resume, retry with source metadata saved before enqueue and local file browsing.
 - Active URL deduplication prevents accidental double-tap enqueue of the same source.
 
 ## Important limits
