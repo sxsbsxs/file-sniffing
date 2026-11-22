@@ -366,11 +366,16 @@ private fun FileSniffingApp(sharedLink: String) {
                         }
                     },
                     onYouTubePageReady = { targetUrl ->
-                        sniffingViewModel.extractYouTubeResource(targetUrl) { resource, error ->
-                            if (resource != null) {
-                                sniffingViewModel.addResource(resource)
+                        sniffingViewModel.extractYouTubeResources(targetUrl) { resources, error ->
+                            if (!resources.isNullOrEmpty()) {
+                                resources.forEach(sniffingViewModel::addResource)
                                 coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("YouTube 已通过 yt-dlp 解析，可加入下载")
+                                    val message = if (YouTubeUrlParser.isPlaylistUrl(targetUrl)) {
+                                        "YouTube 播放列表已解析：${resources.size} 个视频"
+                                    } else {
+                                        "YouTube 已通过 yt-dlp 解析，可加入下载"
+                                    }
+                                    snackbarHostState.showSnackbar(message)
                                 }
                             } else if (!error.isNullOrBlank()) {
                                 coroutineScope.launch {
