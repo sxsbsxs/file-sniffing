@@ -39,6 +39,31 @@ class DownloadIntegrityPolicyTest {
     }
 
     @Test
+    fun rejectsJsonErrorPayloadEvenWhenServerUsesGenericBinaryMime() {
+        assertEquals(
+            "下载地址返回了网页或错误数据，而不是媒体文件；请检查链接、访问权限或 Referer",
+            DownloadIntegrityPolicy.failureReason(
+                ResourceKind.VIDEO, 1000L, 1000L, "application/octet-stream", "json"
+            )
+        )
+    }
+
+    @Test
+    fun trustsRecognizedMediaSignatureOverIncorrectPlainTextMime() {
+        assertNull(
+            DownloadIntegrityPolicy.failureReason(
+                ResourceKind.VIDEO, 1000L, 1000L, "text/plain", "mp4"
+            )
+        )
+        assertEquals(
+            "下载地址返回了网页或错误数据，而不是媒体文件；请检查链接、访问权限或 Referer",
+            DownloadIntegrityPolicy.failureReason(
+                ResourceKind.VIDEO, 1000L, 1000L, "text/plain", "unknown"
+            )
+        )
+    }
+
+    @Test
     fun permitsNonEmptyUnknownLengthBinaryAndLegitimateTextDocuments() {
         assertNull(
             DownloadIntegrityPolicy.failureReason(
