@@ -187,6 +187,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 val downloadedFile = ytDlpRuntime.download(
                     url = ytDlpPageUrl,
                     outputDirectory = tempDirectory,
+                    formatSelector = inputData.getString(KEY_FORMAT_SELECTOR)
+                        ?.takeIf { it.isNotBlank() }
+                        ?: if (kind == ResourceKind.AUDIO) "bestaudio/best" else "bv*+ba/b",
                     audioOnly = kind == ResourceKind.AUDIO,
                     processId = id.toString()
                 ) { progress, _, line ->
@@ -555,7 +558,8 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 totalBytes = previous?.totalBytes ?: -1L,
                 speedBytesPerSecond = previous?.speedBytesPerSecond ?: -1L,
                 adaptiveVideoHeight = previous?.adaptiveVideoHeight
-                    ?: inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
+                    ?: inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 },
+                formatSelector = inputData.getString(KEY_FORMAT_SELECTOR)
             )
         )
     }
@@ -727,6 +731,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
         const val KEY_TOTAL_BYTES = "total_bytes"
         const val KEY_SPEED_BYTES_PER_SECOND = "speed_bytes_per_second"
         const val KEY_ADAPTIVE_VIDEO_HEIGHT = "adaptive_video_height"
+        const val KEY_FORMAT_SELECTOR = "format_selector"
         const val KEY_ERROR = "error"
         private const val CHANNEL_ID = "file_sniffing_downloads"
         private const val NOTIFICATION_ID = 4107
