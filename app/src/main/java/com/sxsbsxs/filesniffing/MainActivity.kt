@@ -125,7 +125,6 @@ class MainActivity : ComponentActivity() {
         if (source == null) return ""
         val sharedText = when (source.action) {
             Intent.ACTION_SEND -> source.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
-            Intent.ACTION_VIEW -> source.dataString.orEmpty()
             else -> ""
         }.trim()
         return SharedLinkNormalizer.normalize(sharedText)
