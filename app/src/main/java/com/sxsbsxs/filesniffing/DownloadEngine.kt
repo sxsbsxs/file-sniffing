@@ -161,7 +161,7 @@ object DownloadEngine {
             id = request.id.toString(),
             fileName = request.tags.firstOrNull { it.startsWith(FILE_NAME_TAG_PREFIX) }
                 ?.removePrefix(FILE_NAME_TAG_PREFIX)
-                ?.let(Uri::decode)
+                ?.let { Uri.decode(it) }
                 ?: "下载任务",
             progress = 0,
             state = "queued",
