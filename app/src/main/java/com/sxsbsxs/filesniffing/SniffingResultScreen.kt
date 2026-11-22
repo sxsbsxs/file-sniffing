@@ -209,6 +209,25 @@ fun SniffingResultScreen(
         visibleResources.filter { it.kind in activeKinds }
     }
 
+    // The embedded browser can show a mobile-page warning while the site's API extractor
+    // still returns a valid stream. A successful provider extraction takes precedence over
+    // the page-text-only diagnostic; the diagnostic remains visible when no media was found.
+    val niconicoVideoId = NiconicoUrlParser.extractVideoId(pageUrl)
+    val youtubeVideoId = YouTubeUrlParser.extractVideoId(pageUrl)
+    val youtubePlaylistId = YouTubeUrlParser.extractPlaylistId(pageUrl)
+    val providerMediaResolved = visibleResources.any { resource ->
+        resource.kind == ResourceKind.VIDEO && (
+            (niconicoVideoId != null &&
+                NiconicoUrlParser.extractVideoId(resource.sourcePage) == niconicoVideoId) ||
+            (youtubeVideoId != null &&
+                YouTubeUrlParser.extractVideoId(resource.sourcePage) == youtubeVideoId) ||
+            (youtubePlaylistId != null &&
+                YouTubeUrlParser.extractPlaylistId(resource.sourcePage) == youtubePlaylistId)
+        )
+    }
+    val displayedPageAccessDiagnostic =
+        pageAccessDiagnostic.takeUnless { providerMediaResolved }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -281,7 +300,7 @@ fun SniffingResultScreen(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (youtubeDiagnostics.isYouTubePage || pageAccessDiagnostic != null) {
+            if (youtubeDiagnostics.isYouTubePage || displayedPageAccessDiagnostic != null) {
                 IconButton(onClick = { showDiagnostics = true }) {
                     Icon(
                         Icons.Rounded.Info,
@@ -623,7 +642,7 @@ fun SniffingResultScreen(
             }
         }
 
-        pageAccessDiagnostic?.let { diagnostic ->
+        displayedPageAccessDiagnostic?.let { diagnostic ->
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -784,7 +803,7 @@ fun SniffingResultScreen(
                         when {
                             isLoading -> "正在扫描网页资源…"
                             pageError != null -> "网页预览暂不可用"
-                            pageAccessDiagnostic != null -> "页面受到站点限制，暂未发现可用媒体"
+                            displayedPageAccessDiagnostic != null -> "页面受到站点限制，暂未发现可用媒体"
                             resources.any { it.kind == ResourceKind.SEGMENT } -> "发现媒体分段，尚未发现完整媒体资源"
                             isRecognizedYouTubeVideo -> "已识别 YouTube 视频，但尚未解析出可下载格式"
                             else -> "暂未发现可下载资源"
@@ -797,7 +816,7 @@ fun SniffingResultScreen(
                     Text(
                         when {
                             pageError != null -> "页面预览失败不代表资源解析失败，稍后可刷新重试"
-                            pageAccessDiagnostic != null -> pageAccessDiagnostic?.message.orEmpty()
+                            displayedPageAccessDiagnostic != null -> displayedPageAccessDiagnostic?.message.orEmpty()
                             resources.any { it.kind == ResourceKind.SEGMENT } -> "单个媒体分段不会作为完整视频列出"
                             isRecognizedYouTubeVideo -> "正在使用 yt-dlp 获取实际视频或播放列表条目。若需要 EJS / JavaScript 挑战运行时或 PO Token 的视频，仍可能因 YouTube 验证而无法解析。"
                             else -> "视频、音频、图片、文档和下载链接会显示在这里"
