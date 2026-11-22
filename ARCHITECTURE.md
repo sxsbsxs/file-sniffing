@@ -26,7 +26,7 @@ There is no WebView screen, webpage navigation flow, DOM injection, browser requ
 - DownloadQueuePolicy: prevents duplicate active tasks for the same URL while allowing a later retry after the task finishes.
 - data.extractor.YtDlpRuntime: initializes the Android yt-dlp/FFmpeg runtime, refreshes the separate yt-dlp executable from the Nightly channel at startup and weekly thereafter, inspects metadata and downloads/merges media. Failed/offline update attempts leave the bundled executable intact and are retried after a six-hour cooldown.
 - data.extractor.YtDlpUpdatePolicy: pure scheduling rules for first-run, weekly refresh and failed-update retry.
-- data.extractor.YouTubeUrlParser, YtDlpPlaylistDetector and NiconicoUrlParser: validate known URL shapes before selecting site-specific handling. Generic playlist results are accepted only when yt-dlp supplies a real HTTP(S) item page URL.
+- data.extractor.YouTubeUrlParser, YtDlpPlaylistDetector and NiconicoUrlParser: validate known URL shapes before selecting site-specific handling. Generic playlist results are accepted only when yt-dlp supplies a real HTTP(S) item page URL. A video/audio page item is routed through yt-dlp even when its referer is the parent playlist URL; known direct media extensions remain on OkDownload.
 - data.extractor.YtDlpInfoJsonParser: parses safe metadata and actual format availability without retaining signed media URLs or authorization headers.
 - data.network: OkDownload adapter, size-aware byte-range strategy and shared speed limiter.
 - data.media: Media3 DownloadHelper track selection, adaptive cache and Transformer export for direct HLS/DASH manifests.
