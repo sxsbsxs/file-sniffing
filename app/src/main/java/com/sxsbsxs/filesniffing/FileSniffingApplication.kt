@@ -4,8 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.ffmpeg.FFmpeg
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -23,16 +22,19 @@ class FileSniffingApplication : Application(), Configuration.Provider {
         CrashReporter.install(this)
         runtimeScope.launch {
             runCatching {
-                YoutubeDL.getInstance().init(this@FileSniffingApplication)
-                FFmpeg.getInstance().init(this@FileSniffingApplication)
+                // Update the embedded yt-dlp program before the first user parse when possible.
+                ytDlpRuntime.prepare()
             }.onFailure { error ->
-                Log.e("FileSniffing", "yt-dlp runtime initialization failed", error)
+                Log.e("FileSniffing", "yt-dlp initialization failed; the bundled runtime remains available", error)
             }
         }
     }
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
+
+    @Inject
+    lateinit var ytDlpRuntime: YtDlpRuntime
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
