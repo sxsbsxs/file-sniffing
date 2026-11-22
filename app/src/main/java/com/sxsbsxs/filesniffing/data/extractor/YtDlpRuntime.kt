@@ -90,8 +90,8 @@ class YtDlpRuntime @Inject constructor(
         require(url.startsWith("https://") || url.startsWith("http://")) {
             "请输入有效的视频链接"
         }
-        require(formatSelector.isNotBlank() && formatSelector.length <= 160) {
-            "下载格式选择无效"
+        require(YtDlpFormatSelectorPolicy.isSafe(formatSelector)) {
+            "下载格式选择无效，请重新解析后选择可用格式"
         }
         ensureInitialized()
         if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
