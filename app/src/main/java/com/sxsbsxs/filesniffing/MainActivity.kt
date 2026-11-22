@@ -176,7 +176,9 @@ private fun FileSniffingApp(sharedLink: String) {
     // Prevent a fast double tap from creating duplicate WorkManager requests for one URL.
     val activeDownloadUrls = remember { mutableMapOf<String, String>() }
     val storedTasksById = storedDownloadHistory.associateBy { it.id }
-    val liveTasksWithStoredUri = downloadTasks.map { task ->
+    val liveTasksWithStoredUri = downloadTasks
+        .filterNot { storedTasksById[it.id]?.state == "superseded" }
+        .map { task ->
         val stored = storedTasksById[task.id]
         when {
             stored?.state == "paused" -> task.copy(
@@ -193,7 +195,9 @@ private fun FileSniffingApp(sharedLink: String) {
         }
     }
     val visibleDownloadTasks = (
-        liveTasksWithStoredUri + storedDownloadHistory.map { record ->
+        liveTasksWithStoredUri + storedDownloadHistory
+            .filterNot { it.state == "superseded" }
+            .map { record ->
             DownloadTaskUi(
                 id = record.id,
                 fileName = record.fileName,
