@@ -92,7 +92,8 @@ class DownloadCenterViewModel @Inject constructor(
                 downloadedBytes = previous?.downloadedBytes ?: -1L,
                 totalBytes = previous?.totalBytes ?: -1L,
                 speedBytesPerSecond = previous?.speedBytesPerSecond ?: -1L,
-                adaptiveVideoHeight = previous?.adaptiveVideoHeight
+                adaptiveVideoHeight = previous?.adaptiveVideoHeight,
+                formatSelector = resource.formatSelector
             )
         )
     }
