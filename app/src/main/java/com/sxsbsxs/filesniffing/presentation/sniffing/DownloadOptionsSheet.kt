@@ -111,10 +111,17 @@ fun DownloadOptionsSheet(
         }
     }
 
+    LaunchedEffect(mode) {
+        if (mode == "audio" && selectedAudioId.isBlank()) {
+            selectedAudioId = audioChoices.firstOrNull()?.audioFormatId
+                ?: audioChoices.firstOrNull()?.formatSelector.orEmpty()
+        }
+    }
+
     val selectedResource = when (mode) {
         "video" -> selectedVideo?.let { video ->
             val videoId = video.videoFormatId ?: video.formatSelector?.substringBefore('+')
-            val audioId = selectedAudioId.takeIf { it.isNotBlank() }
+            val audioId = selectedAudioId.takeIf { it.isNotBlank() && !selectedVideoUsesEmbeddedAudio }
             val selector = when {
                 selectedVideoUsesEmbeddedAudio && video.hasEmbeddedAudio -> videoId
                 !videoId.isNullOrBlank() && !audioId.isNullOrBlank() -> "$videoId+$audioId"
@@ -390,6 +397,7 @@ private fun buildFormatDetails(resource: SniffedResource): String = buildList {
     resource.fileSizeBytes?.takeIf { it > 0L }?.let { add(formatMediaBytes(it)) }
     resource.frameRate?.takeIf { it > 0.0 }?.let { add(it.toInt().toString() + " fps") }
     resource.codecLabel?.takeIf { it.isNotBlank() }?.let { add(it) }
+    resource.audioLanguage?.takeIf { it.isNotBlank() }?.let { add(it) }
     resource.uploader?.takeIf { it.isNotBlank() }?.let { add(it) }
 }.joinToString(" · ").ifBlank { resource.fileName }
 
