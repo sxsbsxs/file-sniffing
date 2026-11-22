@@ -144,7 +144,12 @@ class DownloadCenterViewModel @Inject constructor(
         repository.save(
             previous.copy(
                 state = state,
-                detail = detail,
+                detail = DownloadTaskDetailPolicy.choose(
+                    previousState = previous.state,
+                    previousDetail = previous.detail,
+                    incomingState = state,
+                    incomingDetail = detail
+                ),
                 progress = if (state == "cancelled") 0 else previous.progress,
                 speedBytesPerSecond = -1L,
                 updatedAtMillis = System.currentTimeMillis()
