@@ -15,8 +15,8 @@ android {
         applicationId = "com.sxsbsxs.filesniffing"
         minSdk = 26
         targetSdk = 35
-        versionCode = 32
-        versionName = "0.9.14"
+        versionCode = 33
+        versionName = "0.9.15"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
@@ -24,6 +24,17 @@ android {
             cmake {
                 cppFlags += "-std=c++17"
             }
+        }
+    }
+
+    // Do not ship all three native Python/FFmpeg runtimes in one 100+ MiB APK.
+    // CI publishes one APK per ABI so each device downloads only its own native payload.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = false
         }
     }
 
