@@ -2,14 +2,14 @@
 
 File Sniffing is an Android link resolver and download manager. It no longer contains an in-app browser or webpage-sniffing screen.
 
-Current app version: 0.9.11
+Current app version: 0.9.12
 
 ## How it works
 
 1. Paste or share a video or file URL.
 2. Supported site URLs are sent directly to the bundled yt-dlp runtime for metadata and format inspection.
 3. Direct media/file URLs go to the HTTP download engine.
-4. Choose Download. WorkManager runs the task and shows progress in Download Center.
+4. Choose Download. WorkManager runs the task and shows progress in Download Center.\n5. For Niconico videos that require registration, optionally save a Niconico account from the account icon on the resolver screen.
 
 The app does not open supplied URLs in a WebView, inject scripts into pages, scan DOM content or intercept browser page requests.
 
@@ -46,10 +46,10 @@ The app does not open supplied URLs in a WebView, inject scripts into pages, sca
 - Site extraction depends on the bundled yt-dlp version and each site's current APIs. Extractor errors are reported rather than replaced with guessed formats.
 - Some YouTube videos require newer JavaScript challenge support, EJS components or PO Tokens; those runtime integrations are not currently bundled.
 - Private, Premium-only, PPV, member-only, region-restricted, DRM-protected or otherwise unauthorized media is not unlocked by the app.
-- This browser-free build does not provide a sign-in screen or inject browser cookies into yt-dlp. Sites that require an authenticated session may therefore reject the request.
+- Niconico supports optional account/password sign-in through yt-dlp. Credentials are encrypted with Android Keystore; each Niconico operation creates a temporary owner-only netrc file and deletes it afterward. No WebView or in-app page navigation is involved.\n- Niconico authentication only supplies the user's own account session. Premium-only, channel-member-only, PPV, DRM or other entitlement restrictions still apply. The current UI does not collect a one-time 2FA code.
 - Direct-file multi-connection downloads depend on server Range support. A higher connection ceiling cannot force a server to accept parallel requests.
 - HLS/DASH export depends on Media3 support for the manifest and codecs. Encrypted/DRM streams are not decrypted.
-- Temporary yt-dlp output uses app-private storage and is removed after the operation; credentials and signed media URLs are not written to Room or app logs.
+- Temporary yt-dlp output and Niconico netrc files use app-private storage and are removed after the operation; credentials and signed media URLs are not written to Room or app logs.
 
 ## Build
 
