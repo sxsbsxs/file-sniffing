@@ -30,13 +30,13 @@ class NiconicoExtractor @Inject constructor(
         val canonicalUrl = NiconicoUrlParser.canonicalWatchUrl(videoId)
             ?: throw IllegalArgumentException("无法规范化 N站视频链接")
 
-        val loggedIn = runCatching {
-            CookieManager.getInstance()
-                .getCookie("https://www.nicovideo.jp")
-                .orEmpty()
-                .split(';')
-                .any { it.trim().startsWith("user_session=") }
-        }.getOrDefault(false)
+        // WebView and OkHttp do not automatically share cookies. Explicitly forward the
+        // current Niconico session to both API calls; never log or persist this header.
+        val cookieHeader = runCatching {
+            CookieManager.getInstance().getCookie("https://www.nicovideo.jp").orEmpty()
+        }.getOrDefault("")
+        val loggedIn = cookieHeader.split(';')
+            .any { it.trim().startsWith("user_session=") }
         val apiVersion = if (loggedIn) "v3" else "v3_guest"
         val actionTrackId = "AAAAAAAAAA_${System.currentTimeMillis()}"
         val watchApiUrl =
@@ -51,7 +51,8 @@ class NiconicoExtractor @Inject constructor(
                 .header("Referer", canonicalUrl)
                 .get()
                 .build(),
-            "N站视频信息请求失败"
+            "N站视频信息请求失败",
+            cookieHeader
         )
         val watch = NiconicoApiParser.parseWatchResponse(watchJson)
 
@@ -73,7 +74,8 @@ class NiconicoExtractor @Inject constructor(
                 .header("Referer", canonicalUrl)
                 .post(payload.toRequestBody(JSON_MEDIA_TYPE))
                 .build(),
-            "N站视频流申请失败"
+            "N站视频流申请失败",
+            cookieHeader
         )
         val manifestUrl = NiconicoApiParser.parseHlsContentUrl(manifestJson)
         val safeTitle = FileNameSanitizer.sanitize(watch.title, videoId)
@@ -87,12 +89,19 @@ class NiconicoExtractor @Inject constructor(
         )
     }
 
-    private fun executeJson(request: Request, fallbackMessage: String): String =
-        httpClient.newCall(request).execute().use { response ->
+    private fun executeJson(
+        request: Request,
+        fallbackMessage: String,
+        cookieHeader: String
+    ): String =
+        httpClient.newCall(
+            request.newBuilder().apply {
+                if (cookieHeader.isNotBlank()) header("Cookie", cookieHeader)
+            }.build()
+        ).execute().use { response ->
             val body = response.body?.string()
                 ?: throw java.io.IOException("$fallbackMessage：响应为空")
             if (!response.isSuccessful) {
-                // Parse API error fields when present, without logging URLs or auth headers.
                 val reason = runCatching {
                     val root = com.google.gson.JsonParser.parseString(body).asJsonObject
                     root.getAsJsonObject("data")?.get("reasonCode")?.asString
