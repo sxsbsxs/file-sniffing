@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.18
+
+- Make yt-dlp parsing and downloads use a cancellable process executor; replacing a URL, pausing or cancelling now terminates the associated process, and the worker waits for the process thread to exit before returning.
+- Use a stable private SHA-256 session directory for each source/format/output selection so yt-dlp `.part` files survive WorkManager pause/retry attempts without storing signed media URLs in the path.
+- Reuse a completed private yt-dlp output file when interruption happens during the final copy to Download/SAF; show 90–99% copy progress and remove temporary data only after publication succeeds.
+- Validate yt-dlp format selector syntax before invoking the extractor; accept only safe single IDs, one real video+audio pair and the app's fixed fallback selectors.
+- Validate direct HTTP and yt-dlp output before publishing: reject empty files, known-incomplete byte counts, HTML/JSON/XML error pages and plain-text payloads masquerading as media.
+- Delete clearly invalid HTTP error payload files instead of offering them as resumable media.
+- Verify MediaStore pending-to-visible publication; report failure and clean up the output if the file cannot be published. Apply the same cleanup rule to Media3 exports.
+- Persist the latest transfer progress and byte counters in Room when a task pauses, rather than retaining only the last database snapshot.
+- Persist retry attempts before WorkManager enqueue and replace the old paused/failed row atomically; do not leave an old paused row blocking all future downloads.
+- Confirm pause/cancel state from WorkManager's terminal state; reconcile Room history from WorkManager on app restart to repair state transitions interrupted by process death.
+- Use one canonical Niconico watch URL for task identity and deduplication even when CDN manifest URLs are refreshed.
+- Guard against starting two retries of the same URL and format at the same time.
+- Test stable yt-dlp session IDs, safe format selectors, HTTP payload integrity and Niconico queue identity.
+- Bump app version to 0.9.18 (versionCode 36).
+
 ## 0.9.17
 
 - Add a 26-project open-source benchmark and repository-specific product improvement plan in `docs/OPEN_SOURCE_BENCHMARK.md`.
