@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.provider.DocumentsContract
+import com.sxsbsxs.filesniffing.data.storage.DownloadOutput
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -112,8 +112,9 @@ class Media3AdaptiveProcessor @Inject constructor(
 
     suspend fun exportAdaptiveStream(
         resource: SniffedResource,
-        destinationTree: Uri,
+        destinationTree: Uri?,
         maxVideoHeight: Int? = null,
+        maxConcurrentConnections: Int = 8,
         onProgress: (Int, String) -> Unit
     ): Media3ExportResult = withContext(Dispatchers.IO) {
         require(resource.fileName.endsWith(".m3u8", true) ||
@@ -142,7 +143,12 @@ class Media3AdaptiveProcessor @Inject constructor(
                 .setUpstreamDataSourceFactory(dataSourceFactory)
 
             onProgress(0, "正在缓存已选音视频轨道，暂停后可从已缓存分片继续")
-            downloadSelectedTracks(downloadRequest, cacheDataSourceFactory, onProgress)
+            downloadSelectedTracks(
+                downloadRequest,
+                cacheDataSourceFactory,
+                maxConcurrentConnections,
+                onProgress
+            )
 
             onProgress(55, "分片缓存完成，正在合并并转封装")
             runTransformer(
@@ -158,16 +164,12 @@ class Media3AdaptiveProcessor @Inject constructor(
                 "Media3 导出结束，但没有生成有效文件"
             }
             val outputName = buildOutputName(resource.fileName)
-            val parent = DocumentsContract.buildDocumentUriUsingTree(
-                destinationTree,
-                DocumentsContract.getTreeDocumentId(destinationTree)
+            val destination = DownloadOutput.create(
+                context = context,
+                destinationTree = destinationTree,
+                displayName = outputName,
+                mimeType = "video/mp4"
             )
-            val destination = DocumentsContract.createDocument(
-                context.contentResolver,
-                parent,
-                "video/mp4",
-                outputName
-            ) ?: error("无法在所选文件夹创建 MP4 文件")
 
             try {
                 FileInputStream(tempFile).use { source ->
@@ -194,9 +196,10 @@ class Media3AdaptiveProcessor @Inject constructor(
                     }
                 }
             } catch (error: Exception) {
-                runCatching { context.contentResolver.delete(destination, null, null) }
+                DownloadOutput.delete(context, destination)
                 throw error
             }
+            DownloadOutput.markComplete(context, destination)
             onProgress(100, "Media3 已导出 MP4")
             exportCompleted = true
             Media3ExportResult(destination, outputName)
@@ -211,7 +214,7 @@ class Media3AdaptiveProcessor @Inject constructor(
 
     suspend fun discardAdaptiveCache(
         resource: SniffedResource,
-        destinationTree: Uri,
+        destinationTree: Uri?,
         maxVideoHeight: Int? = null
     ) = withContext(Dispatchers.IO) {
         val directory = adaptiveCacheDirectory(resource, destinationTree, maxVideoHeight)
@@ -222,7 +225,7 @@ class Media3AdaptiveProcessor @Inject constructor(
 
     private fun adaptiveCacheDirectory(
         resource: SniffedResource,
-        destinationTree: Uri,
+        destinationTree: Uri?,
         maxVideoHeight: Int?
     ): File {
         // Cookie contents remain in memory; only a digest is used to isolate cache sessions.
@@ -233,7 +236,7 @@ class Media3AdaptiveProcessor @Inject constructor(
             sourceUrl = resource.url,
             referer = resource.sourcePage,
             fileName = resource.fileName,
-            destinationTree = destinationTree.toString(),
+            destinationTree = destinationTree?.toString() ?: DownloadOutput.PUBLIC_DOWNLOADS_CACHE_KEY,
             maxVideoHeight = maxVideoHeight,
             sessionCookies = sessionCookie
         )
@@ -243,9 +246,10 @@ class Media3AdaptiveProcessor @Inject constructor(
     private suspend fun downloadSelectedTracks(
         request: DownloadRequest,
         cacheDataSourceFactory: CacheDataSource.Factory,
+        maxConcurrentConnections: Int,
         onProgress: (Int, String) -> Unit
     ) {
-        val executor = Executors.newFixedThreadPool(3) { runnable ->
+        val executor = Executors.newFixedThreadPool(maxConcurrentConnections.coerceIn(1, 16)) { runnable ->
             Thread(runnable, "media3-segment-fetch").apply { isDaemon = true }
         }
         val downloader = DefaultDownloaderFactory(cacheDataSourceFactory, executor)
