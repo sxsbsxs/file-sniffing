@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.9.7
+**Current app version:** 0.9.8
 
 ## Technology architecture
 
@@ -52,7 +52,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] MIME-aware SAF file creation and output-name inference for common document, archive, application, font, image, audio and video formats.
 - [x] Restore task list from WorkManager and Room after reopening the app.
 - [x] Browse the public Download folder in-app by default on Android 10+ or the selected SAF folder, including subfolders, filename search, MIME filters, file sizes, modification dates and opening files with Android.
-- [x] Let users configure per-task connection ceiling (1–16), concurrent download tasks (1–4) and a shared speed cap (unlimited, 1/2/5/10/20 MB/s).
+- [x] Let users configure direct-file byte-range connections (1–512), concurrent download tasks (1–4) and a shared speed cap (unlimited, 1/2/5/10/20 MB/s). Large files scale up to the configured ceiling; HLS/DASH segment workers are separately capped at 32.
 - [x] Persist the original URL, Referer and SAF destination tree in Room so failed/cancelled jobs can be retried without relying on WorkInfo input data.
 - [x] Restore task filenames from durable WorkManager tags instead of trying to read unavailable inputData from WorkInfo.
 - [x] Verify direct-download payload signatures through a C++17/JNI probe before reporting completion; HTML error pages are reported as failures.
