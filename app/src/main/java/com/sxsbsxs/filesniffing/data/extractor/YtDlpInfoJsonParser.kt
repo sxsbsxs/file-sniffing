@@ -89,6 +89,17 @@ data class YtDlpFormat(
         }
 }
 
+data class YtDlpPlaylistEntry(
+    val videoId: String,
+    val title: String,
+    val webpageUrl: String
+)
+
+data class YtDlpPlaylistInfo(
+    val title: String,
+    val entries: List<YtDlpPlaylistEntry>
+)
+
 /**
  * Parses a single-video object emitted by yt-dlp -J / --dump-single-json.
  * Playlist JSON with an entries array is rejected rather than ambiguously choosing an entry.
@@ -97,6 +108,36 @@ internal object YtDlpInfoJsonParser {
     private val safeFormatId = Regex("^[A-Za-z0-9_.-]{1,96}$")
     private val resolutionPattern = Regex("^(\\d{2,5})x(\\d{2,5})$")
     private val heightPattern = Regex("^(\\d{2,5})p$", RegexOption.IGNORE_CASE)
+
+    fun parsePlaylist(json: String): YtDlpPlaylistInfo {
+        require(json.isNotBlank()) { "yt-dlp 返回了空播放列表 JSON" }
+        val root = runCatching { JsonParser.parseString(json) }
+            .getOrNull()
+            ?.takeIf { it.isJsonObject }
+            ?.asJsonObject
+            ?: throw IllegalArgumentException("yt-dlp 播放列表 JSON 无效")
+        val entries = root.array("entries")
+            ?.mapNotNull { element ->
+                if (!element.isJsonObject) return@mapNotNull null
+                val item = element.asJsonObject
+                val id = item.string("id")
+                    ?.takeIf { it.matches(Regex("^[A-Za-z0-9_-]{11}$")) }
+                    ?: return@mapNotNull null
+                val title = item.string("title")?.take(180) ?: id
+                val page = item.string("webpage_url")
+                    ?: item.string("url")?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+                    ?: "https://www.youtube.com/watch?v=$id"
+                YtDlpPlaylistEntry(id, title, page)
+            }
+            .orEmpty()
+            .distinctBy { it.videoId }
+            .take(200)
+        require(entries.isNotEmpty()) { "yt-dlp 没有返回可用的播放列表视频" }
+        return YtDlpPlaylistInfo(
+            title = root.string("title")?.take(180) ?: "YouTube 播放列表",
+            entries = entries
+        )
+    }
 
     fun parse(json: String): YtDlpVideoInfo {
         require(json.isNotBlank()) { "yt-dlp 返回了空 JSON" }
