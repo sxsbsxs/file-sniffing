@@ -27,6 +27,7 @@ import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.sxsbsxs.filesniffing.SniffedResource
 import com.sxsbsxs.filesniffing.NativeMediaProbe
+import com.sxsbsxs.filesniffing.DownloadOutputCopyProgressPolicy
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -195,25 +196,24 @@ class Media3AdaptiveProcessor @Inject constructor(
                             if (count < 0) break
                             sink.write(buffer, 0, count)
                             copied += count
-                            val progress = if (total > 0L) {
-                                (90 + (copied * 10.0 / total).toInt()).coerceIn(90, 99)
-                            } else {
-                                -1
-                            }
+                            val progress = DownloadOutputCopyProgressPolicy.percent(copied, total)
                             onProgress(progress, "正在保存 MP4：$copied / $total 字节")
                         }
                         check(copied == total) {
                             "Media3 MP4 保存未写完整：已写入 $copied / $total 字节"
                         }
+                        onProgress(-1, "MP4 数据已写入，正在同步存储")
                         sink.flush()
                     }
                 }
+                onProgress(-1, "MP4 已写入，正在发布文件")
                 DownloadOutput.markComplete(context, destination)
+                onProgress(-1, "MP4 已发布，正在完成下载记录")
             } catch (error: Exception) {
                 DownloadOutput.delete(context, destination)
                 throw error
             }
-            onProgress(100, "Media3 已导出 MP4")
+            onProgress(-1, "MP4 导出完成，正在更新下载记录")
             exportCompleted = true
             Media3ExportResult(destination, outputName)
         } finally {

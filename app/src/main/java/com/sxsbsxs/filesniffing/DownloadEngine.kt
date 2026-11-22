@@ -332,6 +332,7 @@ object DownloadEngine {
                 ?.let { Uri.decode(it) },
             downloadedBytes = info.progress.getLong(PersistentDownloadWorker.KEY_DOWNLOADED_BYTES, -1L),
             totalBytes = info.progress.getLong(PersistentDownloadWorker.KEY_TOTAL_BYTES, -1L),
+            totalBytesEstimated = info.progress.getBoolean(PersistentDownloadWorker.KEY_TOTAL_BYTES_ESTIMATED, false),
             speedBytesPerSecond = info.progress.getLong(PersistentDownloadWorker.KEY_SPEED_BYTES_PER_SECOND, -1L),
             adaptiveVideoHeight = info.tags
                 .firstOrNull { it.startsWith(ADAPTIVE_HEIGHT_TAG_PREFIX) }

@@ -14,6 +14,8 @@ import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpProgressLineParser
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpProgressStagePolicy
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpProgressAggregator
+import com.sxsbsxs.filesniffing.DownloadOutputCopyProgressPolicy
 import com.sxsbsxs.filesniffing.data.network.OkDownloadTransferEngine
 import com.sxsbsxs.filesniffing.data.network.DownloadSpeedLimiter
 import com.sxsbsxs.filesniffing.data.network.DownloadConnectionPolicy
@@ -53,6 +55,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
     @Volatile private var latestProgress = -1
     @Volatile private var latestDownloadedBytes = -1L
     @Volatile private var latestTotalBytes = -1L
+    @Volatile private var latestTotalBytesEstimated = false
     @Volatile private var latestSpeedBytesPerSecond = -1L
 
     override suspend fun doWork(): Result {
@@ -222,6 +225,8 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 }
                 publishProgressAsync(-1, "正在通过 yt-dlp 提取 $providerName 媒体流", fileName)
                 val tempDirectory = requireNotNull(ytDlpTempDirectory)
+                val expectedStreams = ytDlpFormatSelector.substringBefore('/').count { it == '+' } + 1
+                val progressAggregator = YtDlpProgressAggregator(expectedStreams)
                 var ytDlpPostProcessing = false
                 val downloadedFile = ytDlpRuntime.download(
                     url = ytDlpPageUrl,
@@ -232,33 +237,59 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     concurrentFragments = tuning.connectionsPerTask,
                     speedLimitBytesPerSecond = tuning.speedLimitBytesPerSecond
                 ) { progress, _, line ->
-                    if (YtDlpProgressStagePolicy.isPostProcessing(progress, line)) {
+                    val metrics = YtDlpProgressLineParser.parse(line, progress)
+                    val aggregate = if (metrics.hasDownloadProgress) {
+                        progressAggregator.update(metrics)
+                    } else {
+                        null
+                    }
+                    if (metrics.isPostProcessing ||
+                        YtDlpProgressStagePolicy.isPostProcessing(progress, line) ||
+                        aggregate?.allExpectedStreamsFinished == true
+                    ) {
                         ytDlpPostProcessing = true
                     }
-                    val metrics = YtDlpProgressLineParser.parse(line)
+
                     if (ytDlpPostProcessing) {
                         publishProgressAsync(
                             progress = -1,
-                            detail = YtDlpProgressStagePolicy.detail(line),
+                            detail = YtDlpProgressStagePolicy.detailForPostprocessor(
+                                metrics.postProcessor,
+                                line
+                            ),
                             fileName = fileName,
+                            downloadedBytes = aggregate?.downloadedBytes ?: -1L,
+                            totalBytes = aggregate?.totalBytes ?: -1L,
+                            totalBytesEstimated = aggregate?.totalBytesEstimated ?: false,
                             speedBytesPerSecond = 0L
                         )
-                    } else {
-                        val percent = progress.takeIf { it.isFinite() && it >= 0f }
-                            ?.let { (it * 0.89f).toInt().coerceIn(0, 89) } ?: -1
-                        val detail = if (metrics.activeConnections > 0) {
-                            "aria2c 分段下载 · ${metrics.activeConnections} 路连接"
-                        } else {
-                            "yt-dlp 正在下载"
+                    } else if (aggregate != null) {
+                        val percent = (aggregate.progressPercent * 0.89f)
+                            .toInt().coerceIn(0, 89)
+                        val detail = when {
+                            aggregate.connectionCount > 0 ->
+                                "媒体流下载 · ${aggregate.connectionCount} 路连接 · ${aggregate.completedStreams}/${aggregate.expectedStreams} 路已完成"
+                            aggregate.expectedStreams > 1 ->
+                                "媒体流下载 · ${aggregate.completedStreams}/${aggregate.expectedStreams} 路已完成"
+                            else -> "媒体流下载中"
                         }
                         publishProgressAsync(
                             progress = percent,
                             detail = detail,
                             fileName = fileName,
-                            speedBytesPerSecond = metrics.speedBytesPerSecond
+                            downloadedBytes = aggregate.downloadedBytes,
+                            totalBytes = aggregate.totalBytes,
+                            totalBytesEstimated = aggregate.totalBytesEstimated,
+                            speedBytesPerSecond = aggregate.speedBytesPerSecond
                         )
                     }
                 }
+                publishProgressAsync(
+                    progress = -1,
+                    detail = "媒体流处理完毕，正在校验合并输出",
+                    fileName = fileName,
+                    speedBytesPerSecond = 0L
+                )
                 val extension = downloadedFile.extension.lowercase().ifBlank { "mp4" }
                 val baseName = fileName.substringBeforeLast('.', fileName)
                 val finalName = FileNameSanitizer.sanitize("$baseName.$extension", "youtube-video.$extension")
@@ -299,8 +330,18 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     mimeType = outputMime
                 )
                 createdDocument = destination
+                val totalBytes = downloadedFile.length()
+                publishProgressAsync(
+                    progress = 90,
+                    detail = "正在保存合并后的文件：0 / $totalBytes 字节",
+                    fileName = finalName,
+                    downloadedBytes = 0L,
+                    totalBytes = totalBytes,
+                    totalBytesEstimated = false,
+                    speedBytesPerSecond = 0L,
+                    resetTransferStats = true
+                )
                 try {
-                    val totalBytes = downloadedFile.length()
                     applicationContext.contentResolver.openOutputStream(destination, "w")?.use { output ->
                         downloadedFile.inputStream().use { input ->
                             val buffer = ByteArray(128 * 1024)
@@ -311,26 +352,58 @@ class PersistentDownloadWorker @AssistedInject constructor(
                                 if (count < 0) break
                                 output.write(buffer, 0, count)
                                 copiedBytes += count
-                                val copyProgress = if (totalBytes > 0L) {
-                                    (90 + (copiedBytes * 10.0 / totalBytes).toInt()).coerceIn(90, 99)
-                                } else {
-                                    -1
-                                }
+                                val copyProgress = DownloadOutputCopyProgressPolicy.percent(
+                                    copiedBytes,
+                                    totalBytes
+                                )
                                 publishProgressAsync(
                                     copyProgress,
                                     "正在保存到 Download：$copiedBytes / $totalBytes 字节",
                                     finalName,
                                     downloadedBytes = copiedBytes,
-                                    totalBytes = totalBytes
+                                    totalBytes = totalBytes,
+                                    totalBytesEstimated = false,
+                                    speedBytesPerSecond = 0L,
+                                    resetTransferStats = true
                                 )
                             }
                             check(copiedBytes == totalBytes) {
                                 "保存文件未写完整：已写入 $copiedBytes / $totalBytes 字节"
                             }
+                            publishProgressAsync(
+                                progress = -1,
+                                detail = "文件数据已复制，正在同步存储",
+                                fileName = finalName,
+                                downloadedBytes = totalBytes,
+                                totalBytes = totalBytes,
+                                totalBytesEstimated = false,
+                                speedBytesPerSecond = 0L,
+                                resetTransferStats = true
+                            )
                             output.flush()
                         }
                     } ?: error("无法打开 Download 输出文件")
+                    publishProgressAsync(
+                        progress = -1,
+                        detail = "文件已写入，正在发布到 Download 文件夹",
+                        fileName = finalName,
+                        downloadedBytes = totalBytes,
+                        totalBytes = totalBytes,
+                        totalBytesEstimated = false,
+                        speedBytesPerSecond = 0L,
+                        resetTransferStats = true
+                    )
                     DownloadOutput.markComplete(applicationContext, destination)
+                    publishProgressAsync(
+                        progress = -1,
+                        detail = "文件已发布，正在更新下载记录",
+                        fileName = finalName,
+                        downloadedBytes = totalBytes,
+                        totalBytes = totalBytes,
+                        totalBytesEstimated = false,
+                        speedBytesPerSecond = 0L,
+                        resetTransferStats = true
+                    )
                 } catch (copyError: Exception) {
                     DownloadOutput.delete(applicationContext, destination)
                     throw copyError
@@ -516,7 +589,27 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 }
                 error(integrityFailure)
             }
+            publishProgressAsync(
+                progress = -1,
+                detail = "数据接收完成，正在发布文件",
+                fileName = targetName,
+                partialUri = destinationDocument.toString(),
+                downloadedBytes = transferResult.downloadedBytes,
+                totalBytes = transferResult.totalBytes,
+                speedBytesPerSecond = 0L,
+                resetTransferStats = true
+            )
             DownloadOutput.markComplete(applicationContext, destinationDocument)
+            publishProgressAsync(
+                progress = -1,
+                detail = "文件已发布，正在更新下载记录",
+                fileName = targetName,
+                partialUri = destinationDocument.toString(),
+                downloadedBytes = transferResult.downloadedBytes,
+                totalBytes = transferResult.totalBytes,
+                speedBytesPerSecond = 0L,
+                resetTransferStats = true
+            )
             val completedDetail = if (detectedContainer == "unknown") {
                 if (tree == null) "已保存到 Download 文件夹" else "已保存到所选文件夹"
             } else {
@@ -611,15 +704,27 @@ class PersistentDownloadWorker @AssistedInject constructor(
         partialUri: String? = null,
         downloadedBytes: Long = -1L,
         totalBytes: Long = -1L,
-        speedBytesPerSecond: Long = -1L
+        totalBytesEstimated: Boolean = false,
+        speedBytesPerSecond: Long = -1L,
+        resetTransferStats: Boolean = false
     ) {
         synchronized(progressLock) {
             latestProgress = DownloadProgressPolicy.monotonic(latestProgress, progress)
-            if (downloadedBytes >= 0L) {
-                latestDownloadedBytes = maxOf(latestDownloadedBytes, downloadedBytes)
+            if (resetTransferStats) {
+                latestDownloadedBytes = downloadedBytes
+                latestTotalBytes = totalBytes
+                latestTotalBytesEstimated = totalBytesEstimated
+                latestSpeedBytesPerSecond = speedBytesPerSecond
+            } else {
+                if (downloadedBytes >= 0L) {
+                    latestDownloadedBytes = maxOf(latestDownloadedBytes, downloadedBytes)
+                }
+                if (totalBytes >= 0L) {
+                    latestTotalBytes = totalBytes
+                    latestTotalBytesEstimated = totalBytesEstimated
+                }
+                if (speedBytesPerSecond >= 0L) latestSpeedBytesPerSecond = speedBytesPerSecond
             }
-            if (totalBytes >= 0L) latestTotalBytes = totalBytes
-            if (speedBytesPerSecond >= 0L) latestSpeedBytesPerSecond = speedBytesPerSecond
 
             val visibleProgress = DownloadProgressPolicy.visible(latestProgress, progress)
             val data = androidx.work.Data.Builder()
@@ -631,7 +736,10 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     if (latestDownloadedBytes >= 0L) {
                         putLong(KEY_DOWNLOADED_BYTES, latestDownloadedBytes)
                     }
-                    if (latestTotalBytes >= 0L) putLong(KEY_TOTAL_BYTES, latestTotalBytes)
+                    if (latestTotalBytes >= 0L) {
+                        putLong(KEY_TOTAL_BYTES, latestTotalBytes)
+                        putBoolean(KEY_TOTAL_BYTES_ESTIMATED, latestTotalBytesEstimated)
+                    }
                     if (latestSpeedBytesPerSecond >= 0L) {
                         putLong(KEY_SPEED_BYTES_PER_SECOND, latestSpeedBytesPerSecond)
                     }
@@ -884,6 +992,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
         const val KEY_PARTIAL_URI = "partial_uri"
         const val KEY_DOWNLOADED_BYTES = "downloaded_bytes"
         const val KEY_TOTAL_BYTES = "total_bytes"
+        const val KEY_TOTAL_BYTES_ESTIMATED = "total_bytes_estimated"
         const val KEY_SPEED_BYTES_PER_SECOND = "speed_bytes_per_second"
         const val KEY_ADAPTIVE_VIDEO_HEIGHT = "adaptive_video_height"
         const val KEY_FORMAT_SELECTOR = "format_selector"

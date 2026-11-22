@@ -87,6 +87,7 @@ data class DownloadTaskUi(
     val mimeType: String? = null,
     val downloadedBytes: Long = -1L,
     val totalBytes: Long = -1L,
+    val totalBytesEstimated: Boolean = false,
     val speedBytesPerSecond: Long = -1L,
     val adaptiveVideoHeight: Int? = null
 )

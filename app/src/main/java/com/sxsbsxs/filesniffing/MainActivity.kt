@@ -1479,11 +1479,11 @@ private fun DownloadTaskCard(
     }
     val transferSummary = buildList {
         if (task.downloadedBytes >= 0L && task.totalBytes > 0L) {
-            add(formatDownloadBytes(task.downloadedBytes) + " / " + formatDownloadBytes(task.totalBytes))
+            add("已接收 " + formatDownloadBytes(task.downloadedBytes) + " / " + (if (task.totalBytesEstimated) "约 " else "") + formatDownloadBytes(task.totalBytes))
         } else if (task.downloadedBytes > 0L) {
             add("已下载 " + formatDownloadBytes(task.downloadedBytes) + " · 总大小未知")
         } else if (task.totalBytes > 0L) {
-            add("文件大小 " + formatDownloadBytes(task.totalBytes))
+            add((if (task.totalBytesEstimated) "预计大小 " else "文件大小 ") + formatDownloadBytes(task.totalBytes))
         }
         if (task.state == "downloading" && task.totalBytes > task.downloadedBytes &&
             task.speedBytesPerSecond > 0L
