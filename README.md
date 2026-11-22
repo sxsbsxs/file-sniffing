@@ -46,10 +46,10 @@ The app does not open supplied URLs in a WebView, inject scripts into pages, sca
 - Site extraction depends on the bundled yt-dlp version and each site's current APIs. Extractor errors are reported rather than replaced with guessed formats.
 - Some YouTube videos require newer JavaScript challenge support, EJS components or PO Tokens; those runtime integrations are not currently bundled.
 - Private, Premium-only, PPV, member-only, region-restricted, DRM-protected or otherwise unauthorized media is not unlocked by the app.
-- Existing site cookies may be read from the app's local cookie store where available. Removing the browser means there is no in-app sign-in flow to create a new WebView session.
+- This browser-free build does not provide a sign-in screen or inject browser cookies into yt-dlp. Sites that require an authenticated session may therefore reject the request.
 - Direct-file multi-connection downloads depend on server Range support. A higher connection ceiling cannot force a server to accept parallel requests.
 - HLS/DASH export depends on Media3 support for the manifest and codecs. Encrypted/DRM streams are not decrypted.
-- Temporary yt-dlp output and temporary cookie files use app-private storage and are removed after operations; credentials and signed media URLs are not written to Room or app logs.
+- Temporary yt-dlp output uses app-private storage and is removed after the operation; credentials and signed media URLs are not written to Room or app logs.
 
 ## Build
 
