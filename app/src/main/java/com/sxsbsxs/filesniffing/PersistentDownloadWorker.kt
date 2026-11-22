@@ -214,7 +214,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     processId = requireNotNull(ytDlpSessionId)
                 ) { progress, _, line ->
                     val percent = progress.takeIf { it.isFinite() && it >= 0f }
-                        ?.toInt()?.coerceIn(0, 100) ?: -1
+                        ?.let { (it * 0.89f).toInt().coerceIn(0, 89) } ?: -1
                     publishProgressAsync(
                         percent,
                         line.ifBlank { "yt-dlp 正在下载并合并音视频" },
