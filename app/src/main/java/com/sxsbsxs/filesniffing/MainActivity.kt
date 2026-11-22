@@ -1397,7 +1397,7 @@ private fun DownloadsScreen(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf(1, 2, 4, 8, 16, 32).forEach { count ->
+                        listOf(1, 2, 4, 8, 16, 32, 64, 128, 256).forEach { count ->
                             FilterChip(
                                 selected = connectionsDraft == count,
                                 onClick = { connectionsDraft = count },
@@ -1426,7 +1426,7 @@ private fun DownloadsScreen(
                         }
                     }
                     Text(
-                        "普通直链使用 OkDownload，单任务最多可拆成 32 个分段；视频站使用 aria2 时，单个源站最多 16 路连接，两个独立音视频流的总连接数可能叠加。两种引擎都需要源站支持 Range/分片；服务器限流时，调高上限不会自动变快。",
+                        "普通直链使用 OkDownload，单任务分段上限提高到 256。这里是上限，不保证每个文件始终建立 256 条连接：实际分段数还受文件大小、源站 Range 支持和目标存储随机写入能力影响。设置为 128/256 时会自动减少同时运行的直链任务数，避免连接总量失控。当前 OkDownload 使用预先分段调度，尚未实现 Gopeed 的动态慢启动和慢连接任务窃取。视频站仍由 yt-dlp/aria2 处理，单源站最多 16 路连接；服务器限流时调高上限反而可能变慢。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )

@@ -195,7 +195,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
         val adaptiveVideoHeight = inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
         val tuning = appPreferences.downloadTuning.first()
         downloadSpeedLimiter.setLimitBytesPerSecond(tuning.speedLimitBytesPerSecond)
-        DownloadDispatcher.setMaxParallelRunningCount(tuning.parallelDownloads)
+        DownloadDispatcher.setMaxParallelRunningCount(DownloadConnectionPolicy.parallelTasksFor(tuning.parallelDownloads))
         DownloadConnectionPolicy.setPreferredMaximumConnections(tuning.connectionsPerTask)
         var isAdaptiveManifest = kind == ResourceKind.PLAYLIST &&
             (fileName.endsWith(".m3u8", ignoreCase = true) ||

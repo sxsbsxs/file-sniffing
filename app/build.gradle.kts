@@ -15,8 +15,8 @@ android {
         applicationId = "com.sxsbsxs.filesniffing"
         minSdk = 26
         targetSdk = 35
-        versionCode = 43
-        versionName = "0.9.25"
+        versionCode = 44
+        versionName = "0.9.26"
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"

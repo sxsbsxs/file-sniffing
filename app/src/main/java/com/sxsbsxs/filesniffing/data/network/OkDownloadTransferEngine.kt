@@ -69,7 +69,7 @@ class OkDownloadTransferEngine @Inject constructor(
         onProgress: (DownloadTransferProgress) -> Unit
     ): DownloadTransferResult {
         val tuning = appPreferences.downloadTuning.first()
-        DownloadDispatcher.setMaxParallelRunningCount(tuning.parallelDownloads)
+        DownloadDispatcher.setMaxParallelRunningCount(DownloadConnectionPolicy.parallelTasksFor(tuning.parallelDownloads))
         DownloadConnectionPolicy.setPreferredMaximumConnections(tuning.connectionsPerTask)
         return suspendCancellableCoroutine { continuation ->
             val receivedBytes = AtomicLong(0L)

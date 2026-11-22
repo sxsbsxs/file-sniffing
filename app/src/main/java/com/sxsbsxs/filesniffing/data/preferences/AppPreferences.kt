@@ -84,7 +84,7 @@ class AppPreferences @Inject constructor(
     }
 
     private companion object {
-        const val MAX_CONNECTIONS_PER_TASK = 32
+        const val MAX_CONNECTIONS_PER_TASK = 256
         val SPEED_LIMIT_OPTIONS = setOf(0, 1, 2, 5, 10, 20)
     }
 }
