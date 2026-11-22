@@ -9,6 +9,7 @@
 - Distinguish direct MP4/audio file links from extractor format choices; direct files go straight to download without a fake quality picker.
 - Add search by filename/error text and sorting by recent, filename and progress in Download Center.
 - Add generic yt-dlp playlist detection for common playlist URL shapes and parse entries from real HTTP(S) page URLs across extractors; do not fabricate non-YouTube watch URLs.
+- Route generic video/audio item pages from playlists through yt-dlp even when their referer is the list page; recognized direct media file extensions remain on the HTTP engine.
 - Extract video/audio format composition into a pure Kotlin helper with tests for muxed media, separate-track pairing, foreign-source rejection and unsafe format IDs.
 - Include actual audio language labels in the format selector and default Audio-only mode to a real available track.
 - Load media thumbnails with Coil while keeping URLs and signed stream credentials out of Room task records.
