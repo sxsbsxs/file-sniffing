@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.7
+
+- Made the public `Download/` folder the default destination on Android 10+, using MediaStore pending-file publication; a user-selected SAF folder remains available as an override. Android 9 and earlier continue to require a SAF folder.
+- Removed the mandatory “choose a folder before downloading” gate and updated direct downloads, adaptive HLS/DASH exports, retries and the in-app file browser to use the default Download destination.
+- Added user controls for per-task connection ceiling (1–16), concurrent download tasks (1–4) and a shared download speed cap (unlimited, 1/2/5/10/20 MB/s); adaptive segment concurrency and shared OkHttp response throttling use the same settings.
+- Added connection-policy tests for the configurable ceiling.
+- Increased app version to 0.9.7 (versionCode 25).
+
 ## 0.9.6
 
 - Added a dedicated Niconico extractor for `nicovideo.jp/watch` and `nico.ms` video links, using the current `v3` / `v3_guest` watch API and the DMS HLS access-right endpoint.
