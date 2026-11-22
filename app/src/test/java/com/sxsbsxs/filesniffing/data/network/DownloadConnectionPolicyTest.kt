@@ -23,10 +23,13 @@ class DownloadConnectionPolicyTest {
     fun largeFilesScaleWithTheConfiguredCeiling() {
         try {
             DownloadConnectionPolicy.setPreferredMaximumConnections(64)
-            assertEquals(100, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
-            assertEquals(175, DownloadConnectionPolicy.connectionsFor(700L * 1024L * 1024L))
+            assertEquals(64, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
+            assertEquals(64, DownloadConnectionPolicy.connectionsFor(700L * 1024L * 1024L))
             assertEquals(64, DownloadConnectionPolicy.connectionsFor(1500L * 1024L * 1024L))
-            assertEquals(64, DownloadConnectionPolicy.connectionsFor(5L * 1024L * 1024L * 1024L))
+
+            DownloadConnectionPolicy.setPreferredMaximumConnections(128)
+            assertEquals(100, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
+            assertEquals(128, DownloadConnectionPolicy.connectionsFor(700L * 1024L * 1024L))
 
             DownloadConnectionPolicy.setPreferredMaximumConnections(256)
             assertEquals(256, DownloadConnectionPolicy.connectionsFor(1L * 1024L * 1024L * 1024L))
