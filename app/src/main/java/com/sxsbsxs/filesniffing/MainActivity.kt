@@ -467,11 +467,9 @@ private fun FileSniffingApp(sharedLink: String) {
                             } else {
                                 pageUrl = normalized
                                 sniffingViewModel.resolveUrl(normalized) { resources, error ->
-                                    if (!error.isNullOrBlank()) {
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("解析失败：$error")
-                                        }
-                                    } else if (!resources.isNullOrEmpty()) {
+                                    // Detailed failures are already rendered in the persistent error card.
+                                    // Do not repeat the full extractor trace in a second snackbar.
+                                    if (error.isNullOrBlank() && !resources.isNullOrEmpty()) {
                                         coroutineScope.launch {
                                             snackbarHostState.showSnackbar("解析完成：${resources.size} 项")
                                         }
