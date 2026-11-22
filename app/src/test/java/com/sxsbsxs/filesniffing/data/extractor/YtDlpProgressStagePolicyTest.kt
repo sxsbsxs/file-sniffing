@@ -27,6 +27,16 @@ class YtDlpProgressStagePolicyTest {
     }
 
     @Test
+    fun detectsRawHundredPercentLineWhenTheWrapperProgressParserKeepsAnOldValue() {
+        assertTrue(
+            YtDlpProgressStagePolicy.isPostProcessing(
+                98.7f,
+                "[download] 100% of 80MiB in 00:18"
+            )
+        )
+    }
+
+    @Test
     fun normalDownloadLinesRemainDeterminate() {
         assertFalse(
             YtDlpProgressStagePolicy.isPostProcessing(
