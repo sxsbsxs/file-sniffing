@@ -440,6 +440,8 @@ private fun FileSniffingApp(sharedLink: String) {
                                 }
                             } else {
                                 val retryTaskId = UUID.randomUUID()
+                                val retryKey = "${record.sourceUrl}#${record.formatSelector ?: record.resourceKind}"
+                                activeDownloadUrls[retryTaskId.toString()] = retryKey
                                 coroutineScope.launch {
                                     try {
                                         downloadCenterViewModel.persistRetryTask(
@@ -456,8 +458,14 @@ private fun FileSniffingApp(sharedLink: String) {
                                             val index = downloadTasks.indexOfFirst { it.id == updated.id }
                                             if (index < 0) downloadTasks.add(0, updated)
                                             else downloadTasks[index] = updated
+                                            if (updated.state == "queued" || updated.state == "downloading") {
+                                                activeDownloadUrls[updated.id] = retryKey
+                                            } else {
+                                                activeDownloadUrls.remove(updated.id)
+                                            }
                                         }
                                     } catch (error: Exception) {
+                                        activeDownloadUrls.remove(retryTaskId.toString())
                                         snackbarHostState.showSnackbar(
                                             "无法重新加入下载队列：" + (error.message ?: "请重试")
                                         )
