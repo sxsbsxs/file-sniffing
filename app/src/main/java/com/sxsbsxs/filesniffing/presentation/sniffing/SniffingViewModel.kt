@@ -10,6 +10,7 @@ import com.sxsbsxs.filesniffing.SniffedResource
 import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpInfoJsonParser
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpPlaylistDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -59,10 +60,10 @@ class SniffingViewModel @Inject constructor(
                 if (directResource != null) {
                     resources = listOf(directResource)
                     summary = "检测到直链文件"
-                } else if (YouTubeUrlParser.isPlaylistUrl(normalizedUrl)) {
+                } else if (YtDlpPlaylistDetector.isLikelyPlaylistUrl(normalizedUrl)) {
                     val playlist = ytDlpRuntime.inspectPlaylist(normalizedUrl)
                     resources = playlist.entries.map { entry ->
-                        val safeTitle = FileNameSanitizer.sanitize(entry.title, entry.videoId)
+                        val safeTitle = FileNameSanitizer.sanitize(entry.title, entry.entryId)
                         SniffedResource(
                             url = entry.webpageUrl,
                             kind = ResourceKind.VIDEO,
