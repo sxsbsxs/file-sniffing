@@ -98,7 +98,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
 import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
 import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
-import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
 import com.sxsbsxs.filesniffing.data.preferences.DownloadTuning
 
 @AndroidEntryPoint
@@ -447,7 +446,7 @@ private fun MainNavigationBar(
         NavigationBarItem(
             selected = selectedTab == 0,
             onClick = { onSelect(0) },
-            icon = { Icon(Icons.Rounded.Search, contentDescription = "嗅探", modifier = Modifier.size(21.dp)) },
+            icon = { Icon(Icons.Rounded.Search, contentDescription = "解析", modifier = Modifier.size(21.dp)) },
             label = { Text("解析", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = MaterialTheme.colorScheme.primary,
