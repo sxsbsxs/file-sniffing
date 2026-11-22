@@ -165,7 +165,12 @@ class DownloadCenterViewModel @Inject constructor(
             fileName = task.fileName,
             state = task.state,
             progress = task.progress.takeIf { it >= 0 } ?: previous.progress,
-            detail = task.detail,
+            detail = DownloadTaskDetailPolicy.choose(
+                previousState = previous.state,
+                previousDetail = previous.detail,
+                incomingState = task.state,
+                incomingDetail = task.detail
+            ),
             destinationUri = task.fileUri ?: previous.destinationUri,
             downloadedBytes = task.downloadedBytes.takeIf { it >= 0L } ?: previous.downloadedBytes,
             totalBytes = task.totalBytes.takeIf { it >= 0L } ?: previous.totalBytes,
