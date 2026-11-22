@@ -298,10 +298,16 @@ object DownloadEngine {
                 info.progress.getInt(PersistentDownloadWorker.KEY_PROGRESS, -1)
             else -> 0
         }
+        val lastProgressDetail = info.progress
+            .getString(PersistentDownloadWorker.KEY_DETAIL)
+            ?.takeIf { it.isNotBlank() }
+        val missingFailureDetail = lastProgressDetail
+            ?.let { "任务在「${it.take(80)}」阶段异常退出（Worker 未返回错误详情）；可以尝试重试" }
+            ?: "任务异常退出（未返回错误详情）；可以尝试重试，若提示缺少原始参数，请重新解析链接"
         val detail = when (info.state) {
             WorkInfo.State.FAILED ->
                 info.outputData.getString(PersistentDownloadWorker.KEY_ERROR)
-                    ?: "任务异常退出（未返回错误详情）；可以尝试重试，若提示缺少原始参数，请重新解析链接"
+                    ?: missingFailureDetail
             WorkInfo.State.CANCELLED -> if (pauseWasRequested) "已暂停，可继续下载" else "下载已取消"
             WorkInfo.State.SUCCEEDED ->
                 info.outputData.getString(PersistentDownloadWorker.KEY_DETAIL) ?: "下载完成"
