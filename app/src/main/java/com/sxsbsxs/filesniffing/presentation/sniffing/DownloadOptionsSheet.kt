@@ -54,10 +54,21 @@ fun DownloadOptionsSheet(
     onDismiss: () -> Unit,
     onStartDownload: (SniffedResource) -> Unit
 ) {
-    val videoChoices = remember(resources) { resources.filter { it.kind == ResourceKind.VIDEO } }
-    val audioChoices = remember(resources) { resources.filter { it.kind == ResourceKind.AUDIO } }
+    val videoChoices = remember(resources) {
+        resources.filter {
+            it.kind == ResourceKind.VIDEO &&
+                !it.videoFormatId.isNullOrBlank() &&
+                !it.formatSelector.isNullOrBlank()
+        }
+    }
+    val audioChoices = remember(resources) {
+        resources.filter {
+            it.kind == ResourceKind.AUDIO &&
+                (!it.audioFormatId.isNullOrBlank() || !it.formatSelector.isNullOrBlank())
+        }
+    }
     val directChoice = remember(resources) {
-        resources.firstOrNull { it.kind != ResourceKind.VIDEO && it.kind != ResourceKind.AUDIO }
+        resources.firstOrNull { it !in videoChoices && it !in audioChoices }
     }
 
     var mode by remember(resources) {
@@ -87,7 +98,7 @@ fun DownloadOptionsSheet(
         ?: videoChoices.firstOrNull()
     val selectedAudio = audioChoices.firstOrNull {
         (it.audioFormatId ?: it.formatSelector) == selectedAudioId
-    }
+    } ?: audioChoices.firstOrNull()
 
     LaunchedEffect(selectedVideoKey) {
         selectedVideo?.let { video ->
