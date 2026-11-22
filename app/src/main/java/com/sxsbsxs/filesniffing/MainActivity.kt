@@ -439,8 +439,20 @@ private fun FileSniffingApp(sharedLink: String) {
                                     snackbarHostState.showSnackbar("任务缺少原始参数，请重新粘贴链接后下载")
                                 }
                             } else {
-                                val retryTaskId = UUID.randomUUID()
                                 val retryKey = "${record.sourceUrl}#${record.formatSelector ?: record.resourceKind}"
+                                val alreadyRunning = retryKey in activeDownloadUrls.values ||
+                                    storedDownloadHistory.any { existing ->
+                                        existing.id != task.id &&
+                                            existing.state in setOf("queued", "downloading") &&
+                                            "${existing.sourceUrl}#${existing.formatSelector ?: existing.resourceKind}" == retryKey
+                                    }
+                                if (alreadyRunning) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("相同格式已经在下载队列中")
+                                    }
+                                    return@loadRetryRecord
+                                }
+                                val retryTaskId = UUID.randomUUID()
                                 activeDownloadUrls[retryTaskId.toString()] = retryKey
                                 coroutineScope.launch {
                                     try {
