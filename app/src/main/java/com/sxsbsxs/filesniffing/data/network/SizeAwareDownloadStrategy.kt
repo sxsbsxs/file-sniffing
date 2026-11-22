@@ -27,11 +27,10 @@ internal object DownloadConnectionPolicy {
             totalBytes < 8L * MIB -> 2
             totalBytes < 64L * MIB -> 4
             totalBytes < 256L * MIB -> 8
-            totalBytes < 512L * MIB -> 16
-            totalBytes < 1L * 1024L * MIB -> 32
-            totalBytes < 2L * 1024L * MIB -> 64
-            totalBytes < 4L * 1024L * MIB -> 128
-            else -> preferredMaximumConnections
+            else -> (totalBytes / (4L * MIB))
+                .coerceAtLeast(1L)
+                .coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt()
         }
         return sizeBasedCount.coerceAtMost(preferredMaximumConnections)
     }
