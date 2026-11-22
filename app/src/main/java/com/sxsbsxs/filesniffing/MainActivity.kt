@@ -364,6 +364,20 @@ private fun FileSniffingApp(sharedLink: String) {
                                 }
                             }
                         }
+                    },
+                    onYouTubePageReady = { targetUrl ->
+                        sniffingViewModel.extractYouTubeResource(targetUrl) { resource, error ->
+                            if (resource != null) {
+                                sniffingViewModel.addResource(resource)
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("YouTube 已通过 yt-dlp 解析，可加入下载")
+                                }
+                            } else if (!error.isNullOrBlank()) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("YouTube 解析失败：$error")
+                                }
+                            }
+                        }
                     }
                 )
             } else if (selectedTab == 0) {
