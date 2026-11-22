@@ -20,9 +20,13 @@ data class SniffedResource(
     val fileName: String,
     val mimeType: String?,
     val pageTitle: String,
-    val sourcePage: String
+    val sourcePage: String,
+    /** Real yt-dlp format_id or video+audio format selector; never a signed media URL. */
+    val formatSelector: String? = null,
+    val qualityLabel: String? = null,
+    val fileSizeBytes: Long? = null
 ) {
-    val id: String get() = url
+    val id: String get() = "$url#${formatSelector ?: kind.name}"
 }
 
 object ResourceSniffer {
