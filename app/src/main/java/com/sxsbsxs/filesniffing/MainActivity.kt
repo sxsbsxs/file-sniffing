@@ -1392,12 +1392,12 @@ private fun DownloadsScreen(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("单个源站连接上限：$connectionsDraft", fontWeight = FontWeight.Medium)
+                    Text("单任务分段上限：$connectionsDraft", fontWeight = FontWeight.Medium)
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf(1, 2, 4, 8, 16).forEach { count ->
+                        listOf(1, 2, 4, 8, 16, 32).forEach { count ->
                             FilterChip(
                                 selected = connectionsDraft == count,
                                 onClick = { connectionsDraft = count },
@@ -1426,7 +1426,7 @@ private fun DownloadsScreen(
                         }
                     }
                     Text(
-                        "单个源站最多 16 路，这是 aria2 的单服务器连接上限；视频和音频分开下载时，总连接数可能叠加。只有服务器支持 Range/分片时才能并发，服务端限流或只允许单连接时不会因调高数字变快。直链同时任务数只控制 OkDownload 直链引擎。",
+                        "普通直链使用 OkDownload，单任务最多可拆成 32 个分段；视频站使用 aria2 时，单个源站最多 16 路连接，两个独立音视频流的总连接数可能叠加。两种引擎都需要源站支持 Range/分片；服务器限流时，调高上限不会自动变快。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )

@@ -13,7 +13,7 @@ import com.liulishuo.okdownload.core.download.DownloadStrategy
 internal object DownloadConnectionPolicy {
     private const val MIB = 1024L * 1024L
     private const val TARGET_BLOCK_BYTES = 1L * MIB
-    private const val MAX_CONNECTIONS = 16
+    private const val MAX_CONNECTIONS = 32
 
     @Volatile
     private var preferredMaximumConnections: Int = 16
