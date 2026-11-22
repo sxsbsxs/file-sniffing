@@ -191,8 +191,8 @@ class YtDlpRuntime @Inject constructor(
                         val cookiePath = cursor.getString(pathIndex)?.ifBlank { "/" } ?: "/"
                         if (!isSupportedCookieDomain(domain) || name.isBlank() ||
                             name.any { it.isWhitespace() } ||
-                            value.any { it == '\\t' || it == '\\r' || it == '\\n' } ||
-                            cookiePath.any { it == '\\t' || it == '\\r' || it == '\\n' }
+                            value.any { it == '\t' || it == '\r' || it == '\n' } ||
+                            cookiePath.any { it == '\t' || it == '\r' || it == '\n' }
                         ) continue
 
                         val secure = cursor.getLong(secureIndex) != 0L
@@ -213,7 +213,7 @@ class YtDlpRuntime @Inject constructor(
                             expiry.toString(),
                             name,
                             value
-                        ).joinToString("\\t"))
+                        ).joinToString("\t"))
                     }
                 }
             }
@@ -239,7 +239,7 @@ class YtDlpRuntime @Inject constructor(
                     val value = pair.substring(separator + 1).trim()
                     if (name.isBlank() || value.isBlank() ||
                         name.any { it.isWhitespace() } ||
-                        value.any { it == '\\t' || it == '\\r' || it == '\\n' }
+                        value.any { it == '\t' || it == '\r' || it == '\n' }
                     ) null else {
                         "$domain\\tTRUE\\t/\\tTRUE\\t0\\t$name\\t$value"
                     }
