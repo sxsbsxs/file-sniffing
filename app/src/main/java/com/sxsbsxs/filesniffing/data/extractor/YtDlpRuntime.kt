@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import com.sxsbsxs.filesniffing.NiconicoUrlParser
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
@@ -14,12 +15,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -37,33 +33,27 @@ import kotlin.concurrent.write
  */
 @Singleton
 class YtDlpRuntime @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val niconicoCookieProvider: NiconicoCookieProvider
+    @ApplicationContext private val context: Context
 ) {
     private val initializationMutex = Mutex()
     private val executableLock = ReentrantReadWriteLock()
-    private val maintenanceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val updateScheduleLock = Any()
-    @Volatile private var idleUpdateJob: Job? = null
     @Volatile private var initialized = false
 
     /**
-     * Initialize the bundled runtime immediately. Nightly maintenance is deferred until
-     * five minutes after the most recent yt-dlp command so parsing never waits for an update.
+     * Initialize yt-dlp and perform the normal weekly extractor refresh before the first
+     * user request. The application calls this on an IO scope during startup; parse requests
+     * share the initialization mutex and therefore never race a runtime update.
      */
     suspend fun prepare() = withContext(Dispatchers.IO) {
         ensureInitialized()
-        scheduleIdleUpdateCheck()
     }
     suspend fun inspectPlaylist(url: String): YtDlpPlaylistInfo = withContext(Dispatchers.IO) {
         require(url.startsWith("https://") || url.startsWith("http://")) {
             "请输入有效的播放列表链接"
         }
         ensureInitialized()
-        val cookieFile = niconicoCookieProvider.createCookieFileIfAvailable(url)
         try {
             val request = YoutubeDLRequest(url).apply {
-                cookieFile?.let { addOption("--cookies", it.absolutePath) }
                 addOption("--flat-playlist")
                 addOption("--dump-single-json")
                 addOption("--no-warnings")
@@ -77,8 +67,6 @@ class YtDlpRuntime @Inject constructor(
             throw cancelled
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
-        } finally {
-            cookieFile?.delete()
         }
     }
 
@@ -87,25 +75,40 @@ class YtDlpRuntime @Inject constructor(
             "请输入有效的视频链接"
         }
         ensureInitialized()
-        val cookieFile = niconicoCookieProvider.createCookieFileIfAvailable(url)
         try {
-            val request = YoutubeDLRequest(url).apply {
-                cookieFile?.let { addOption("--cookies", it.absolutePath) }
-                addOption("--dump-single-json")
-                addOption("--no-playlist")
-                addOption("--no-warnings")
-                addOption("--skip-download")
-                addOption("--socket-timeout", "20")
-            }
-            val response = executeCancellable(request, UUID.randomUUID().toString())
-            YtDlpInfoJsonParser.parse(response.out)
+            inspectOnce(url)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            throw IOException(sanitizeError(error.message), error)
-        } finally {
-            cookieFile?.delete()
+            if (!NiconicoGuestExtractorRecoveryPolicy.shouldRefreshAndRetry(url, error.message)) {
+                throw IOException(sanitizeError(error.message), error)
+            }
+
+            Log.w(TAG, "Niconico guest extraction returned the legacy registration error; refreshing yt-dlp once")
+            if (!forceRefreshYtDlpForNiconico()) {
+                throw IOException(sanitizeError(error.message), error)
+            }
+
+            try {
+                inspectOnce(url)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (retryError: Exception) {
+                throw IOException(sanitizeError(retryError.message), retryError)
+            }
         }
+    }
+
+    private suspend fun inspectOnce(url: String): YtDlpVideoInfo {
+        val request = YoutubeDLRequest(url).apply {
+            addOption("--dump-single-json")
+            addOption("--no-playlist")
+            addOption("--no-warnings")
+            addOption("--skip-download")
+            addOption("--socket-timeout", "20")
+        }
+        val response = executeCancellable(request, UUID.randomUUID().toString())
+        return YtDlpInfoJsonParser.parse(response.out)
     }
 
     suspend fun download(
@@ -134,10 +137,8 @@ class YtDlpRuntime @Inject constructor(
                 !it.name.endsWith(".part", ignoreCase = true) && it.length() > 0L }
             ?.maxByOrNull { it.lastModified() }
         if (reusableOutput != null) return@withContext reusableOutput
-        val cookieFile = niconicoCookieProvider.createCookieFileIfAvailable(url)
         try {
             val request = YoutubeDLRequest(url).apply {
-                cookieFile?.let { addOption("--cookies", it.absolutePath) }
                 addOption("--no-playlist")
                 addOption("--newline")
                 addOption("--no-mtime")
@@ -170,8 +171,6 @@ class YtDlpRuntime @Inject constructor(
             throw cancelled
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
-        } finally {
-            cookieFile?.delete()
         }
     }
 
@@ -185,7 +184,6 @@ class YtDlpRuntime @Inject constructor(
         processId: String,
         onProgress: ((Float, Long, String) -> Unit)? = null
     ): com.yausername.youtubedl_android.YoutubeDLResponse {
-        cancelIdleUpdateCheck()
         val executionThread = AtomicReference<Thread?>()
         return try {
             suspendCancellableCoroutine { continuation ->
@@ -221,7 +219,6 @@ class YtDlpRuntime @Inject constructor(
             withContext(NonCancellable + Dispatchers.IO) {
                 executionThread.get()?.join()
             }
-            scheduleIdleUpdateCheck()
         }
     }
 
@@ -235,33 +232,50 @@ class YtDlpRuntime @Inject constructor(
                 YoutubeDL.getInstance().init(context)
                 com.yausername.ffmpeg.FFmpeg.getInstance().init(context)
                 initialized = true
+                updateYtDlpIfDue()
             }
         }
     }
 
-    private fun cancelIdleUpdateCheck() {
-        synchronized(updateScheduleLock) {
-            idleUpdateJob?.cancel()
-            idleUpdateJob = null
+    /**
+     * Retry once with a fresh Nightly extractor when an old Niconico extractor mistakes a
+     * publicly viewable guest video for registered-user-only content.
+     *
+     * This is version-scoped so a genuinely restricted video does not trigger a network update
+     * on every parse attempt.
+     */
+    private fun forceRefreshYtDlpForNiconico(): Boolean {
+        val preferences = context.getSharedPreferences(UPDATE_PREFERENCES, Context.MODE_PRIVATE)
+        val installedVersion = YoutubeDL.getInstance().versionName(context)
+        val lastRecoveryVersion = preferences.getString(KEY_NICONICO_RECOVERY_VERSION, null)
+        if (!installedVersion.isNullOrBlank() && installedVersion == lastRecoveryVersion) {
+            return false
         }
-    }
 
-    private fun scheduleIdleUpdateCheck() {
-        synchronized(updateScheduleLock) {
-            idleUpdateJob?.cancel()
-            idleUpdateJob = maintenanceScope.launch {
-                delay(IDLE_UPDATE_DELAY_MILLIS)
-                val writeLock = executableLock.writeLock()
-                if (!writeLock.tryLock()) {
-                    scheduleIdleUpdateCheck()
-                    return@launch
-                }
-                try {
-                    updateYtDlpIfDue()
-                } finally {
-                    writeLock.unlock()
-                }
+        return try {
+            val now = System.currentTimeMillis()
+            val status = executableLock.write {
+                YoutubeDL.getInstance().updateYoutubeDL(
+                    context,
+                    YoutubeDL.UpdateChannel.NIGHTLY
+                )
             }
+            val latestVersion = YoutubeDL.getInstance().versionName(context)
+            val recoveryVersion = latestVersion?.takeIf { it.isNotBlank() }
+                ?: installedVersion?.takeIf { it.isNotBlank() }
+            if (recoveryVersion != null) {
+                preferences.edit()
+                    .putLong(KEY_LAST_ATTEMPT, now)
+                    .putLong(KEY_LAST_SUCCESS, now)
+                    .putString(KEY_LAST_VERSION, recoveryVersion)
+                    .putString(KEY_NICONICO_RECOVERY_VERSION, recoveryVersion)
+                    .apply()
+            }
+            Log.i(TAG, "Niconico extractor recovery update: $status, version=$latestVersion")
+            recoveryVersion != null
+        } catch (error: Exception) {
+            Log.w(TAG, "Niconico extractor recovery update failed; keeping current runtime", error)
+            false
         }
     }
 
@@ -288,10 +302,12 @@ class YtDlpRuntime @Inject constructor(
         // Record the attempt before network work so a failed/offline check cannot loop each parse.
         preferences.edit().putLong(KEY_LAST_ATTEMPT, now).apply()
         try {
-            val status = YoutubeDL.getInstance().updateYoutubeDL(
-                context,
-                YoutubeDL.UpdateChannel.NIGHTLY
-            )
+            val status = executableLock.write {
+                YoutubeDL.getInstance().updateYoutubeDL(
+                    context,
+                    YoutubeDL.UpdateChannel.NIGHTLY
+                )
+            }
             val latestVersion = YoutubeDL.getInstance().versionName(context)
             if (!latestVersion.isNullOrBlank()) {
                 preferences.edit()
@@ -318,7 +334,7 @@ class YtDlpRuntime @Inject constructor(
                 safe.contains("not a bot", true) ->
                 "YouTube 要求登录或人机验证；当前版本不提供网页登录，请尝试公开可访问的视频，或稍后更新 yt-dlp"
             safe.contains("only available for registered users", true) ->
-                "该 Niconico 视频仅限注册用户访问。请点击解析页右上角“N站登录”，在应用内登录后重新解析；若仍失败，可能需要相应会员或购买权限。"
+                "N站解析器仍报告需要注册用户权限。已尝试刷新解析器；请确认该视频当前是否允许游客观看，或是否存在地区限制。"
             safe.contains("invalid session", true) ->
                 "Niconico 登录状态已过期，请重新登录后重试。"
             safe.contains("premium members only", true) ->
@@ -336,6 +352,6 @@ class YtDlpRuntime @Inject constructor(
         const val KEY_LAST_ATTEMPT = "last_attempt_ms"
         const val KEY_LAST_SUCCESS = "last_success_ms"
         const val KEY_LAST_VERSION = "last_version"
-        const val IDLE_UPDATE_DELAY_MILLIS = 5 * 60 * 1000L
+        const val KEY_NICONICO_RECOVERY_VERSION = "niconico_recovery_version"
     }
 }

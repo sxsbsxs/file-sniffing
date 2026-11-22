@@ -142,14 +142,22 @@ The follow-up inspection found several mismatches between the settings and the e
 The embedded yt-dlp update check has also moved out of ensureInitialized(): runtime initialization and extraction no longer wait for the Nightly network update. The update check is scheduled after five minutes of idle time and starts only if the executable read/write lock is free.
 
 
-## 8. Niconico account authorization — 0.9.22
+## 8. Niconico guest-extractor regression — 0.9.23
 
-A screenshot test exposed that yt-dlp was being called without any Niconico session. The current yt-dlp Niconico extractor determines whether a viewer is signed in by checking the `user_session` cookie for `https://www.nicovideo.jp`. The app now provides an in-app WebView login to the official Niconico account page and exports only that cookie for yt-dlp.
+A user reported that a Niconico URL which previously downloaded as a guest started returning yt-dlp's generic "This video is only available for registered users" error after the 0.9.21 performance change.
 
-- The login UI does not collect or transmit the user's password. Login happens on Niconico's official page inside the app's WebView.
-- Only the `user_session` cookie is exported. Other browser cookies are not copied.
-- yt-dlp receives a temporary Netscape cookie file scoped to `.nicovideo.jp` using `--cookies`. The file is created in app-private cache and deleted after each inspect/download command.
-- Both metadata inspection and download receive the same local session. Expired-session, registered-user-only, premium-only and channel-member-only errors are translated into actionable Chinese messages.
-- The parse page gets a visible Niconico login/status action. The Files tab now explains that failed parsing creates no output file and provides a return-to-parse action.
+The commit history exposed a relevant regression: 0.9.21 moved the normal Nightly extractor update out of `ensureInitialized()` and delayed it until five minutes of idle time. Before that change, app startup and the first parse shared initialization, and the first yt-dlp request could not race the due weekly update. The new delay allowed a request to run the bundled older extractor first.
 
-This authorization supports videos the logged-in account is entitled to view. It does not grant Premium, channel membership, PPV purchase, or region access by itself.
+This matches yt-dlp's documented Niconico guest-extraction failure: the old extractor's page-data fallback no longer matched Niconico's `server-response` metadata and could fall through to the login-required API. The fix changed the page metadata extraction; current yt-dlp also chooses the guest `v3_guest` endpoint when no `user_session` exists. See:
+- https://github.com/yt-dlp/yt-dlp/issues/10662
+- https://github.com/yt-dlp/yt-dlp/commit/4d92312
+- https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/niconico.py
+
+Changes in 0.9.23:
+- Remove the newly added Niconico WebView login screen and Cookie export. Guest-accessible videos must remain downloadable without login.
+- Restore the normal weekly Nightly refresh to serialized runtime initialization before the first extractor request when the update is due.
+- If a Niconico watch URL produces the exact legacy registered-user error, force one Nightly refresh for the currently installed extractor version and retry extraction once. This avoids making every normal parse wait for a network update and avoids repeatedly updating for genuinely restricted videos.
+- Keep account-entitlement errors honest: a successful extractor refresh cannot grant Premium, channel membership, PPV purchase or region access.
+- Keep the Files empty-state explanation and remove the duplicate long parse-failure snackbar.
+
+The issue is now treated as a guest extractor/version regression first, not as proof that the user's video needs an account login. Real-device validation of the supplied `sm37593092` URL is still required.
