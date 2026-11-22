@@ -132,50 +132,80 @@ class SniffingViewModel @Inject constructor(
         }
     }
 
-    fun extractYouTubeResource(
+    fun extractYouTubeResources(
         pageUrl: String,
-        onResult: (SniffedResource?, String?) -> Unit
+        onResult: (List<SniffedResource>?, String?) -> Unit
     ) {
         val videoId = YouTubeUrlParser.extractVideoId(pageUrl)
-        if (videoId == null) {
-            onResult(null, "不是有效的 YouTube 视频链接")
+        val playlistId = YouTubeUrlParser.extractPlaylistId(pageUrl)
+        if (videoId == null && playlistId == null) {
+            onResult(null, "不是有效的 YouTube 视频或播放列表链接")
             return
         }
         youtubeExtractionJob?.cancel()
         youtubeExtractionJob = viewModelScope.launch {
             try {
-                val info = ytDlpRuntime.inspect(pageUrl)
-                if (YouTubeUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) != videoId) {
-                    return@launch
+                val resources = if (playlistId != null) {
+                    val playlist = ytDlpRuntime.inspectPlaylist(pageUrl)
+                    playlist.entries.map { entry ->
+                        val safeTitle = FileNameSanitizer.sanitize(entry.title, entry.videoId)
+                        SniffedResource(
+                            url = "https://www.youtube.com/watch?v=" + entry.videoId,
+                            kind = ResourceKind.VIDEO,
+                            fileName = safeTitle + ".mp4",
+                            mimeType = "video/mp4",
+                            pageTitle = entry.title,
+                            sourcePage = "https://www.youtube.com/watch?v=" + entry.videoId
+                        )
+                    }
+                } else {
+                    val info = ytDlpRuntime.inspect(pageUrl)
+                    if (info.selectableVideoFormats.isEmpty() && info.audioOnlyFormats.isEmpty()) {
+                        throw IllegalStateException("yt-dlp 没有返回可下载的视频或音频格式")
+                    }
+                    val safeTitle = FileNameSanitizer.sanitize(info.title, videoId!!)
+                    listOf(
+                        SniffedResource(
+                            url = pageUrl,
+                            kind = ResourceKind.VIDEO,
+                            fileName = safeTitle + ".mp4",
+                            mimeType = "video/mp4",
+                            pageTitle = info.title,
+                            sourcePage = pageUrl
+                        )
+                    )
                 }
-                if (info.selectableVideoFormats.isEmpty() && info.audioOnlyFormats.isEmpty()) {
-                    throw IllegalStateException("yt-dlp 没有返回可下载的视频或音频格式")
+                val activeMatches = if (playlistId != null) {
+                    YouTubeUrlParser.extractPlaylistId(_uiState.value.activePageUrl.orEmpty()) == playlistId
+                } else {
+                    YouTubeUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) == videoId
                 }
-                val safeTitle = FileNameSanitizer.sanitize(info.title, videoId)
-                val resource = SniffedResource(
-                    url = pageUrl,
-                    kind = ResourceKind.VIDEO,
-                    fileName = "$safeTitle.mp4",
-                    mimeType = "video/mp4",
-                    pageTitle = info.title,
-                    sourcePage = pageUrl
-                )
+                if (!activeMatches) return@launch
                 _uiState.update { state ->
-                    val transient = state.transientResources
-                        .filterNot { YouTubeUrlParser.extractVideoId(it.sourcePage) == videoId } + resource
-                    val visible = state.resources.filterNot {
-                        YouTubeUrlParser.extractVideoId(it.sourcePage) == videoId
-                    } + resource
+                    val oldIds = state.transientResources.filter {
+                        if (playlistId != null) {
+                            YouTubeUrlParser.extractPlaylistId(it.sourcePage) == playlistId
+                        } else {
+                            YouTubeUrlParser.extractVideoId(it.sourcePage) == videoId
+                        }
+                    }.map { it.id }.toSet()
+                    val transient = state.transientResources.filterNot { it.id in oldIds } + resources
+                    val visible = state.resources.filterNot { it.id in oldIds } + resources
                     state.copy(
                         transientResources = transient,
                         resources = visible.distinctBy { it.id }
                     )
                 }
-                onResult(resource, null)
+                onResult(resources, null)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                if (YouTubeUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) == videoId) {
+                val stillActive = if (playlistId != null) {
+                    YouTubeUrlParser.extractPlaylistId(_uiState.value.activePageUrl.orEmpty()) == playlistId
+                } else {
+                    YouTubeUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) == videoId
+                }
+                if (stillActive) {
                     onResult(null, error.message?.take(180)?.ifBlank { null } ?: "YouTube 解析失败")
                 }
             }
