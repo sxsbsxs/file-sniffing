@@ -39,10 +39,13 @@ data class SniffedResource(
 ) {
     val downloadKey: String
         get() {
-            val stableSource = if (
-                kind == ResourceKind.PLAYLIST &&
-                NiconicoUrlParser.extractVideoId(sourcePage) != null
-            ) sourcePage else url
+            val stableSource = if (kind == ResourceKind.PLAYLIST) {
+                NiconicoUrlParser.extractVideoId(sourcePage)
+                    ?.let(NiconicoUrlParser::canonicalWatchUrl)
+                    ?: url
+            } else {
+                url
+            }
             return "$stableSource#${formatSelector ?: kind.name}"
         }
     val id: String get() = downloadKey
