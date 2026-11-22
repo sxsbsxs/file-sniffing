@@ -37,12 +37,34 @@ jobs:
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
-      - name: Build debug APK
+      - name: Build ABI-specific debug APKs
         run: ./gradlew :app:assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Check arm64 APK size
+        run: |
+          apk="app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
+          test -f "$apk"
+          size=$(stat -c%s "$apk")
+          echo "arm64-v8a APK: $size bytes"
+          test "$size" -lt $((65 * 1024 * 1024))
+
+      - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
-          name: file-sniffing-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: file-sniffing-arm64-v8a
+          path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+          if-no-files-found: error
+
+      - name: Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: file-sniffing-armeabi-v7a
+          path: app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk
+          if-no-files-found: error
+
+      - name: Upload x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: file-sniffing-x86_64
+          path: app/build/outputs/apk/debug/app-x86_64-debug.apk
           if-no-files-found: error
