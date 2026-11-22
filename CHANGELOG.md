@@ -9,17 +9,6 @@
 - Bump app version to 0.9.13 (versionCode 31).
 - Niconico public access still follows the service's current guest API and any genuine video visibility, membership, payment, region or DRM restrictions.
 
-## 0.9.12
-
-- Add an optional Niconico account dialog without restoring WebView or in-app webpage navigation.
-- Store the Niconico account/password encrypted with a non-exportable Android Keystore AES-GCM key.
-- Use a temporary owner-only netrc file for Niconico yt-dlp requests; remove it after each metadata or download operation.
-- Route the same local credentials through both URL inspection and WorkManager downloads; credentials are only supplied for validated Niconico watch URLs.
-- Show clearer guidance when Niconico requires registration or the video requires Premium, channel-membership or PPV entitlement.
-- Add unit coverage for safe netrc quoting and line-break rejection.
-- Bump app version to 0.9.12 (versionCode 30).
-- The account does not bypass video-level access rights, membership, payment, region restrictions or DRM.
-
 ## 0.9.11
 
 - Remove the in-app webpage viewer, WebView result screen, DOM/JavaScript injection, browser request interception and page-text restriction diagnostics.
