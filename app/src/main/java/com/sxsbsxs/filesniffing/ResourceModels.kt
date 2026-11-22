@@ -37,7 +37,14 @@ data class SniffedResource(
     val codecLabel: String? = null,
     val frameRate: Double? = null
 ) {
-    val downloadKey: String get() = "$url#${formatSelector ?: kind.name}"
+    val downloadKey: String
+        get() {
+            val stableSource = if (
+                kind == ResourceKind.PLAYLIST &&
+                NiconicoUrlParser.extractVideoId(sourcePage) != null
+            ) sourcePage else url
+            return "$stableSource#${formatSelector ?: kind.name}"
+        }
     val id: String get() = downloadKey
 }
 
