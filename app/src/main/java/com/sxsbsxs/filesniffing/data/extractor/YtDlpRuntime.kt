@@ -8,12 +8,15 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
 /**
  * Seal-style bridge to the upstream yt-dlp Android runtime.
@@ -26,6 +29,7 @@ class YtDlpRuntime @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val initializationMutex = Mutex()
+    private val executableLock = ReentrantReadWriteLock()
     @Volatile private var initialized = false
 
     /** Initializes yt-dlp/FFmpeg and silently refreshes the extractor from the Nightly channel. */
@@ -46,7 +50,7 @@ class YtDlpRuntime @Inject constructor(
                 addOption("--playlist-end", "200")
                 addOption("--socket-timeout", "20")
             }
-            val response = YoutubeDL.getInstance().execute(request)
+            val response = executableLock.read { YoutubeDL.getInstance().execute(request) }
             YtDlpInfoJsonParser.parsePlaylist(response.out)
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
@@ -67,7 +71,7 @@ class YtDlpRuntime @Inject constructor(
                 addOption("--skip-download")
                 addOption("--socket-timeout", "20")
             }
-            val response = YoutubeDL.getInstance().execute(request)
+            val response = executableLock.read { YoutubeDL.getInstance().execute(request) }
             YtDlpInfoJsonParser.parse(response.out)
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
@@ -109,8 +113,10 @@ class YtDlpRuntime @Inject constructor(
                 }
                 addOption("-o", File(outputDirectory, "$outputPrefix.%(ext)s").absolutePath)
             }
-            YoutubeDL.getInstance().execute(request, processId) { progress, eta, line ->
-                onProgress?.invoke(progress, eta, line.take(240))
+            executableLock.read {
+                YoutubeDL.getInstance().execute(request, processId) { progress, eta, line ->
+                    onProgress?.invoke(progress, eta, line.take(240))
+                }
             }
             outputDirectory.listFiles()
                 ?.filter { it.isFile && it.name.startsWith("$outputPrefix.") &&
@@ -161,10 +167,12 @@ class YtDlpRuntime @Inject constructor(
         // Record the attempt before network work so a failed/offline check cannot loop each parse.
         preferences.edit().putLong(KEY_LAST_ATTEMPT, now).apply()
         try {
-            val status = YoutubeDL.getInstance().updateYoutubeDL(
-                context,
-                YoutubeDL.UpdateChannel.NIGHTLY
-            )
+            val status = executableLock.write {
+                YoutubeDL.getInstance().updateYoutubeDL(
+                    context,
+                    YoutubeDL.UpdateChannel.NIGHTLY
+                )
+            }
             val latestVersion = YoutubeDL.getInstance().versionName(context)
             if (!latestVersion.isNullOrBlank()) {
                 preferences.edit()
