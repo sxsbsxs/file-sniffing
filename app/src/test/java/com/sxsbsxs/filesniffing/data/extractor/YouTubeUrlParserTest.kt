@@ -14,6 +14,20 @@ class YouTubeUrlParserTest {
     }
 
     @Test
+    fun extractsPlaylistIdsFromPlaylistAndWatchUrls() {
+        assertEquals(
+            "PL1234567890",
+            YouTubeUrlParser.extractPlaylistId("https://www.youtube.com/playlist?list=PL1234567890")
+        )
+        assertEquals(
+            "PL1234567890",
+            YouTubeUrlParser.extractPlaylistId("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890")
+        )
+        assertNull(YouTubeUrlParser.extractPlaylistId("https://youtube.com.attacker.example/playlist?list=PL1234567890"))
+        assertNull(YouTubeUrlParser.extractPlaylistId("https://example.com/playlist?list=PL1234567890"))
+    }
+
+    @Test
     fun extractsShortLinkId() {
         assertEquals(
             "dQw4w9WgXcQ",
