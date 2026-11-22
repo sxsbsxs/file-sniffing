@@ -127,3 +127,16 @@ Do not copy source code blindly. Check each project's license and dependency bou
 - Search/sort works across persisted and live tasks; errors include a recoverable explanation.
 - HLS/DASH/HTTP/site downloads have separate, tested pause/resume behavior.
 - Arm64 debug APK remains below 65 MiB unless a measured, justified feature changes the budget.
+
+
+## 7. Performance follow-up — 0.9.21
+
+The follow-up inspection found several mismatches between the settings and the engines:
+
+- Seal models metadata extraction (FetchingInfo) separately from a running download (Running) and keeps a bounded queue. We preserve that distinction rather than treating a slow extractor as file-transfer progress.
+- XDM keeps cumulative byte counters and updates its progress/ETA snapshot on a sampling interval; its connection-slot view also reports what segment workers are actually doing. The mobile task card now reports the actual OkDownload block count when available.
+- NewPipe uses a small per-mission thread count and advances a cumulative byte counter. This is a better starting point than exposing 64–512 connections where many resources cannot use them.
+- yt-dlp has separate controls for DASH/HLS fragment concurrency and rate limiting. Its concurrent-fragments option applies to fragmented DASH/HLS downloads, not a progressive single-file HTTP stream; limit-rate accepts a byte-per-second rate. The app now passes the user's setting to these options and explains the limitation instead of claiming every video gets hundreds of TCP connections.
+- OkDownload only uses multiple byte-range blocks when the server accepts Range requests and the output stream supports seeking. Its size-aware strategy now computes a 4 MiB target block and applies a practical 1–32 connection ceiling to normal video sizes.
+
+The embedded yt-dlp update check has also moved out of ensureInitialized(): runtime initialization and extraction no longer wait for the Nightly network update. The update check is scheduled after five minutes of idle time and starts only if the executable read/write lock is free.

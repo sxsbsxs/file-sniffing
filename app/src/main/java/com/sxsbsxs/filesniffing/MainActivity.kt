@@ -1087,9 +1087,6 @@ private fun DownloadsScreen(
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { showDownloadSettings = true }) {
-                Icon(Icons.Rounded.Tune, contentDescription = "下载设置")
-            }
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(7.dp)
@@ -1133,6 +1130,51 @@ private fun DownloadsScreen(
             }
         }
         FolderPickerCard(folderLabel, hasFolder, onChooseFolder)
+        Spacer(Modifier.height(8.dp))
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showDownloadSettings = true },
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Rounded.Tune,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(11.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        "下载性能设置",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "${connectionsDraft} 路并发上限 · ${parallelDraft} 个直链任务 · " +
+                            if (speedLimitDraft == 0) "不限速" else "${speedLimitDraft} MB/s",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+                Text(
+                    "调整",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
         Box(
             Modifier
                 .fillMaxWidth()
@@ -1351,12 +1393,12 @@ private fun DownloadsScreen(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("直链分段连接上限：$connectionsDraft", fontWeight = FontWeight.Medium)
+                    Text("连接并发上限：$connectionsDraft", fontWeight = FontWeight.Medium)
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf(1, 2, 4, 8, 16, 32, 64, 128, 256, 512).forEach { count ->
+                        listOf(1, 2, 4, 8, 16, 32).forEach { count ->
                             FilterChip(
                                 selected = connectionsDraft == count,
                                 onClick = { connectionsDraft = count },
@@ -1364,7 +1406,7 @@ private fun DownloadsScreen(
                             )
                         }
                     }
-                    Text("同时下载任务：$parallelDraft", fontWeight = FontWeight.Medium)
+                    Text("直链同时下载任务：$parallelDraft", fontWeight = FontWeight.Medium)
                     Slider(
                         value = parallelDraft.toFloat(),
                         onValueChange = { parallelDraft = it.toInt().coerceIn(1, 4) },
@@ -1385,7 +1427,7 @@ private fun DownloadsScreen(
                         }
                     }
                     Text(
-                        "直链支持 1–512 个分段连接；大文件约每 4 MiB 分一段，小文件自动减少。服务器不支持 Range 时会退回单连接。HLS/DASH 分片并发另行限制为最多 32。速度上限由所有下载任务共享。",
+                        "连接并发会应用于支持 Range 的直链分段，以及 HLS/DASH 分片（yt-dlp 和 Media3）。普通单文件视频没有分片时不能强行多线程；服务器关闭 Range 时直链会退回单连接。直链同时任务数只控制 OkDownload 直链引擎。限速会传入 yt-dlp，直链和 Media3 则共用限速器。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )

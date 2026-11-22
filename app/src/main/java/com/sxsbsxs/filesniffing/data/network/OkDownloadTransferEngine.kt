@@ -22,7 +22,8 @@ data class DownloadTransferProgress(
     val progress: Int,
     val downloadedBytes: Long,
     val totalBytes: Long,
-    val speedBytesPerSecond: Long
+    val speedBytesPerSecond: Long,
+    val connectionCount: Int = 1
 )
 
 data class DownloadTransferResult(
@@ -75,16 +76,21 @@ class OkDownloadTransferEngine @Inject constructor(
             val totalBytes = AtomicLong(-1L)
             val lastReportedBytes = AtomicLong(0L)
             val lastReportedAtNanos = AtomicLong(System.nanoTime())
+            val reportLock = Any()
             val latestResponseHeaders = java.util.concurrent.atomic.AtomicReference<Map<String, List<String>>>(emptyMap())
 
-            fun reportProgress(current: Long, total: Long) {
+            fun reportProgress(current: Long, total: Long, connectionCount: Int) {
                 val now = System.nanoTime()
-                val previousBytes = lastReportedBytes.getAndSet(current)
-                val elapsedNanos = now - lastReportedAtNanos.getAndSet(now)
-                val speed = if (elapsedNanos > 0L && current >= previousBytes) {
-                    ((current - previousBytes) * 1_000_000_000.0 / elapsedNanos).toLong()
-                } else {
-                    -1L
+                val speed = synchronized(reportLock) {
+                    val previousBytes = lastReportedBytes.get()
+                    val elapsedNanos = now - lastReportedAtNanos.get()
+                    if (current >= previousBytes && elapsedNanos > 0L) {
+                        lastReportedBytes.set(current)
+                        lastReportedAtNanos.set(now)
+                        ((current - previousBytes) * 1_000_000_000.0 / elapsedNanos).toLong()
+                    } else {
+                        -1L
+                    }
                 }
                 val percent = if (total > 0L) {
                     ((current * 100.0) / total).toInt().coerceIn(0, 99)
@@ -96,7 +102,8 @@ class OkDownloadTransferEngine @Inject constructor(
                         progress = percent,
                         downloadedBytes = current,
                         totalBytes = total,
-                        speedBytesPerSecond = speed
+                        speedBytesPerSecond = speed,
+                        connectionCount = connectionCount.coerceAtLeast(1)
                     )
                 )
             }
@@ -148,9 +155,13 @@ class OkDownloadTransferEngine @Inject constructor(
                     val total = info.totalLength
                     val offset = info.totalOffset
                     if (total > 0L) totalBytes.set(total)
-                    if (offset > 0L) receivedBytes.set(offset)
-                    lastReportedBytes.set(offset.coerceAtLeast(0L))
-                    lastReportedAtNanos.set(System.nanoTime())
+                    if (offset > 0L) receivedBytes.updateAndGet { maxOf(it, offset) }
+                    synchronized(reportLock) {
+                        if (offset > lastReportedBytes.get()) {
+                            lastReportedBytes.set(offset)
+                            lastReportedAtNanos.set(System.nanoTime())
+                        }
+                    }
                 }
 
                 override fun downloadFromBreakpoint(task: DownloadTask, info: BreakpointInfo) {
@@ -182,15 +193,16 @@ class OkDownloadTransferEngine @Inject constructor(
                     val info = task.info
                     if (info != null) {
                         if (info.totalLength > 0L) totalBytes.set(info.totalLength)
-                        if (info.totalOffset > receivedBytes.get()) {
-                            receivedBytes.set(info.totalOffset)
+                        if (info.totalOffset > 0L) {
+                            receivedBytes.updateAndGet { maxOf(it, info.totalOffset) }
                         }
                     }
                 }
 
                 override fun fetchProgress(task: DownloadTask, blockIndex: Int, increaseBytes: Long) {
                     val current = receivedBytes.addAndGet(increaseBytes)
-                    reportProgress(current, totalBytes.get())
+                    val activeConnections = runCatching { task.info?.blockCount ?: 1 }.getOrDefault(1)
+                    reportProgress(current, totalBytes.get(), activeConnections)
                 }
 
                 override fun fetchEnd(task: DownloadTask, blockIndex: Int, contentLength: Long) = Unit

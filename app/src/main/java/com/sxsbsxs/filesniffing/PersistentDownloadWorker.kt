@@ -47,6 +47,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
     private val downloadSpeedLimiter: DownloadSpeedLimiter
 ) : CoroutineWorker(appContext, parameters) {
 
+    private val progressLock = Any()
     @Volatile private var latestProgress = -1
     @Volatile private var latestDownloadedBytes = -1L
     @Volatile private var latestTotalBytes = -1L
@@ -224,13 +225,17 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     outputDirectory = tempDirectory,
                     formatSelector = ytDlpFormatSelector,
                     audioOnly = kind == ResourceKind.AUDIO,
-                    processId = requireNotNull(ytDlpSessionId)
+                    processId = requireNotNull(ytDlpSessionId),
+                    concurrentFragments = tuning.connectionsPerTask,
+                    speedLimitBytesPerSecond = tuning.speedLimitBytesPerSecond
                 ) { progress, _, line ->
                     val percent = progress.takeIf { it.isFinite() && it >= 0f }
                         ?.let { (it * 0.89f).toInt().coerceIn(0, 89) } ?: -1
                     publishProgressAsync(
                         percent,
-                        line.ifBlank { "yt-dlp 正在下载并合并音视频" },
+                        line.ifBlank {
+                            "yt-dlp 正在下载（HLS/DASH 分片并发上限：${tuning.connectionsPerTask}）"
+                        },
                         fileName
                     )
                 }
@@ -408,7 +413,14 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 destinationDocument = destinationDocument,
                 headers = headers
             ) { snapshot ->
-                val detail = if (snapshot.totalBytes > 0L) "下载中" else "正在接收数据"
+                val detail = when {
+                    snapshot.connectionCount > 1 ->
+                        "下载中 · ${snapshot.connectionCount} 路分段连接"
+                    tuning.connectionsPerTask > 1 ->
+                        "下载中 · 实际 1 路（文件大小或服务器 Range 能力限制）"
+                    snapshot.totalBytes > 0L -> "下载中 · 1 路连接"
+                    else -> "正在接收数据 · 1 路连接"
+                }
                 publishProgressAsync(
                     progress = snapshot.progress,
                     detail = detail,
@@ -581,24 +593,33 @@ class PersistentDownloadWorker @AssistedInject constructor(
         totalBytes: Long = -1L,
         speedBytesPerSecond: Long = -1L
     ) {
-        if (progress >= 0) latestProgress = progress
-        if (downloadedBytes >= 0L) latestDownloadedBytes = downloadedBytes
-        if (totalBytes >= 0L) latestTotalBytes = totalBytes
-        if (speedBytesPerSecond >= 0L) latestSpeedBytesPerSecond = speedBytesPerSecond
-
-        val data = androidx.work.Data.Builder()
-            .putInt(KEY_PROGRESS, progress)
-            .putString(KEY_DETAIL, detail)
-            .putString(KEY_FILE_NAME, fileName)
-            .apply {
-                if (!partialUri.isNullOrBlank()) putString(KEY_PARTIAL_URI, partialUri)
-                if (downloadedBytes >= 0L) putLong(KEY_DOWNLOADED_BYTES, downloadedBytes)
-                if (totalBytes >= 0L) putLong(KEY_TOTAL_BYTES, totalBytes)
-                if (speedBytesPerSecond >= 0L) putLong(KEY_SPEED_BYTES_PER_SECOND, speedBytesPerSecond)
+        synchronized(progressLock) {
+            latestProgress = DownloadProgressPolicy.monotonic(latestProgress, progress)
+            if (downloadedBytes >= 0L) {
+                latestDownloadedBytes = maxOf(latestDownloadedBytes, downloadedBytes)
             }
-            .build()
-        setProgressAsync(data)
-        setForegroundAsync(createForegroundInfo(fileName, progress, detail))
+            if (totalBytes >= 0L) latestTotalBytes = totalBytes
+            if (speedBytesPerSecond >= 0L) latestSpeedBytesPerSecond = speedBytesPerSecond
+
+            val data = androidx.work.Data.Builder()
+                .putInt(KEY_PROGRESS, latestProgress)
+                .putString(KEY_DETAIL, detail)
+                .putString(KEY_FILE_NAME, fileName)
+                .apply {
+                    if (!partialUri.isNullOrBlank()) putString(KEY_PARTIAL_URI, partialUri)
+                    if (latestDownloadedBytes >= 0L) {
+                        putLong(KEY_DOWNLOADED_BYTES, latestDownloadedBytes)
+                    }
+                    if (latestTotalBytes >= 0L) putLong(KEY_TOTAL_BYTES, latestTotalBytes)
+                    if (latestSpeedBytesPerSecond >= 0L) {
+                        putLong(KEY_SPEED_BYTES_PER_SECOND, latestSpeedBytesPerSecond)
+                    }
+                }
+                .build()
+            // Keep WorkManager writes ordered: OkDownload callbacks can arrive on several threads.
+            setProgressAsync(data)
+            setForegroundAsync(createForegroundInfo(fileName, latestProgress, detail))
+        }
     }
 
     private fun createForegroundInfo(fileName: String, progress: Int, detail: String): ForegroundInfo {

@@ -14,7 +14,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -36,11 +41,18 @@ class YtDlpRuntime @Inject constructor(
 ) {
     private val initializationMutex = Mutex()
     private val executableLock = ReentrantReadWriteLock()
+    private val maintenanceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val updateScheduleLock = Any()
+    @Volatile private var idleUpdateJob: Job? = null
     @Volatile private var initialized = false
 
-    /** Initializes yt-dlp/FFmpeg and silently refreshes the extractor from the Nightly channel. */
+    /**
+     * Initialize the bundled runtime immediately. Nightly maintenance is deferred until
+     * five minutes after the most recent yt-dlp command so parsing never waits for an update.
+     */
     suspend fun prepare() = withContext(Dispatchers.IO) {
         ensureInitialized()
+        scheduleIdleUpdateCheck()
     }
     suspend fun inspectPlaylist(url: String): YtDlpPlaylistInfo = withContext(Dispatchers.IO) {
         require(url.startsWith("https://") || url.startsWith("http://")) {
@@ -93,6 +105,8 @@ class YtDlpRuntime @Inject constructor(
         formatSelector: String = "bv*+ba/b",
         audioOnly: Boolean = false,
         processId: String = UUID.randomUUID().toString(),
+        concurrentFragments: Int = 8,
+        speedLimitBytesPerSecond: Long = 0L,
         onProgress: ((Float, Long, String) -> Unit)? = null
     ): File = withContext(Dispatchers.IO) {
         require(url.startsWith("https://") || url.startsWith("http://")) {
@@ -117,6 +131,10 @@ class YtDlpRuntime @Inject constructor(
                 addOption("--newline")
                 addOption("--no-mtime")
                 addOption("--continue")
+                addOption("--concurrent-fragments", concurrentFragments.coerceIn(1, 32).toString())
+                if (speedLimitBytesPerSecond > 0L) {
+                    addOption("--limit-rate", speedLimitBytesPerSecond.toString())
+                }
                 val effectiveFormat = if (
                     audioOnly && formatSelector == "bv*+ba/b"
                 ) "bestaudio/best" else formatSelector
@@ -154,6 +172,7 @@ class YtDlpRuntime @Inject constructor(
         processId: String,
         onProgress: ((Float, Long, String) -> Unit)? = null
     ): com.yausername.youtubedl_android.YoutubeDLResponse {
+        cancelIdleUpdateCheck()
         val executionThread = AtomicReference<Thread?>()
         return try {
             suspendCancellableCoroutine { continuation ->
@@ -189,6 +208,7 @@ class YtDlpRuntime @Inject constructor(
             withContext(NonCancellable + Dispatchers.IO) {
                 executionThread.get()?.join()
             }
+            scheduleIdleUpdateCheck()
         }
     }
 
@@ -203,7 +223,32 @@ class YtDlpRuntime @Inject constructor(
                 com.yausername.ffmpeg.FFmpeg.getInstance().init(context)
                 initialized = true
             }
-            updateYtDlpIfDue()
+        }
+    }
+
+    private fun cancelIdleUpdateCheck() {
+        synchronized(updateScheduleLock) {
+            idleUpdateJob?.cancel()
+            idleUpdateJob = null
+        }
+    }
+
+    private fun scheduleIdleUpdateCheck() {
+        synchronized(updateScheduleLock) {
+            idleUpdateJob?.cancel()
+            idleUpdateJob = maintenanceScope.launch {
+                delay(IDLE_UPDATE_DELAY_MILLIS)
+                val writeLock = executableLock.writeLock()
+                if (!writeLock.tryLock()) {
+                    scheduleIdleUpdateCheck()
+                    return@launch
+                }
+                try {
+                    updateYtDlpIfDue()
+                } finally {
+                    writeLock.unlock()
+                }
+            }
         }
     }
 
@@ -230,12 +275,10 @@ class YtDlpRuntime @Inject constructor(
         // Record the attempt before network work so a failed/offline check cannot loop each parse.
         preferences.edit().putLong(KEY_LAST_ATTEMPT, now).apply()
         try {
-            val status = executableLock.write {
-                YoutubeDL.getInstance().updateYoutubeDL(
-                    context,
-                    YoutubeDL.UpdateChannel.NIGHTLY
-                )
-            }
+            val status = YoutubeDL.getInstance().updateYoutubeDL(
+                context,
+                YoutubeDL.UpdateChannel.NIGHTLY
+            )
             val latestVersion = YoutubeDL.getInstance().versionName(context)
             if (!latestVersion.isNullOrBlank()) {
                 preferences.edit()
@@ -272,5 +315,6 @@ class YtDlpRuntime @Inject constructor(
         const val KEY_LAST_ATTEMPT = "last_attempt_ms"
         const val KEY_LAST_SUCCESS = "last_success_ms"
         const val KEY_LAST_VERSION = "last_version"
+        const val IDLE_UPDATE_DELAY_MILLIS = 5 * 60 * 1000L
     }
 }

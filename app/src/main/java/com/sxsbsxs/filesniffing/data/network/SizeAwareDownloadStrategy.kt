@@ -4,35 +4,30 @@ import com.liulishuo.okdownload.DownloadTask
 import com.liulishuo.okdownload.core.download.DownloadStrategy
 
 /**
- * Chooses a real byte-range block count after OkDownload has inspected the server response.
- * Small files use fewer ranges; very large files can use the user's 1..512 connection ceiling.
+ * Chooses a byte-range block count after OkDownload has inspected the response.
  *
- * OkDownload itself falls back to one connection when the server does not support byte ranges
- * or when the output stream cannot seek. Unknown/chunked lengths also stay on one connection.
+ * Multi-block still requires server Range support and a seekable output stream.
+ * For compatible servers, a 4 MiB target block means normal video-sized files
+ * can use the configured ceiling instead of being stuck at 2/4/8 connections.
  */
 internal object DownloadConnectionPolicy {
     private const val MIB = 1024L * 1024L
+    private const val TARGET_BLOCK_BYTES = 4L * MIB
+    private const val MAX_CONNECTIONS = 32
 
     @Volatile
-    private var preferredMaximumConnections: Int = 64
+    private var preferredMaximumConnections: Int = 16
 
     fun setPreferredMaximumConnections(value: Int) {
-        preferredMaximumConnections = value.coerceIn(1, 512)
+        preferredMaximumConnections = value.coerceIn(1, MAX_CONNECTIONS)
     }
 
     fun connectionsFor(totalBytes: Long): Int {
-        val sizeBasedCount = when {
-            totalBytes <= 0L -> 1
-            totalBytes < 1L * MIB -> 1
-            totalBytes < 8L * MIB -> 2
-            totalBytes < 64L * MIB -> 4
-            totalBytes < 256L * MIB -> 8
-            else -> (totalBytes / (4L * MIB))
-                .coerceAtLeast(1L)
-                .coerceAtMost(Int.MAX_VALUE.toLong())
-                .toInt()
-        }
-        return sizeBasedCount.coerceAtMost(preferredMaximumConnections)
+        if (totalBytes <= 0L) return 1
+        val estimatedBlocks = ((totalBytes - 1L) / TARGET_BLOCK_BYTES + 1L)
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
+        return estimatedBlocks.coerceAtLeast(1).coerceAtMost(preferredMaximumConnections)
     }
 }
 

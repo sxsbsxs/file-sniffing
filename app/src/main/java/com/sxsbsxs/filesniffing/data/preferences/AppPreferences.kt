@@ -18,7 +18,7 @@ private val Context.fileSniffingDataStore: DataStore<Preferences> by preferences
 )
 
 data class DownloadTuning(
-    val connectionsPerTask: Int = 64,
+    val connectionsPerTask: Int = 16,
     val parallelDownloads: Int = 3,
     val speedLimitMegabytesPerSecond: Int = 0
 ) {
@@ -43,7 +43,7 @@ class AppPreferences @Inject constructor(
     val downloadTuning: Flow<DownloadTuning>
         get() = context.fileSniffingDataStore.data.map { preferences ->
             DownloadTuning(
-                connectionsPerTask = (preferences[connectionsPerTaskKey] ?: 64).coerceIn(1, 512),
+                connectionsPerTask = (preferences[connectionsPerTaskKey] ?: 16).coerceIn(1, 32),
                 parallelDownloads = (preferences[parallelDownloadsKey] ?: 3).coerceIn(1, 4),
                 speedLimitMegabytesPerSecond = (preferences[speedLimitKey] ?: 0)
                     .takeIf { it in SPEED_LIMIT_OPTIONS } ?: 0
@@ -52,7 +52,7 @@ class AppPreferences @Inject constructor(
 
     suspend fun updateDownloadTuning(tuning: DownloadTuning) {
         context.fileSniffingDataStore.edit { preferences ->
-            preferences[connectionsPerTaskKey] = tuning.connectionsPerTask.coerceIn(1, 512)
+            preferences[connectionsPerTaskKey] = tuning.connectionsPerTask.coerceIn(1, 32)
             preferences[parallelDownloadsKey] = tuning.parallelDownloads.coerceIn(1, 4)
             preferences[speedLimitKey] = tuning.speedLimitMegabytesPerSecond
                 .takeIf { it in SPEED_LIMIT_OPTIONS } ?: 0
