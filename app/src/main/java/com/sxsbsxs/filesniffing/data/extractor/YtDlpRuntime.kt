@@ -37,7 +37,8 @@ import kotlin.concurrent.write
  */
 @Singleton
 class YtDlpRuntime @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val niconicoCookieProvider: NiconicoCookieProvider
 ) {
     private val initializationMutex = Mutex()
     private val executableLock = ReentrantReadWriteLock()
@@ -59,8 +60,10 @@ class YtDlpRuntime @Inject constructor(
             "请输入有效的播放列表链接"
         }
         ensureInitialized()
+        val cookieFile = niconicoCookieProvider.createCookieFileIfAvailable(url)
         try {
             val request = YoutubeDLRequest(url).apply {
+                cookieFile?.let { addOption("--cookies", it.absolutePath) }
                 addOption("--flat-playlist")
                 addOption("--dump-single-json")
                 addOption("--no-warnings")
@@ -70,6 +73,8 @@ class YtDlpRuntime @Inject constructor(
             }
             val response = executeCancellable(request, UUID.randomUUID().toString())
             YtDlpInfoJsonParser.parsePlaylist(response.out)
+        } finally {
+            cookieFile?.delete()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -82,8 +87,10 @@ class YtDlpRuntime @Inject constructor(
             "请输入有效的视频链接"
         }
         ensureInitialized()
+        val cookieFile = niconicoCookieProvider.createCookieFileIfAvailable(url)
         try {
             val request = YoutubeDLRequest(url).apply {
+                cookieFile?.let { addOption("--cookies", it.absolutePath) }
                 addOption("--dump-single-json")
                 addOption("--no-playlist")
                 addOption("--no-warnings")
@@ -92,6 +99,8 @@ class YtDlpRuntime @Inject constructor(
             }
             val response = executeCancellable(request, UUID.randomUUID().toString())
             YtDlpInfoJsonParser.parse(response.out)
+        } finally {
+            cookieFile?.delete()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -125,8 +134,10 @@ class YtDlpRuntime @Inject constructor(
                 !it.name.endsWith(".part", ignoreCase = true) && it.length() > 0L }
             ?.maxByOrNull { it.lastModified() }
         if (reusableOutput != null) return@withContext reusableOutput
+        val cookieFile = niconicoCookieProvider.createCookieFileIfAvailable(url)
         try {
             val request = YoutubeDLRequest(url).apply {
+                cookieFile?.let { addOption("--cookies", it.absolutePath) }
                 addOption("--no-playlist")
                 addOption("--newline")
                 addOption("--no-mtime")
@@ -159,6 +170,8 @@ class YtDlpRuntime @Inject constructor(
             throw cancelled
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
+        } finally {
+            cookieFile?.delete()
         }
     }
 
@@ -304,6 +317,14 @@ class YtDlpRuntime @Inject constructor(
             safe.contains("Sign in to confirm", true) ||
                 safe.contains("not a bot", true) ->
                 "YouTube 要求登录或人机验证；当前版本不提供网页登录，请尝试公开可访问的视频，或稍后更新 yt-dlp"
+            safe.contains("only available for registered users", true) ->
+                "该 Niconico 视频仅限注册用户访问。请点击解析页右上角“N站登录”，在应用内登录后重新解析；若仍失败，可能需要相应会员或购买权限。"
+            safe.contains("invalid session", true) ->
+                "Niconico 登录状态已过期，请重新登录后重试。"
+            safe.contains("premium members only", true) ->
+                "该 Niconico 视频仅限 Premium 会员观看。"
+            safe.contains("channel members only", true) ->
+                "该 Niconico 视频仅限频道会员观看。"
             safe.contains("Unsupported URL", true) -> "当前 yt-dlp 版本不支持此链接"
             else -> safe
         }

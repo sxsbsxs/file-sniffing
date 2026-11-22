@@ -88,6 +88,7 @@ fun LocalFilesScreen(
     treeUri: Uri?,
     folderLabel: String,
     onChooseFolder: () -> Unit,
+    onBackToParse: () -> Unit,
     onOpenFile: (Uri, String?) -> Unit
 ) {
     val context = LocalContext.current
@@ -348,7 +349,15 @@ fun LocalFilesScreen(
                     ) {
                         Icon(Icons.Rounded.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(30.dp))
                         Spacer(Modifier.height(10.dp))
-                        Text("这个文件夹是空的", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text("当前没有下载文件", color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            "解析失败不会生成下载文件。成功下载后，文件会显示在这里。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = onBackToParse) { Text("返回解析") }
                     }
                 }
                 visibleDocuments.isEmpty() -> {

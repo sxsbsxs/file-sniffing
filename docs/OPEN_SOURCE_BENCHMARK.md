@@ -140,3 +140,16 @@ The follow-up inspection found several mismatches between the settings and the e
 - OkDownload only uses multiple byte-range blocks when the server accepts Range requests and the output stream supports seeking. Its size-aware strategy now computes a 4 MiB target block and applies a practical 1–32 connection ceiling to normal video sizes.
 
 The embedded yt-dlp update check has also moved out of ensureInitialized(): runtime initialization and extraction no longer wait for the Nightly network update. The update check is scheduled after five minutes of idle time and starts only if the executable read/write lock is free.
+
+
+## 8. Niconico account authorization — 0.9.22
+
+A screenshot test exposed that yt-dlp was being called without any Niconico session. The current yt-dlp Niconico extractor determines whether a viewer is signed in by checking the `user_session` cookie for `https://www.nicovideo.jp`. The app now provides an in-app WebView login to the official Niconico account page and exports only that cookie for yt-dlp.
+
+- The login UI does not collect or transmit the user's password. Login happens on Niconico's official page inside the app's WebView.
+- Only the `user_session` cookie is exported. Other browser cookies are not copied.
+- yt-dlp receives a temporary Netscape cookie file scoped to `.nicovideo.jp` using `--cookies`. The file is created in app-private cache and deleted after each inspect/download command.
+- Both metadata inspection and download receive the same local session. Expired-session, registered-user-only, premium-only and channel-member-only errors are translated into actionable Chinese messages.
+- The parse page gets a visible Niconico login/status action. The Files tab now explains that failed parsing creates no output file and provides a return-to-parse action.
+
+This authorization supports videos the logged-in account is entitled to view. It does not grant Premium, channel membership, PPV purchase, or region access by itself.

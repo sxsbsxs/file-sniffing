@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Build
 import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -108,6 +109,7 @@ import java.util.UUID
 import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
 import com.sxsbsxs.filesniffing.presentation.sniffing.DownloadOptionsSheet
 import com.sxsbsxs.filesniffing.data.preferences.DownloadTuning
+import com.sxsbsxs.filesniffing.data.extractor.NiconicoCookieProvider
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -165,6 +167,16 @@ private fun FileSniffingApp(sharedLink: String) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var pageUrl by rememberSaveable { mutableStateOf(sharedLink) }
     var pendingDownloadOptions by remember { mutableStateOf<List<SniffedResource>?>(null) }
+    var showNiconicoLogin by rememberSaveable { mutableStateOf(false) }
+    var niconicoLoggedIn by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        niconicoLoggedIn = NiconicoCookieProvider.hasSessionInWebView()
+    }
+
+    BackHandler(enabled = showNiconicoLogin) {
+        showNiconicoLogin = false
+    }
 
     LaunchedEffect(sharedLink) {
         if (sharedLink.isNotBlank()) {
@@ -389,10 +401,12 @@ private fun FileSniffingApp(sharedLink: String) {
             )
         },
         bottomBar = {
-            MainNavigationBar(
-                selectedTab = selectedTab,
-                onSelect = { selectedTab = it }
-            )
+            if (!showNiconicoLogin) {
+                MainNavigationBar(
+                    selectedTab = selectedTab,
+                    onSelect = { selectedTab = it }
+                )
+            }
         }
     ) { innerPadding ->
         Box(
@@ -400,7 +414,19 @@ private fun FileSniffingApp(sharedLink: String) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (selectedTab) {
+            if (showNiconicoLogin) {
+                NiconicoLoginScreen(
+                    onBack = { showNiconicoLogin = false },
+                    onLoginStateChanged = { niconicoLoggedIn = it },
+                    onDone = {
+                        niconicoLoggedIn = true
+                        showNiconicoLogin = false
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Niconico 授权已保存到本机")
+                        }
+                    }
+                )
+            } else when (selectedTab) {
                 0 -> HomeScreen(
                     pageUrl = pageUrl,
                     onUrlChange = { pageUrl = it },
@@ -424,6 +450,8 @@ private fun FileSniffingApp(sharedLink: String) {
                     resources = sniffingState.resources,
                     resultSummary = sniffingState.resultSummary,
                     errorMessage = sniffingState.errorMessage,
+                    niconicoLoggedIn = niconicoLoggedIn,
+                    onOpenNiconicoLogin = { showNiconicoLogin = true },
                     onResolve = {
                         val candidate = pageUrl.trim()
                         if (candidate.isBlank()) {
@@ -555,6 +583,7 @@ private fun FileSniffingApp(sharedLink: String) {
                     treeUri = selectedFolderUri?.let(Uri::parse),
                     folderLabel = folderLabel,
                     onChooseFolder = { folderPicker.launch(null) },
+                    onBackToParse = { selectedTab = 0 },
                     onOpenFile = { uri, mimeType ->
                         openLocalDocument(context, uri, mimeType)
                     }
@@ -638,6 +667,8 @@ private fun HomeScreen(
     resources: List<SniffedResource>,
     resultSummary: String,
     errorMessage: String?,
+    niconicoLoggedIn: Boolean,
+    onOpenNiconicoLogin: () -> Unit,
     onResolve: () -> Unit,
     onConfigureDownload: (List<SniffedResource>) -> Unit
 ) {
@@ -652,12 +683,22 @@ private fun HomeScreen(
             .padding(horizontal = 20.dp)
             .padding(top = 22.dp, bottom = 12.dp)
     ) {
-        Text(
-            "链接解析",
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 23.sp,
-            fontWeight = FontWeight.SemiBold
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "链接解析",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 23.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onOpenNiconicoLogin) {
+                Text(
+                    if (niconicoLoggedIn) "N站已登录" else "N站登录",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
         Spacer(Modifier.height(22.dp))
         UrlInputCard(
             value = pageUrl,
