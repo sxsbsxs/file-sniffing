@@ -42,7 +42,7 @@ internal object DownloadIntegrityPolicy {
             .orEmpty()
         if (detectedContainer.equals("html", ignoreCase = true) ||
             mime in alwaysInvalidMediaMimeTypes ||
-            (mime == "text/plain" && kind in setOf(ResourceKind.VIDEO, ResourceKind.AUDIO, ResourceKind.SEGMENT))
+            (mime == "text/plain" && kind in setOf(ResourceKind.VIDEO, ResourceKind.AUDIO, ResourceKind.PLAYLIST, ResourceKind.SEGMENT))
         ) {
             return "下载地址返回了网页或错误数据，而不是媒体文件；请检查链接、访问权限或 Referer"
         }
