@@ -2,12 +2,15 @@ package com.sxsbsxs.filesniffing
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.lifecycle.Observer
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import java.util.UUID
+import java.util.concurrent.Executor
 import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 
 object DownloadEngine {
@@ -71,9 +74,9 @@ object DownloadEngine {
             )
         )
 
-        val manager = WorkManager.getInstance(context.applicationContext)
-        manager.enqueue(request)
-        observeRequest(context.applicationContext, manager, request.id, onUpdate)
+        val appContext = context.applicationContext
+        val manager = WorkManager.getInstance(appContext)
+        enqueueAndObserve(appContext, manager, request, onUpdate)
     }
 
     fun retry(
@@ -145,8 +148,37 @@ object DownloadEngine {
             .remove(record.id)
             .apply()
         val manager = WorkManager.getInstance(appContext)
-        manager.enqueue(request)
-        observeRequest(appContext, manager, request.id, onUpdate)
+        enqueueAndObserve(appContext, manager, request, onUpdate)
+    }
+
+    private fun enqueueAndObserve(
+        context: Context,
+        manager: WorkManager,
+        request: androidx.work.WorkRequest,
+        onUpdate: (DownloadTaskUi) -> Unit
+    ) {
+        val queuedTask = DownloadTaskUi(
+            id = request.id.toString(),
+            fileName = request.tags.firstOrNull { it.startsWith(FILE_NAME_TAG_PREFIX) }
+                ?.removePrefix(FILE_NAME_TAG_PREFIX)
+                ?.let(Uri::decode)
+                ?: "下载任务",
+            progress = 0,
+            state = "queued",
+            detail = "已加入后台下载队列"
+        )
+        val operation = manager.enqueue(request)
+        operation.result.addListener({
+            val failure = runCatching { operation.result.get() }.exceptionOrNull()
+            if (failure != null) {
+                val cause = failure.cause ?: failure
+                val detail = "无法加入后台下载队列（${cause.javaClass.simpleName}）：${cause.message.orEmpty().take(140)}"
+                Handler(Looper.getMainLooper()).post {
+                    onUpdate(queuedTask.copy(state = "failed", progress = 0, detail = detail))
+                }
+            }
+        }, Executor { command -> command.run() })
+        observeRequest(context, manager, request.id, onUpdate)
     }
 
     private fun fileNameTag(fileName: String): String =
