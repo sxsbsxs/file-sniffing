@@ -443,6 +443,6 @@ private fun formatMediaDuration(seconds: Double): String {
     return if (hours > 0L) {
         String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, remaining)
     } else {
-        String.format(Locale.ROOT, "%d:%02d", minutes, seconds)
+        String.format(Locale.ROOT, "%d:%02d", minutes, remaining)
     }
 }
