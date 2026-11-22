@@ -1,12 +1,16 @@
 # Changelog
 
-## 0.9.10 (in progress)
+## 0.9.10
 
-- Recognize YouTube playlist URLs and request yt-dlp flat-playlist JSON; expose each valid video as an individual downloadable resource (up to 200 entries).
-- Add playlist URL and JSON parser regression tests.
-- Detect the exact Japanese Niconico country/region restriction wording shown in the user's screenshot and display the existing access restriction diagnosis.
-- Preserve sanitized root exception class/message in failed download history so APK/SVG failures can be diagnosed instead of showing only a generic failure.
-- This does not bypass Niconico regional restrictions or YouTube verification/PO Token requirements. Dynamic per-format quality selection remains incomplete.
+- Route Niconico metadata extraction and downloads through the same upstream yt-dlp Android runtime used for YouTube, relying on yt-dlp's dedicated Niconico extractor instead of the previous custom OkHttp/Media3 extraction branch.
+- Export the current WebView Chromium cookie database after flushing CookieManager, preserve domain/path/secure/expiry/HttpOnly attributes, filter to YouTube/Google and Niconico-related domains, and pass a private temporary Netscape cookie file to yt-dlp; delete the file after each operation.
+- Filter expired Chromium cookies and keep the temporary cookie file in the app-private cache directory.
+- Suppress a stale mobile-browser region banner when yt-dlp has independently returned a real video resource. The page banner alone is not treated as proof that the separate media API is region-blocked; real extractor access-denied responses are still reported.
+- Route both Niconico and YouTube downloads through yt-dlp + FFmpeg in WorkManager, and clean failed/cancelled temporary output while retaining paused partial work.
+- Keep YouTube playlist URL extraction and flat-playlist JSON support (up to 200 entries), with regression tests.
+- Preserve sanitized root exception class/message in failed download history instead of showing only a generic failure.
+- Dynamic YouTube format selection, EJS/JavaScript challenge runtime and PO Token provider integration remain incomplete; this release does not bypass service region, account, membership, PPV or DRM restrictions.
+- Increase app version to 0.9.10 (versionCode 28).
 
 ## 0.9.9
 
