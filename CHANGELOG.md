@@ -4,8 +4,8 @@
 
 - Fix a Room persistence race where the global WorkManager observer could overwrite a newly queued task's source URL with an empty value.
 - Make the Worker the single writer of durable download state; UI observers now only update the live task list.
-- Recover missing legacy retry parameters from the original WorkManager inputData, including the URL, referer, MIME type, destination and selected resource kind.
-- Add an outer Worker exception boundary so failures during task setup are reported with a sanitized cause instead of the generic "下载失败" fallback; best-effort persist the original URL and failure.
+- Persist the URL, referer, MIME type, resource kind and destination in Room before enqueuing WorkManager, so the retry source exists even if worker creation or preflight fails.
+- Add an outer Worker exception boundary so failures during task setup are reported with a sanitized cause instead of the generic "下载失败" fallback; best-effort persist the original URL and failure. Legacy rows whose URL was already erased require one re-parse because WorkInfo does not expose inputData to the UI.
 - Prevent repeated taps from enqueueing duplicate active downloads for the same source URL.
 - Add unit tests for same-URL queue deduplication.
 - Bump app version to 0.9.14 (versionCode 32).
