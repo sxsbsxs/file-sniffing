@@ -98,6 +98,10 @@ class YtDlpRuntime @Inject constructor(
         }
     }
 
+    fun cancel(processId: String) {
+        runCatching { YoutubeDL.getInstance().destroyProcessById(processId) }
+    }
+
     private fun ensureInitialized() {
         // YoutubeDL.init is synchronized and safe to call again after Application startup.
         YoutubeDL.getInstance().init(context)
