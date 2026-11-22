@@ -66,6 +66,6 @@ flowchart TD
 2. ViewModels expose observable state with Kotlin Flow.
 3. WorkManager persists job scheduling and runs downloads in a foreground worker.
 4. Room is the durable app-facing download history; OkDownload's breakpoint store is the transport-level resume metadata for direct downloads. Live WorkManager progress carries transferred bytes, total bytes and speed when known.
-5. All output files are created through the user-granted SAF tree URI.
+5. On Android 10+, downloads are published through the public MediaStore Download collection by default; a user-granted SAF tree URI is an optional override. Android 9 and earlier require a SAF destination.
 6. Adaptive streams are exported through Media3, not manually concatenated by app code.
 7. Credentials are not uploaded. The shared OkHttp network interceptor asks Android CookieManager for cookies scoped to each exact request URL, including redirected requests; cookie values are never persisted or logged.
