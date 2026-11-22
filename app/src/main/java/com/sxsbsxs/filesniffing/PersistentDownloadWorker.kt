@@ -66,7 +66,8 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 YouTubeUrlParser.extractVideoId(referer) != null -> referer
             else -> null
         }
-        val requestedExtension = requestedFileName.substringAfterLast('.', "").lowercase()
+        val requestedPath = Uri.parse(requestedUrl).lastPathSegment.orEmpty()
+        val requestedExtension = requestedPath.substringAfterLast('.', "").lowercase()
         val directMediaExtensions = setOf(
             "mp4", "m4v", "webm", "mov", "mkv", "avi", "3gp", "mpeg", "mpg",
             "mp3", "m4a", "aac", "ogg", "oga", "wav", "flac", "opus", "wma"
