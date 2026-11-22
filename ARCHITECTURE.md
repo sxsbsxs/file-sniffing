@@ -5,8 +5,9 @@
 ```mermaid
 flowchart TD
     A[Compose URL Entry] --> B[SniffingViewModel]
-    X[Future yt-dlp runtime] -.-> X1[Actual -J format metadata parser]
-    X1 -.-> I
+    B --> Y[YouTube watch page ready]
+    Y --> Y1[YtDlpRuntime: yt-dlp --dump-single-json]
+    Y1 --> I
     B --> C[WebView]
     C --> D[shouldInterceptRequest]
     C --> E[Injected JavaScript]
@@ -33,7 +34,9 @@ flowchart TD
     P --> Q[OkHttp]
     P --> V[NativeMediaProbe · C++ JNI]
     V -->|Reject HTML error payload| P
-    O -->|YouTube watch URL| W[yt-dlp + FFmpeg]\n    W --> U\n    O -->|HLS / DASH| R[Media3 DownloadHelper]
+    O -->|YouTube watch URL| W[yt-dlp + FFmpeg]\n    W --> U\n    O -->|YouTube watch URL| W[yt-dlp + FFmpeg]
+    W --> U
+    O -->|HLS / DASH| R[Media3 DownloadHelper]
     R --> R1[HLS/DASH Downloader + persistent SimpleCache]
     R1 --> S[Media3 Transformer reading cache]
     S --> T[Temporary MP4]
