@@ -3,7 +3,7 @@ package com.sxsbsxs.filesniffing
 /** Prevents a second active task for the same source URL without blocking later retries. */
 internal object DownloadQueuePolicy {
     fun isAlreadyActive(
-        sourceUrl: String,
+        sourceUrl: String, // stable URL#format selector key
         activeSessionUrls: Collection<String>,
         persistedActiveUrls: Collection<String>
     ): Boolean {
