@@ -387,6 +387,7 @@ def validate_native_probe() -> None:
             "mp3": bytes([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00]),
             "mpeg-ts": bytes(transport_stream),
             "html": b"<!doctype html><html><body>not media</body></html>",
+            "json": b'  {"error":"access denied","status":403}',
         }
         for expected, payload in cases.items():
             sample = temp / f"sample.{expected}"
