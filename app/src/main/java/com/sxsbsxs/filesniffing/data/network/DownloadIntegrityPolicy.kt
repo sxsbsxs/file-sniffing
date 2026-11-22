@@ -40,10 +40,12 @@ internal object DownloadIntegrityPolicy {
             ?.trim()
             ?.lowercase(Locale.ROOT)
             .orEmpty()
-        if (detectedContainer.equals("html", ignoreCase = true) ||
-            mime in alwaysInvalidMediaMimeTypes ||
-            (mime == "text/plain" && kind in setOf(ResourceKind.VIDEO, ResourceKind.AUDIO, ResourceKind.PLAYLIST, ResourceKind.SEGMENT))
-        ) {
+        val detectedErrorPayload = detectedContainer.equals("html", ignoreCase = true) ||
+            detectedContainer.equals("json", ignoreCase = true)
+        val unknownPlainTextMedia = mime == "text/plain" &&
+            detectedContainer.equals("unknown", ignoreCase = true) &&
+            kind in mediaKinds
+        if (detectedErrorPayload || mime in alwaysInvalidMediaMimeTypes || unknownPlainTextMedia) {
             return "下载地址返回了网页或错误数据，而不是媒体文件；请检查链接、访问权限或 Referer"
         }
         return null
