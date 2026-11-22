@@ -5,11 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.sxsbsxs.filesniffing.ResourceKind
 import com.sxsbsxs.filesniffing.NiconicoUrlParser
 import com.sxsbsxs.filesniffing.SniffedResource
+import com.sxsbsxs.filesniffing.FileNameSanitizer
 import com.sxsbsxs.filesniffing.data.local.SniffedResourceEntity
 import com.sxsbsxs.filesniffing.data.repository.SniffedResourceRepository
 import com.sxsbsxs.filesniffing.data.media.AdaptiveQualityOption
 import com.sxsbsxs.filesniffing.data.media.Media3AdaptiveProcessor
 import com.sxsbsxs.filesniffing.data.extractor.NiconicoExtractor
+import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -24,7 +27,8 @@ import kotlinx.coroutines.launch
 class SniffingViewModel @Inject constructor(
     private val resourceRepository: SniffedResourceRepository,
     private val media3AdaptiveProcessor: Media3AdaptiveProcessor,
-    private val niconicoExtractor: NiconicoExtractor
+    private val niconicoExtractor: NiconicoExtractor,
+    private val ytDlpRuntime: YtDlpRuntime
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SniffingUiState())
@@ -32,10 +36,12 @@ class SniffingViewModel @Inject constructor(
 
     private var observePageJob: Job? = null
     private var niconicoExtractionJob: Job? = null
+    private var youtubeExtractionJob: Job? = null
 
     fun beginInspection(pageUrl: String) {
         observePageJob?.cancel()
         niconicoExtractionJob?.cancel()
+        youtubeExtractionJob?.cancel()
         _uiState.value = SniffingUiState(
             activePageUrl = pageUrl,
             isPageLoading = true
@@ -90,10 +96,6 @@ class SniffingViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Resolve a Niconico watch page to the short-lived HLS manifest issued for this session.
-     * The result stays in memory; the download worker refreshes the manifest again on start/retry.
-     */
     fun extractNiconicoResource(
         pageUrl: String,
         onResult: (SniffedResource?, String?) -> Unit
@@ -124,10 +126,57 @@ class SniffingViewModel @Inject constructor(
                 throw cancelled
             } catch (error: Exception) {
                 if (NiconicoUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) == videoId) {
-                    onResult(
-                        null,
-                        error.message?.take(180)?.ifBlank { null } ?: "N站视频解析失败"
+                    onResult(null, error.message?.take(180)?.ifBlank { null } ?: "N站视频解析失败")
+                }
+            }
+        }
+    }
+
+    fun extractYouTubeResource(
+        pageUrl: String,
+        onResult: (SniffedResource?, String?) -> Unit
+    ) {
+        val videoId = YouTubeUrlParser.extractVideoId(pageUrl)
+        if (videoId == null) {
+            onResult(null, "不是有效的 YouTube 视频链接")
+            return
+        }
+        youtubeExtractionJob?.cancel()
+        youtubeExtractionJob = viewModelScope.launch {
+            try {
+                val info = ytDlpRuntime.inspect(pageUrl)
+                if (YouTubeUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) != videoId) {
+                    return@launch
+                }
+                if (info.selectableVideoFormats.isEmpty() && info.audioOnlyFormats.isEmpty()) {
+                    throw IllegalStateException("yt-dlp 没有返回可下载的视频或音频格式")
+                }
+                val safeTitle = FileNameSanitizer.sanitize(info.title, videoId)
+                val resource = SniffedResource(
+                    url = pageUrl,
+                    kind = ResourceKind.VIDEO,
+                    fileName = "$safeTitle.mp4",
+                    mimeType = "video/mp4",
+                    pageTitle = info.title,
+                    sourcePage = pageUrl
+                )
+                _uiState.update { state ->
+                    val transient = state.transientResources
+                        .filterNot { YouTubeUrlParser.extractVideoId(it.sourcePage) == videoId } + resource
+                    val visible = state.resources.filterNot {
+                        YouTubeUrlParser.extractVideoId(it.sourcePage) == videoId
+                    } + resource
+                    state.copy(
+                        transientResources = transient,
+                        resources = visible.distinctBy { it.id }
                     )
+                }
+                onResult(resource, null)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (YouTubeUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) == videoId) {
+                    onResult(null, error.message?.take(180)?.ifBlank { null } ?: "YouTube 解析失败")
                 }
             }
         }
@@ -173,6 +222,7 @@ class SniffingViewModel @Inject constructor(
     fun closeInspection() {
         observePageJob?.cancel()
         niconicoExtractionJob?.cancel()
+        youtubeExtractionJob?.cancel()
         observePageJob = null
         _uiState.value = SniffingUiState()
     }
