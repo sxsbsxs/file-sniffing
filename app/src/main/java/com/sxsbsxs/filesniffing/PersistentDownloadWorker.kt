@@ -298,6 +298,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
                                     totalBytes = totalBytes
                                 )
                             }
+                            check(copiedBytes == totalBytes) {
+                                "保存文件未写完整：已写入 $copiedBytes / $totalBytes 字节"
+                            }
                             output.flush()
                         }
                     } ?: error("无法打开 Download 输出文件")
