@@ -15,6 +15,7 @@ import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpProgressLineParser
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpProgressStagePolicy
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpProgressAggregator
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpOverallProgressPolicy
 import com.sxsbsxs.filesniffing.DownloadOutputCopyProgressPolicy
 import com.sxsbsxs.filesniffing.data.network.OkDownloadTransferEngine
 import com.sxsbsxs.filesniffing.data.network.DownloadSpeedLimiter
