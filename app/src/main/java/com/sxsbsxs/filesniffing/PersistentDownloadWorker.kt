@@ -450,7 +450,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     kind = kind,
                     mimeType = mime,
                     state = if (paused) "paused" else "cancelled",
-                    progress = if (paused) previous?.progress ?: 0 else 0,
+                    progress = if (paused) latestProgress.takeIf { it >= 0 } ?: previous?.progress ?: 0 else 0,
                     detail = if (paused) "已暂停，继续时将尝试从断点恢复" else "下载已取消，可重新下载",
                     documentUri = createdDocument?.toString()
                 )
