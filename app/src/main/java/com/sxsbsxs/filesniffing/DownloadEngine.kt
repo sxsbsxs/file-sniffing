@@ -45,7 +45,8 @@ object DownloadEngine {
                     PersistentDownloadWorker.KEY_KIND to resource.kind.name,
                     PersistentDownloadWorker.KEY_MIME to resource.mimeType,
                     PersistentDownloadWorker.KEY_REFERER to resource.sourcePage,
-                    PersistentDownloadWorker.KEY_ADAPTIVE_VIDEO_HEIGHT to (adaptiveVideoHeight ?: -1)
+                    PersistentDownloadWorker.KEY_ADAPTIVE_VIDEO_HEIGHT to (adaptiveVideoHeight ?: -1),
+                    PersistentDownloadWorker.KEY_FORMAT_SELECTOR to resource.formatSelector
                 )
             )
             .addTag(DOWNLOAD_TAG)
@@ -102,6 +103,9 @@ object DownloadEngine {
             .putString(PersistentDownloadWorker.KEY_REFERER, record.referer)
             .apply {
                 record.mimeType?.let { putString(PersistentDownloadWorker.KEY_MIME, it) }
+                record.formatSelector?.let {
+                    putString(PersistentDownloadWorker.KEY_FORMAT_SELECTOR, it)
+                }
                 putInt(PersistentDownloadWorker.KEY_ADAPTIVE_VIDEO_HEIGHT, record.adaptiveVideoHeight ?: -1)
                 (partialUri ?: record.destinationUri)
                     ?.takeIf { it.isNotBlank() }
