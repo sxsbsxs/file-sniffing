@@ -352,6 +352,9 @@ private fun FileSniffingApp(sharedLink: String) {
                     onNiconicoPageReady = { targetUrl ->
                         sniffingViewModel.extractNiconicoResource(targetUrl) { resource, error ->
                             if (resource != null) {
+                                // The extractor result must enter the same observable resource list
+                                // as WebView-discovered resources; a toast alone makes it invisible.
+                                sniffingViewModel.addResource(resource)
                                 coroutineScope.launch {
                                     snackbarHostState.showSnackbar("N站视频流已解析，可选择画质并下载")
                                 }
