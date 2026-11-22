@@ -10,7 +10,6 @@ import dagger.assisted.AssistedInject
 import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 import com.sxsbsxs.filesniffing.data.repository.DownloadRepository
 import com.sxsbsxs.filesniffing.NiconicoUrlParser
-import com.sxsbsxs.filesniffing.data.extractor.NiconicoExtractor
 import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import com.sxsbsxs.filesniffing.data.network.OkDownloadTransferEngine
@@ -40,7 +39,6 @@ class PersistentDownloadWorker @AssistedInject constructor(
     private val okDownloadTransferEngine: OkDownloadTransferEngine,
     private val media3AdaptiveProcessor: Media3AdaptiveProcessor,
     private val downloadRepository: DownloadRepository,
-    private val niconicoExtractor: NiconicoExtractor,
     private val ytDlpRuntime: YtDlpRuntime,
     private val appPreferences: AppPreferences,
     private val downloadSpeedLimiter: DownloadSpeedLimiter
@@ -68,8 +66,10 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 YouTubeUrlParser.extractVideoId(referer) != null -> referer
             else -> null
         }
+        // Both providers use the same upstream yt-dlp extraction path as Seal.
+        val ytDlpPageUrl = niconicoPageUrl ?: youtubePageUrl
 
-        if ((requestedUrl.isBlank() && niconicoPageUrl == null && youtubePageUrl == null) ||
+        if ((requestedUrl.isBlank() && ytDlpPageUrl == null) ||
             requestedFileName.isBlank()
         ) {
             return@withContext Result.failure(workDataOf(KEY_ERROR to "下载任务参数不完整"))
@@ -87,7 +87,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
             pageTitle = "",
             sourcePage = referer
         )
-        val recordSourceUrl = niconicoPageUrl ?: youtubePageUrl ?: requestedUrl
+        val recordSourceUrl = ytDlpPageUrl ?: requestedUrl
         val tree = treeValue.takeIf { it.isNotBlank() }?.let(Uri::parse)
         val adaptiveVideoHeight = inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
         val tuning = appPreferences.downloadTuning.first()
@@ -113,11 +113,12 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 documentUri = null
             )
 
-            if (youtubePageUrl != null) {
-                publishProgressAsync(-1, "正在通过 yt-dlp 获取 YouTube 媒体流", fileName)
+            if (ytDlpPageUrl != null) {
+                val providerName = if (niconicoPageUrl != null) "N站" else "YouTube"
+                publishProgressAsync(-1, "正在通过 yt-dlp 提取 $providerName 媒体流", fileName)
                 val tempDirectory = java.io.File(applicationContext.cacheDir, "yt-dlp-${id}")
                 val downloadedFile = ytDlpRuntime.download(
-                    url = youtubePageUrl,
+                    url = ytDlpPageUrl,
                     outputDirectory = tempDirectory,
                     processId = id.toString()
                 ) { progress, _, line ->
@@ -163,37 +164,15 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     mimeType = outputMime,
                     state = "completed",
                     progress = 100,
-                    detail = "yt-dlp 下载完成，音视频合并已由 FFmpeg 处理",
+                    detail = "yt-dlp 下载完成，FFmpeg 已处理音视频合并",
                     documentUri = destination.toString()
                 )
                 return@withContext Result.success(
                     workDataOf(
                         KEY_FILE_NAME to finalName,
                         KEY_FILE_URI to destination.toString(),
-                        KEY_DETAIL to "yt-dlp 下载完成"
+                        KEY_DETAIL to "$providerName 下载完成"
                     )
-                )
-            }
-
-            if (niconicoPageUrl != null) {
-                publishProgressAsync(-1, "正在向 N站刷新本次播放授权", fileName)
-                resource = niconicoExtractor.extract(niconicoPageUrl)
-                url = resource.url
-                fileName = resource.fileName
-                kind = resource.kind
-                mime = resource.mimeType
-                isAdaptiveManifest = kind == ResourceKind.PLAYLIST &&
-                    fileName.endsWith(".m3u8", ignoreCase = true)
-                require(isAdaptiveManifest) { "N站没有返回可下载的 HLS 视频流" }
-                persistRecord(
-                    fileName = fileName,
-                    sourceUrl = recordSourceUrl,
-                    kind = kind,
-                    mimeType = mime,
-                    state = "downloading",
-                    progress = -1,
-                    detail = "N站视频流已刷新，正在分析画质",
-                    documentUri = null
                 )
             }
 
@@ -347,7 +326,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 )
             )
         } catch (cancelled: CancellationException) {
-            if (youtubePageUrl != null) ytDlpRuntime.cancel(id.toString())
+            if (ytDlpPageUrl != null) ytDlpRuntime.cancel(id.toString())
             val paused = isPauseRequested()
             withContext(NonCancellable) {
                 if (!paused && isAdaptiveManifest) {
