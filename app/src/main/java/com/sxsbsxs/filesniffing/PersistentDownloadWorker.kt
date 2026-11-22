@@ -400,7 +400,27 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 responseMimeType = responseMime,
                 detectedContainer = detectedContainer
             )
-            check(integrityFailure == null) { requireNotNull(integrityFailure) }
+            if (integrityFailure != null) {
+                val responseMimeBase = responseMime.substringBefore(';').trim().lowercase()
+                val invalidErrorPayload = transferResult.downloadedBytes <= 0L ||
+                    detectedContainer.equals("html", ignoreCase = true) ||
+                    responseMimeBase in setOf(
+                        "text/html",
+                        "application/xhtml+xml",
+                        "application/json",
+                        "text/json",
+                        "application/problem+json",
+                        "application/xml",
+                        "text/xml"
+                    ) ||
+                    (responseMimeBase == "text/plain" &&
+                        kind in setOf(ResourceKind.VIDEO, ResourceKind.AUDIO, ResourceKind.PLAYLIST, ResourceKind.SEGMENT))
+                if (invalidErrorPayload) {
+                    DownloadOutput.delete(applicationContext, destinationDocument)
+                    createdDocument = null
+                }
+                error(integrityFailure)
+            }
             DownloadOutput.markComplete(applicationContext, destinationDocument)
             val completedDetail = if (detectedContainer == "unknown") {
                 if (tree == null) "已保存到 Download 文件夹" else "已保存到所选文件夹"
