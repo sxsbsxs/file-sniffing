@@ -235,24 +235,25 @@ fun DownloadOptionsSheet(
                             FormatChoiceRow(
                                 selected = selectedVideoUsesEmbeddedAudio && selectedAudioId.isBlank(),
                                 title = "使用视频自带音轨",
-                                subtitle = video.codecLabel?.let { "内嵌 · " + it } ?: "不额外下载音轨",
+                                subtitle = video.codecLabel?.let { "内嵌 · " + it } ?: "此视频格式已包含音频",
                                 onClick = {
                                     selectedVideoUsesEmbeddedAudio = true
                                     selectedAudioId = ""
                                 }
                             )
-                        }
-                        audioChoices.forEach { choice ->
-                            val audioId = choice.audioFormatId ?: choice.formatSelector.orEmpty()
-                            FormatChoiceRow(
-                                selected = !selectedVideoUsesEmbeddedAudio && selectedAudioId == audioId,
-                                title = choice.qualityLabel ?: "音频格式",
-                                subtitle = buildFormatDetails(choice),
-                                onClick = {
-                                    selectedVideoUsesEmbeddedAudio = false
-                                    selectedAudioId = audioId
-                                }
-                            )
+                        } else {
+                            audioChoices.forEach { choice ->
+                                val audioId = choice.audioFormatId ?: choice.formatSelector.orEmpty()
+                                FormatChoiceRow(
+                                    selected = !selectedVideoUsesEmbeddedAudio && selectedAudioId == audioId,
+                                    title = choice.qualityLabel ?: "音频格式",
+                                    subtitle = buildFormatDetails(choice),
+                                    onClick = {
+                                        selectedVideoUsesEmbeddedAudio = false
+                                        selectedAudioId = audioId
+                                    }
+                                )
+                            }
                         }
                         if (!video.hasEmbeddedAudio && selectedAudioId.isBlank()) {
                             Text(
