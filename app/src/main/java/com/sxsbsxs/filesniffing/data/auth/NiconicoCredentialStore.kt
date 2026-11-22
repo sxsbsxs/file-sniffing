@@ -121,16 +121,16 @@ internal object NiconicoNetrcFormatter {
     fun format(username: String, password: String): String {
         validate(username)
         validate(password)
-        return "machine niconico login ${quote(username)} password ${quote(password)}\n"
+        return "machine niconico login " + quote(username) + " password " + quote(password) + "\n"
     }
 
     fun validate(value: String) {
         require(value.isNotEmpty()) { "账号或密码不能为空" }
-        require(value.none { it == '\\r' || it == '\\n' || it.code < 0x20 || it.code == 0x7f }) {
+        require(value.none { it == '\r' || it == '\n' || it.code < 0x20 || it.code == 0x7f }) {
             "账号或密码包含不支持的控制字符"
         }
     }
 
     private fun quote(value: String): String =
-        "\"\u0024{value.replace("\\\\", "\\\\\\\\").replace("\"", "\\\\\"")}\""
+        "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }
