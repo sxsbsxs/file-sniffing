@@ -56,8 +56,23 @@ object DownloadOutput {
 
     fun markComplete(context: Context, documentUri: Uri) {
         if (!isMediaStoreDownload(documentUri) || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val resolver = context.contentResolver
         val values = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-        context.contentResolver.update(documentUri, values, null, null)
+        val updated = resolver.update(documentUri, values, null, null)
+        if (updated == 0) {
+            val stillPending = resolver.query(
+                documentUri,
+                arrayOf(MediaStore.MediaColumns.IS_PENDING),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getInt(0) == 1 else null
+            }
+            check(stillPending == false) {
+                "文件已下载，但无法发布到 Download 文件夹；请检查存储权限或空间"
+            }
+        }
     }
 
     fun delete(context: Context, documentUri: Uri) {
