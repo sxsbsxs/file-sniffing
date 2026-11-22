@@ -10,6 +10,7 @@
 - Extend the native C++ probe to identify JSON error bodies even when they arrive as application/octet-stream; trust a recognized MP4/WebM/audio signature over an incorrect text/plain MIME header.
 - Delete clearly invalid HTTP error payload files instead of offering them as resumable media.
 - Verify MediaStore pending-to-visible publication; report failure and clean up the output if the file cannot be published. Apply the same cleanup rule to Media3 exports.
+- Verify final yt-dlp/Media3 file-copy byte counts before publication; Media3 export also requires a recognized MP4 file signature.
 - Persist the latest transfer progress and byte counters in Room when a task pauses, rather than retaining only the last database snapshot.
 - Persist retry attempts before WorkManager enqueue and replace the old paused/failed row atomically; do not leave an old paused row blocking all future downloads.
 - Persist Worker input-validation failures instead of returning a failed WorkManager result while leaving the Room row queued. Observe the asynchronous WorkManager enqueue result; enqueue failures become failed task rows, and successful requests attach their LiveData observer on the main thread.
