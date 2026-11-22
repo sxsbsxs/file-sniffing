@@ -5,7 +5,6 @@ import com.liulishuo.okdownload.OkDownload
 import com.liulishuo.okdownload.core.dispatcher.DownloadDispatcher
 import com.liulishuo.okdownload.core.connection.DownloadOkHttp3Connection
 import com.sxsbsxs.filesniffing.data.network.SizeAwareDownloadStrategy
-import com.sxsbsxs.filesniffing.data.network.WebViewCookieInterceptor
 import com.sxsbsxs.filesniffing.data.network.DownloadSpeedLimiter
 import dagger.Module
 import dagger.Provides
@@ -31,8 +30,6 @@ object NetworkModule {
             .followRedirects(true)
             .followSslRedirects(true)
             .retryOnConnectionFailure(true)
-            // Apply the WebView session to every HTTP exchange, including redirects.
-            .addNetworkInterceptor(WebViewCookieInterceptor())
             .addNetworkInterceptor(downloadSpeedLimiter)
             .build()
 
