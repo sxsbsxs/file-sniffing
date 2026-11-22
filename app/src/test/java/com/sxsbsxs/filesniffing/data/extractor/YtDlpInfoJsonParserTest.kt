@@ -14,6 +14,7 @@ class YtDlpInfoJsonParserTest {
             """
             {
               "title": "Example playlist",
+              "extractor_key": "YoutubeTab",
               "entries": [
                 {"id":"dQw4w9WgXcQ","title":"First video"},
                 {"id":"9bZkp7q19f0","title":"Second video","url":"https://www.youtube.com/watch?v=9bZkp7q19f0"},
@@ -24,13 +25,61 @@ class YtDlpInfoJsonParserTest {
             """.trimIndent()
         )
         assertEquals("Example playlist", playlist.title)
-        assertEquals(listOf("dQw4w9WgXcQ", "9bZkp7q19f0"), playlist.entries.map { it.videoId })
+        assertEquals(listOf("dQw4w9WgXcQ", "9bZkp7q19f0"), playlist.entries.map { it.entryId })
         assertEquals(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             playlist.entries.first().webpageUrl
         )
     }
 
+    @Test
+    fun parsesGenericPlaylistOnlyWhenExtractorReturnsRealPageUrls() {
+        val playlist = YtDlpInfoJsonParser.parsePlaylist(
+            """
+            {
+              "title": "Generic series",
+              "extractor_key": "NiconicoPlaylist",
+              "entries": [
+                {"id":"sm12345678","title":"Episode 1","webpage_url":"https://www.nicovideo.jp/watch/sm12345678"},
+                {"id":"episode-two","title":"Episode 2","url":"https://video.example/watch/episode-two"},
+                {"id":"missing-url","title":"No URL"}
+              ]
+            }
+            """.trimIndent()
+        )
+
+        assertEquals("Generic series", playlist.title)
+        assertEquals(listOf("sm12345678", "episode-two"), playlist.entries.map { it.entryId })
+        assertEquals(
+            listOf(
+                "https://www.nicovideo.jp/watch/sm12345678",
+                "https://video.example/watch/episode-two"
+            ),
+            playlist.entries.map { it.webpageUrl }
+        )
+    }
+
+    @Test
+    fun rejectsNonPlaylistJsonAndUnsafeEntryUrls() {
+        assertThrows(IllegalArgumentException::class.java) {
+            YtDlpInfoJsonParser.parsePlaylist(
+                """{"title":"No entries","extractor_key":"Example"}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            YtDlpInfoJsonParser.parsePlaylist(
+                """
+                {
+                  "title":"Unsafe",
+                  "extractor_key":"Example",
+                  "entries":[
+                    {"id":"one","title":"Unsafe URL","webpage_url":"javascript:alert(1)"}
+                  ]
+                }
+                """.trimIndent()
+            )
+        }
+    }
     @Test
     fun rejectsEmptyPlaylistResults() {
         assertThrows(IllegalArgumentException::class.java) {
