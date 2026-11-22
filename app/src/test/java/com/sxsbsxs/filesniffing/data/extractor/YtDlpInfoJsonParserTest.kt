@@ -9,6 +9,36 @@ import org.junit.Test
 class YtDlpInfoJsonParserTest {
 
     @Test
+    fun parsesFlatPlaylistEntriesWithoutInventingVideoIds() {
+        val playlist = YtDlpInfoJsonParser.parsePlaylist(
+            """
+            {
+              "title": "Example playlist",
+              "entries": [
+                {"id":"dQw4w9WgXcQ","title":"First video"},
+                {"id":"9bZkp7q19f0","title":"Second video","url":"https://www.youtube.com/watch?v=9bZkp7q19f0"},
+                {"id":"invalid","title":"Bad entry"},
+                null
+              ]
+            }
+            """.trimIndent()
+        )
+        assertEquals("Example playlist", playlist.title)
+        assertEquals(listOf("dQw4w9WgXcQ", "9bZkp7q19f0"), playlist.entries.map { it.videoId })
+        assertEquals(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            playlist.entries.first().webpageUrl
+        )
+    }
+
+    @Test
+    fun rejectsEmptyPlaylistResults() {
+        assertThrows(IllegalArgumentException::class.java) {
+            YtDlpInfoJsonParser.parsePlaylist("""{"title":"Empty","entries":[]}""")
+        }
+    }
+
+    @Test
     fun readsOnlyActualFormatsAndPairsVideoOnlyWithAnActualAudioFormat() {
         val info = YtDlpInfoJsonParser.parse(singleVideoJson)
 
