@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.10 (in progress)
+
+- Recognize YouTube playlist URLs and request yt-dlp flat-playlist JSON; expose each valid video as an individual downloadable resource (up to 200 entries).
+- Add playlist URL and JSON parser regression tests.
+- Detect the exact Japanese Niconico country/region restriction wording shown in the user's screenshot and display the existing access restriction diagnosis.
+- Preserve sanitized root exception class/message in failed download history so APK/SVG failures can be diagnosed instead of showing only a generic failure.
+- This does not bypass Niconico regional restrictions or YouTube verification/PO Token requirements. Dynamic per-format quality selection remains incomplete.
+
 ## 0.9.9
 
 - Integrated Seal's upstream `youtubedl-android` runtime (0.17.3) and FFmpeg instead of relying on the previous metadata-only YouTube parser.
