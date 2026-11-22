@@ -176,27 +176,55 @@ object DownloadEngine {
         liveData.observeForever(observer)
     }
 
-    fun pause(context: Context, taskId: String) {
+    fun pause(
+        context: Context,
+        taskId: String,
+        onPaused: () -> Unit = {}
+    ) {
         val appContext = context.applicationContext
+        val manager = WorkManager.getInstance(appContext)
+        observeCancellation(manager, taskId, onPaused)
         runCatching {
             appContext.getSharedPreferences(PAUSE_REQUESTS_PREF, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(taskId, true)
                 .apply()
-            WorkManager.getInstance(appContext).cancelWorkById(UUID.fromString(taskId))
+            manager.cancelWorkById(UUID.fromString(taskId))
         }
     }
 
-    fun cancel(context: Context, taskId: String) {
+    fun cancel(
+        context: Context,
+        taskId: String,
+        onCancelled: () -> Unit = {}
+    ) {
+        val appContext = context.applicationContext
+        val manager = WorkManager.getInstance(appContext)
+        observeCancellation(manager, taskId, onCancelled)
         runCatching {
-            val appContext = context.applicationContext
             appContext.getSharedPreferences(PAUSE_REQUESTS_PREF, Context.MODE_PRIVATE)
                 .edit()
                 .remove(taskId)
                 .apply()
-            WorkManager.getInstance(appContext)
-                .cancelWorkById(UUID.fromString(taskId))
+            manager.cancelWorkById(UUID.fromString(taskId))
         }
+    }
+
+    private fun observeCancellation(
+        manager: WorkManager,
+        taskId: String,
+        onCancelled: () -> Unit
+    ) {
+        val id = runCatching { UUID.fromString(taskId) }.getOrNull() ?: return
+        val liveData = manager.getWorkInfoByIdLiveData(id)
+        val observer = object : Observer<WorkInfo?> {
+            override fun onChanged(info: WorkInfo?) {
+                if (info == null || !info.state.isFinished) return
+                liveData.removeObserver(this)
+                if (info.state == WorkInfo.State.CANCELLED) onCancelled()
+            }
+        }
+        liveData.observeForever(observer)
     }
 
     fun observeAll(context: Context, onUpdate: (DownloadTaskUi) -> Unit): () -> Unit {
