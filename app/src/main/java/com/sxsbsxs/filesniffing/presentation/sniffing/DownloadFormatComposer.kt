@@ -36,7 +36,7 @@ internal object DownloadFormatComposer {
         val audioId = selectedAudio.audioFormatId
             ?: selectedAudio.formatSelector
             ?: return null
-        if (!safeFormatId.matches(audioId) || selectedAudio.hasEmbeddedAudio.not()) return null
+        if (!safeFormatId.matches(audioId)) return null
 
         val estimatedSize = if (
             video.fileSizeBytes != null && selectedAudio.fileSizeBytes != null
