@@ -277,11 +277,11 @@ private fun FileSniffingApp(sharedLink: String) {
 
     val enqueueDownload: (SniffedResource) -> Unit = enqueue@{ resource ->
         val alreadyActive = DownloadQueuePolicy.isAlreadyActive(
-            sourceUrl = resource.url,
+            sourceUrl = resource.downloadKey,
             activeSessionUrls = activeDownloadUrls.values,
             persistedActiveUrls = storedDownloadHistory
                 .filter { it.state == "queued" || it.state == "downloading" }
-                .map { it.sourceUrl }
+                .map { "${it.sourceUrl}#${it.formatSelector ?: it.resourceKind}" }
         )
         if (alreadyActive) {
             coroutineScope.launch { snackbarHostState.showSnackbar("相同链接已在下载队列中") }
@@ -305,7 +305,7 @@ private fun FileSniffingApp(sharedLink: String) {
             }
         } else {
             val taskId = UUID.randomUUID()
-            activeDownloadUrls[taskId.toString()] = resource.url
+            activeDownloadUrls[taskId.toString()] = resource.downloadKey
             coroutineScope.launch {
                 try {
                     // Commit the retry source before enqueue, so a fast Worker cannot race this write.
@@ -324,7 +324,7 @@ private fun FileSniffingApp(sharedLink: String) {
                         if (index < 0) downloadTasks.add(0, task)
                         else downloadTasks[index] = task
                         if (task.state == "queued" || task.state == "downloading") {
-                            activeDownloadUrls[task.id] = resource.url
+                            activeDownloadUrls[task.id] = resource.downloadKey
                         } else {
                             activeDownloadUrls.remove(task.id)
                         }
