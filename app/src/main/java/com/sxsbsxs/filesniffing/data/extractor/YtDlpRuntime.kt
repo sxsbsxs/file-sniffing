@@ -104,7 +104,10 @@ class YtDlpRuntime @Inject constructor(
                 addOption("--newline")
                 addOption("--no-mtime")
                 addOption("--continue")
-                addOption("-f", if (audioOnly) "bestaudio/best" else formatSelector)
+                val effectiveFormat = if (
+                    audioOnly && formatSelector == "bv*+ba/b"
+                ) "bestaudio/best" else formatSelector
+                addOption("-f", effectiveFormat)
                 if (audioOnly) {
                     addOption("-x")
                     addOption("--audio-format", "mp3")
