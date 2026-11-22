@@ -113,18 +113,23 @@ class DownloadCenterViewModel @Inject constructor(
         partialUri: String?
     ) {
         val now = System.currentTimeMillis()
-        repository.save(
-            previous.copy(
-                id = taskId.toString(),
-                state = "queued",
-                progress = 0,
-                detail = "已重新加入后台下载队列",
-                destinationUri = partialUri?.takeIf { it.isNotBlank() } ?: previous.destinationUri,
-                createdAtMillis = now,
-                updatedAtMillis = now,
-                speedBytesPerSecond = -1L
-            )
+        val superseded = previous.copy(
+            state = "cancelled",
+            detail = "已由新的继续下载任务替代",
+            speedBytesPerSecond = -1L,
+            updatedAtMillis = now
         )
+        val retry = previous.copy(
+            id = taskId.toString(),
+            state = "queued",
+            progress = 0,
+            detail = "已重新加入后台下载队列",
+            destinationUri = partialUri?.takeIf { it.isNotBlank() } ?: previous.destinationUri,
+            createdAtMillis = now,
+            updatedAtMillis = now,
+            speedBytesPerSecond = -1L
+        )
+        repository.replaceForRetry(superseded, retry)
     }
 
     suspend fun updateTaskState(
