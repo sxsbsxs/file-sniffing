@@ -30,6 +30,8 @@ import androidx.work.workDataOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 
@@ -259,16 +261,41 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 )
                 createdDocument = destination
                 try {
+                    val totalBytes = downloadedFile.length()
                     applicationContext.contentResolver.openOutputStream(destination, "w")?.use { output ->
-                        downloadedFile.inputStream().use { input -> input.copyTo(output) }
+                        downloadedFile.inputStream().use { input ->
+                            val buffer = ByteArray(128 * 1024)
+                            var copiedBytes = 0L
+                            while (true) {
+                                currentCoroutineContext().ensureActive()
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                output.write(buffer, 0, count)
+                                copiedBytes += count
+                                val copyProgress = if (totalBytes > 0L) {
+                                    (90 + (copiedBytes * 10.0 / totalBytes).toInt()).coerceIn(90, 99)
+                                } else {
+                                    -1
+                                }
+                                publishProgressAsync(
+                                    copyProgress,
+                                    "正在保存到 Download：$copiedBytes / $totalBytes 字节",
+                                    finalName,
+                                    downloadedBytes = copiedBytes,
+                                    totalBytes = totalBytes
+                                )
+                            }
+                            output.flush()
+                        }
                     } ?: error("无法打开 Download 输出文件")
                     DownloadOutput.markComplete(applicationContext, destination)
                 } catch (copyError: Exception) {
                     DownloadOutput.delete(applicationContext, destination)
                     throw copyError
-                } finally {
-                    tempDirectory.deleteRecursively()
                 }
+                // Keep a completed private copy until the public/SAF destination is fully
+                // written and published. A pause or process death during copy can reuse it.
+                tempDirectory.deleteRecursively()
                 persistRecord(
                     fileName = finalName,
                     sourceUrl = recordSourceUrl,
