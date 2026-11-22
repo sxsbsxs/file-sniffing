@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.9
+
+- Integrated Seal's upstream `youtubedl-android` runtime (0.17.3) and FFmpeg instead of relying on the previous metadata-only YouTube parser.
+- YouTube watch pages now trigger a real yt-dlp `--dump-single-json` inspection; only videos with actual downloadable video/audio formats are exposed as resources.
+- YouTube downloads now run through yt-dlp in the WorkManager worker, with FFmpeg muxing and output to MediaStore Download or the selected SAF folder.
+- WebView YouTube cookies are exported to a temporary Netscape cookie file for the yt-dlp process and deleted afterward; cookie values and signed media URLs are not stored in Room or logged.
+- Forward the current Niconico WebView cookie to both watch and DMS access-right API calls; WebView and OkHttp cookie stores are not assumed to be shared.
+- Regional, Premium, member-only and PPV restrictions remain enforced; no geo or account entitlement bypass is attempted.
+- Dynamic YouTube format selection, EJS/JavaScript runtime and PO Token provider integration remain follow-up work; bot-check protected videos may still fail.
+- Increased app version to 0.9.9 (versionCode 27).
+
 ## 0.9.8
 
 - Increased the configurable direct HTTP byte-range connection ceiling from 16 to 512, with presets for 1/2/4/8/16/32/64/128/256/512 and a 64-connection default for very large files.
