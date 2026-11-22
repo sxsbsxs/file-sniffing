@@ -216,6 +216,11 @@ private fun FileSniffingApp(sharedLink: String) {
             val index = downloadTasks.indexOfFirst { it.id == task.id }
             if (index < 0) downloadTasks.add(0, task)
             else downloadTasks[index] = task
+            if (task.state in setOf("queued", "paused", "cancelled", "completed", "failed")) {
+                coroutineScope.launch {
+                    downloadCenterViewModel.reconcileWorkManagerTask(task)
+                }
+            }
         }
         onDispose { removeObserver() }
     }
