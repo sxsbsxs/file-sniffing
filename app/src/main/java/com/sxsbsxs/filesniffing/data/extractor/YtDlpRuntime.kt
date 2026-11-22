@@ -202,6 +202,7 @@ class YtDlpRuntime @Inject constructor(
                         } else {
                             0L
                         }
+                        if (expiry > 0L && expiry <= System.currentTimeMillis() / 1_000L) continue
                         val httpOnly = httpOnlyIndex >= 0 && cursor.getLong(httpOnlyIndex) != 0L
                         val outputDomain = if (httpOnly) "#HttpOnly_$domain" else domain
                         val includeSubdomains = if (domain.startsWith(".")) "TRUE" else "FALSE"
@@ -241,7 +242,7 @@ class YtDlpRuntime @Inject constructor(
                         name.any { it.isWhitespace() } ||
                         value.any { it == '\t' || it == '\r' || it == '\n' }
                     ) null else {
-                        "$domain\\tTRUE\\t/\\tTRUE\\t0\\t$name\\t$value"
+                        "$domain\tTRUE\t/\tTRUE\t0\t$name\t$value"
                     }
                 }
         }.distinct()
