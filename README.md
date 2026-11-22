@@ -2,7 +2,7 @@
 
 File Sniffing is an Android link resolver and download manager. It no longer contains an in-app browser or webpage-sniffing screen.
 
-Current app version: 0.9.17
+Current app version: 0.9.18
 
 ## How it works
 
@@ -41,11 +41,11 @@ The app does not open supplied URLs in a WebView, inject scripts into pages, sca
 - Direct media/file URLs are identified separately and go straight to download rather than showing a fake quality picker.
 - Audio-only output through yt-dlp and FFmpeg; chosen format IDs are preserved when retrying a failed task.
 - Public Download folder by default on Android 10+; optional SAF destination override. Android 9 and earlier require a chosen SAF directory.
-- Persistent download queue, Worker-owned task history, direct-file pause/resume, retry with source metadata saved before enqueue and local file browsing.
-- Active URL + format deduplication prevents accidental double-tap enqueue of the same selection while allowing different qualities of the same video.
+- Persistent download queue, Worker-owned task history, Room state reconciliation after app restart, direct-file pause/resume and retry with source metadata saved before enqueue. yt-dlp pause/retry reuses a stable private session and waits for the previous process to exit before starting the next attempt.
+- Active URL + format deduplication prevents accidental double-tap enqueue of the same selection while allowing different qualities of the same video. Niconico tasks use a canonical watch URL rather than a changing signed CDN URL.
 - Download Center supports search and sorting by recent, filename and progress.
 
-## Important limits
+## Reliability checks\n\n- Direct HTTP output is checked for empty responses, known byte-count truncation and common HTML/JSON/XML error payloads before it is marked complete.\n- yt-dlp output is checked before it is published; incomplete temporary work is retained only for resumable sessions.\n- MediaStore publication errors are surfaced instead of silently treating an unpublished pending file as complete.\n- Pause/cancel states are confirmed against WorkManager, and durable task history is reconciled when the app starts again.\n\n## Important limits
 
 - The app no longer provides a browser. Users paste or share a link; the app does not navigate to a login page or scrape visible page content.
 - The yt-dlp executable is checked against the Nightly channel at app startup and then weekly, matching Seal's updater strategy. When offline or an update fails, the bundled executable remains available and the updater retries after a six-hour cooldown.
