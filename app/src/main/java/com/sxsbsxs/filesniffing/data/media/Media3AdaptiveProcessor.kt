@@ -195,11 +195,11 @@ class Media3AdaptiveProcessor @Inject constructor(
                         sink.flush()
                     }
                 }
+                DownloadOutput.markComplete(context, destination)
             } catch (error: Exception) {
                 DownloadOutput.delete(context, destination)
                 throw error
             }
-            DownloadOutput.markComplete(context, destination)
             onProgress(100, "Media3 已导出 MP4")
             exportCompleted = true
             Media3ExportResult(destination, outputName)
