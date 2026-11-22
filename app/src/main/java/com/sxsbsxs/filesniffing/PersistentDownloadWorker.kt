@@ -326,8 +326,15 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 )
             )
         } catch (cancelled: CancellationException) {
-            if (ytDlpPageUrl != null) ytDlpRuntime.cancel(id.toString())
             val paused = isPauseRequested()
+            if (ytDlpPageUrl != null) {
+                ytDlpRuntime.cancel(id.toString())
+                if (!paused) {
+                    runCatching {
+                        java.io.File(applicationContext.cacheDir, "yt-dlp-${id}").deleteRecursively()
+                    }
+                }
+            }
             withContext(NonCancellable) {
                 if (!paused && isAdaptiveManifest) {
                     runCatching {
@@ -352,6 +359,11 @@ class PersistentDownloadWorker @AssistedInject constructor(
             }
             throw cancelled
         } catch (error: Exception) {
+            if (ytDlpPageUrl != null) {
+                runCatching {
+                    java.io.File(applicationContext.cacheDir, "yt-dlp-${id}").deleteRecursively()
+                }
+            }
             var rootCause: Throwable = error
             while (rootCause.cause != null) {
                 rootCause = rootCause.cause!!
