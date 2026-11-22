@@ -1,6 +1,9 @@
 package com.sxsbsxs.filesniffing.data.extractor
 
 internal object YtDlpProgressStagePolicy {
+    private val completedDownloadLine = Regex(
+        """(?i)(?:\\[download\\]\\s*100(?:\\.0+)?%|\\(100(?:\\.0+)?%\\))"""
+    )
     private val postProcessingMarkers = listOf(
         "[merger]",
         "merging formats",
@@ -15,6 +18,7 @@ internal object YtDlpProgressStagePolicy {
 
     fun isPostProcessing(progress: Float, line: String): Boolean {
         if (progress.isFinite() && progress >= 99.9f) return true
+        if (completedDownloadLine.containsMatchIn(line)) return true
         val normalized = line.lowercase()
         return postProcessingMarkers.any(normalized::contains)
     }
