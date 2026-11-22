@@ -28,9 +28,11 @@ object DownloadEngine {
     ) {
         // Niconico HLS URLs are short-lived. Queue only the stable watch URL;
         // PersistentDownloadWorker resolves a fresh manifest when the task actually starts.
-        val niconicoWatchUrl = resource.sourcePage.takeIf {
-            resource.kind == ResourceKind.PLAYLIST &&
-                NiconicoUrlParser.extractVideoId(it) != null
+        val niconicoWatchUrl = if (resource.kind == ResourceKind.PLAYLIST) {
+            NiconicoUrlParser.extractVideoId(resource.sourcePage)
+                ?.let(NiconicoUrlParser::canonicalWatchUrl)
+        } else {
+            null
         }
         val workerUrl = niconicoWatchUrl ?: resource.url
 
