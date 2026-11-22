@@ -373,8 +373,11 @@ class PersistentDownloadWorker @AssistedInject constructor(
             }
             throw cancelled
         } catch (error: Exception) {
-            val root = generateSequence(error) { it.cause }.last()
-            val rawDetail = root.message?.takeIf { it.isNotBlank() }
+            var rootCause: Throwable = error
+            while (rootCause.cause != null) {
+                rootCause = rootCause.cause!!
+            }
+            val rawDetail = rootCause.message?.takeIf { it.isNotBlank() }
                 ?: error.message?.takeIf { it.isNotBlank() }
                 ?: "没有返回错误描述"
             val safeDetail = rawDetail
@@ -383,7 +386,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 }
                 .replace(Regex("https?://[^\\s]+"), "[URL 已隐藏]")
                 .take(220)
-            val detail = "下载失败（${root.javaClass.simpleName}）：$safeDetail"
+            val detail = "下载失败（${rootCause.javaClass.simpleName}）：$safeDetail"
             persistRecord(
                 fileName = fileName,
                 sourceUrl = recordSourceUrl,
