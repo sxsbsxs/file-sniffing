@@ -15,6 +15,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
@@ -116,19 +119,52 @@ class YtDlpRuntime @Inject constructor(
                 }
                 addOption("-o", File(outputDirectory, "$outputPrefix.%(ext)s").absolutePath)
             }
-            executableLock.read {
-                YoutubeDL.getInstance().execute(request, processId) { progress, eta, line ->
-                    onProgress?.invoke(progress, eta, line.take(240))
+            suspendCancellableCoroutine { continuation ->
+                val executionThread = Thread({
+                    try {
+                        if (!continuation.isActive) return@Thread
+                        executableLock.read {
+                            YoutubeDL.getInstance().execute(request, processId) { progress, eta, line ->
+                                onProgress?.invoke(progress, eta, line.take(240))
+                            }
+                        }
+                        val outputFile = outputDirectory.listFiles()
+                            ?.filter { it.isFile && it.name.startsWith("$outputPrefix.") &&
+                                !it.name.endsWith(".part", ignoreCase = true) && it.length() > 0L }
+                            ?.maxByOrNull { it.lastModified() }
+                            ?: throw IOException("yt-dlp 已结束，但没有找到输出文件")
+                        if (continuation.isActive) {
+                            runCatching { continuation.resume(outputFile) }
+                        }
+                    } catch (cancelled: CancellationException) {
+                        if (continuation.isActive) {
+                            runCatching { continuation.resumeWithException(cancelled) }
+                        }
+                    } catch (error: Exception) {
+                        if (continuation.isActive) {
+                            runCatching {
+                                continuation.resumeWithException(
+                                    IOException(sanitizeError(error.message), error)
+                                )
+                            }
+                        }
+                    }
+                }, "yt-dlp-" + processId.take(20)).apply {
+                    isDaemon = true
                 }
+
+                continuation.invokeOnCancellation {
+                    // Cancel the native process immediately; the Worker must not wait for
+                    // the blocking yt-dlp call to return before its pause/cancel takes effect.
+                    cancel(processId)
+                    executionThread.interrupt()
+                }
+                executionThread.start()
             }
-            outputDirectory.listFiles()
-                ?.filter { it.isFile && it.name.startsWith("$outputPrefix.") &&
-                    !it.name.endsWith(".part", ignoreCase = true) && it.length() > 0L }
-                ?.maxByOrNull { it.lastModified() }
-                ?: throw IOException("yt-dlp 已结束，但没有找到输出文件")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
-        } finally {
         }
     }
 
