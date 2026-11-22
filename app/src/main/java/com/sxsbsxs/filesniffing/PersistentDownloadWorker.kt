@@ -183,6 +183,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
             (fileName.endsWith(".m3u8", ignoreCase = true) ||
                 fileName.endsWith(".mpd", ignoreCase = true))
         var createdDocument: Uri? = null
+        var ytDlpOutputReady = false
 
         try {
             setForeground(createForegroundInfo(fileName, -1, "正在准备下载"))
@@ -253,6 +254,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 check(downloadedIntegrityFailure == null) {
                     downloadedIntegrityFailure ?: "yt-dlp 输出文件完整性检查失败"
                 }
+                ytDlpOutputReady = true
                 val destination = DownloadOutput.create(
                     context = applicationContext,
                     destinationTree = tree,
@@ -521,7 +523,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
             }
             throw cancelled
         } catch (error: Exception) {
-            if (ytDlpPageUrl != null) {
+            if (ytDlpPageUrl != null && !ytDlpOutputReady) {
                 runCatching { ytDlpTempDirectory?.deleteRecursively() }
             }
             var rootCause: Throwable = error
