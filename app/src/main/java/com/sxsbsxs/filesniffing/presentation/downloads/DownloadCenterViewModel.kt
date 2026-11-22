@@ -82,7 +82,11 @@ class DownloadCenterViewModel @Inject constructor(
                 }.getOrNull()
             }
             val input = workInfo?.inputData
-            val sourceUrl = input?.getString(PersistentDownloadWorker.KEY_URL)
+            if (input == null) {
+                onResult(existing)
+                return@launch
+            }
+            val sourceUrl = input.getString(PersistentDownloadWorker.KEY_URL)
                 ?.takeIf { it.isNotBlank() }
             if (sourceUrl == null) {
                 onResult(existing)
