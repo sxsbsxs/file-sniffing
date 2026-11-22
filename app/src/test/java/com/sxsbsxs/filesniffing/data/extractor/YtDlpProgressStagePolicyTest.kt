@@ -9,12 +9,7 @@ class YtDlpProgressStagePolicyTest {
 
     @Test
     fun detectsMergerOutputEvenWhenPercentageIsUnavailable() {
-        assertTrue(
-            YtDlpProgressStagePolicy.isPostProcessing(
-                -1f,
-                "[Merger] Merging formats into output.mp4"
-            )
-        )
+        assertTrue(YtDlpProgressStagePolicy.isPostProcessing("[Merger] Merging formats into output.mp4"))
         assertEquals(
             "正在合并视频与音频流",
             YtDlpProgressStagePolicy.detail("[Merger] Merging formats into output.mp4")
@@ -22,27 +17,24 @@ class YtDlpProgressStagePolicyTest {
     }
 
     @Test
-    fun switchesToIndeterminateWhenAllReportedDownloadWorkReachesOneHundredPercent() {
-        assertTrue(YtDlpProgressStagePolicy.isPostProcessing(100f, "[download] 100%"))
+    fun perStreamHundredPercentDoesNotPrematurelyEndMultiStreamDownload() {
+        assertFalse(YtDlpProgressStagePolicy.isPostProcessing("[download] 100% of 80MiB"))
+        assertFalse(YtDlpProgressStagePolicy.isPostProcessing(
+            """FILE_SNIFFING_PROGRESS|137|{"status":"finished","downloaded_bytes":83886080}"""
+        ))
     }
 
     @Test
-    fun detectsRawHundredPercentLineWhenTheWrapperProgressParserKeepsAnOldValue() {
-        assertTrue(
-            YtDlpProgressStagePolicy.isPostProcessing(
-                98.7f,
-                "[download] 100% of 80MiB in 00:18"
-            )
-        )
+    fun detectsExplicitPostprocessorMarkers() {
+        assertTrue(YtDlpProgressStagePolicy.isPostProcessing("[ExtractAudio] Destination: audio.m4a"))
+        assertTrue(YtDlpProgressStagePolicy.isPostProcessing("[VideoRemuxer] Remuxing video"))
+        assertTrue(YtDlpProgressStagePolicy.isPostProcessing("Post-process: fixing container"))
     }
 
     @Test
-    fun normalDownloadLinesRemainDeterminate() {
-        assertFalse(
-            YtDlpProgressStagePolicy.isPostProcessing(
-                68.4f,
-                "[download] 68.4% of 120MiB at 4MiB/s ETA 00:09"
-            )
-        )
+    fun normalDownloadLinesRemainOutsidePostProcessing() {
+        assertFalse(YtDlpProgressStagePolicy.isPostProcessing(
+            "[download] 68.4% of 120MiB at 4MiB/s ETA 00:09"
+        ))
     }
 }

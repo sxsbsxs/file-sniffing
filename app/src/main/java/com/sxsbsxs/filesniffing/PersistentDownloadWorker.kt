@@ -248,7 +248,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                         null
                     }
                     if (metrics.isPostProcessing ||
-                        YtDlpProgressStagePolicy.isPostProcessing(progress, line) ||
+                        YtDlpProgressStagePolicy.isPostProcessing(line) ||
                         aggregate?.allExpectedStreamsFinished == true
                     ) {
                         ytDlpPostProcessing = true
