@@ -168,9 +168,13 @@ class OkDownloadTransferEngine @Inject constructor(
                     val total = info.totalLength
                     val offset = info.totalOffset
                     if (total > 0L) totalBytes.set(total)
-                    if (offset > 0L) receivedBytes.set(offset)
-                    lastReportedBytes.set(offset.coerceAtLeast(0L))
-                    lastReportedAtNanos.set(System.nanoTime())
+                    if (offset > 0L) receivedBytes.updateAndGet { maxOf(it, offset) }
+                    synchronized(reportLock) {
+                        if (offset > lastReportedBytes.get()) {
+                            lastReportedBytes.set(offset)
+                            lastReportedAtNanos.set(System.nanoTime())
+                        }
+                    }
                 }
 
                 override fun connectStart(
