@@ -235,6 +235,22 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     "wav" -> "audio/wav"
                     else -> "application/octet-stream"
                 }
+                val downloadedPrefix = java.io.FileInputStream(downloadedFile).use { input ->
+                    val bytes = ByteArray(4096)
+                    val count = input.read(bytes)
+                    if (count > 0) bytes.copyOf(count) else ByteArray(0)
+                }
+                val downloadedContainer = NativeMediaProbe.detectContainer(downloadedPrefix)
+                val downloadedIntegrityFailure = DownloadIntegrityPolicy.failureReason(
+                    kind = kind,
+                    downloadedBytes = downloadedFile.length(),
+                    totalBytes = downloadedFile.length(),
+                    responseMimeType = outputMime,
+                    detectedContainer = downloadedContainer
+                )
+                check(downloadedIntegrityFailure == null) {
+                    downloadedIntegrityFailure ?: "yt-dlp 输出文件完整性检查失败"
+                }
                 val destination = DownloadOutput.create(
                     context = applicationContext,
                     destinationTree = tree,
