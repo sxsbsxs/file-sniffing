@@ -15,14 +15,14 @@ internal data class YtDlpLineMetrics(
  */
 internal object YtDlpProgressLineParser {
     private val aria2Rate = Regex(
-        """\\bDL:\\s*([0-9]+(?:\\.[0-9]+)?)\\s*([KMGT]?i?B)\\b""",
+        """\bDL:\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGT]?i?B)\b""",
         RegexOption.IGNORE_CASE
     )
     private val ytDlpRate = Regex(
-        """\\bat\\s+([0-9]+(?:\\.[0-9]+)?)\\s*([KMGT]?i?B)/s\\b""",
+        """\bat\s+([0-9]+(?:\.[0-9]+)?)\s*([KMGT]?i?B)/s\b""",
         RegexOption.IGNORE_CASE
     )
-    private val connectionCount = Regex("""\\bCN:(\\d+)\\b""", RegexOption.IGNORE_CASE)
+    private val connectionCount = Regex("""\bCN:(\d+)\b""", RegexOption.IGNORE_CASE)
 
     fun parse(line: String): YtDlpLineMetrics {
         val count = connectionCount.find(line)?.groupValues?.get(1)?.toIntOrNull() ?: -1
