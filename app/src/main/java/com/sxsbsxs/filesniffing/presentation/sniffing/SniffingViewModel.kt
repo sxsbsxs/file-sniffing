@@ -2,14 +2,11 @@ package com.sxsbsxs.filesniffing.presentation.sniffing
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.sxsbsxs.filesniffing.ResourceKind
-import com.sxsbsxs.filesniffing.NiconicoUrlParser
-import com.sxsbsxs.filesniffing.SniffedResource
 import com.sxsbsxs.filesniffing.FileNameSanitizer
-import com.sxsbsxs.filesniffing.data.local.SniffedResourceEntity
-import com.sxsbsxs.filesniffing.data.repository.SniffedResourceRepository
-import com.sxsbsxs.filesniffing.data.media.AdaptiveQualityOption
-import com.sxsbsxs.filesniffing.data.media.Media3AdaptiveProcessor
+import com.sxsbsxs.filesniffing.ResourceKind
+import com.sxsbsxs.filesniffing.ResourceSniffer
+import com.sxsbsxs.filesniffing.SharedLinkNormalizer
+import com.sxsbsxs.filesniffing.SniffedResource
 import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,264 +15,139 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/**
+ * Direct link resolver. It never creates a WebView or opens the supplied page.
+ * Supported extractors fetch metadata/media information directly through yt-dlp.
+ */
 @HiltViewModel
 class SniffingViewModel @Inject constructor(
-    private val resourceRepository: SniffedResourceRepository,
-    private val media3AdaptiveProcessor: Media3AdaptiveProcessor,
     private val ytDlpRuntime: YtDlpRuntime
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SniffingUiState())
     val uiState = _uiState.asStateFlow()
 
-    private var observePageJob: Job? = null
-    private var niconicoExtractionJob: Job? = null
-    private var youtubeExtractionJob: Job? = null
+    private var resolveJob: Job? = null
 
-    fun beginInspection(pageUrl: String) {
-        observePageJob?.cancel()
-        niconicoExtractionJob?.cancel()
-        youtubeExtractionJob?.cancel()
+    fun resolveUrl(rawUrl: String, onResult: (List<SniffedResource>?, String?) -> Unit) {
+        val normalizedUrl = SharedLinkNormalizer.normalize(rawUrl)
+        if (normalizedUrl.isNullOrBlank()) {
+            onResult(null, "请输入有效的视频或文件链接")
+            return
+        }
+
+        resolveJob?.cancel()
         _uiState.value = SniffingUiState(
-            activePageUrl = pageUrl,
+            activePageUrl = normalizedUrl,
             isPageLoading = true
         )
-        observePageJob = viewModelScope.launch {
-            try {
-                resourceRepository.observeForPage(pageUrl).collectLatest { stored ->
-                    val mapped = stored.mapNotNull(::toResource)
-                    _uiState.update { state ->
-                        if (state.activePageUrl == pageUrl) {
-                            val transientIds = state.transientResources.map { it.id }.toSet()
-                            state.copy(
-                                resources = (mapped.filterNot { it.id in transientIds } +
-                                    state.transientResources).distinctBy { it.id },
-                                errorMessage = null
-                            )
-                        } else {
-                            state
-                        }
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                val message = error.message
-                    ?.take(160)
-                    ?.takeIf { it.isNotBlank() }
-                    ?: "本地资源记录读取失败"
-                _uiState.update { state ->
-                    if (state.activePageUrl == pageUrl) {
-                        state.copy(isPageLoading = false, errorMessage = message)
-                    } else {
-                        state
-                    }
-                }
-            }
-        }
-    }
 
-    fun inspectAdaptiveQualities(
-        resource: SniffedResource,
-        onResult: (List<AdaptiveQualityOption>, String?) -> Unit
-    ) {
-        viewModelScope.launch {
+        resolveJob = viewModelScope.launch {
             try {
-                onResult(media3AdaptiveProcessor.inspectAdaptiveQualities(resource), null)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                onResult(emptyList(), error.message?.take(180)?.ifBlank { null } ?: "读取视频画质失败")
-            }
-        }
-    }
-
-    fun extractNiconicoResource(
-        pageUrl: String,
-        onResult: (SniffedResource?, String?) -> Unit
-    ) {
-        val videoId = NiconicoUrlParser.extractVideoId(pageUrl)
-        if (videoId == null) {
-            onResult(null, "不是有效的 Niconico 视频链接")
-            return
-        }
-        niconicoExtractionJob?.cancel()
-        niconicoExtractionJob = viewModelScope.launch {
-            try {
-                val info = ytDlpRuntime.inspect(pageUrl)
-                if (info.selectableVideoFormats.isEmpty() && info.audioOnlyFormats.isEmpty()) {
-                    throw IllegalStateException("yt-dlp 没有从 N站返回可用的视频或音频格式")
-                }
-                val safeTitle = FileNameSanitizer.sanitize(info.title, videoId)
-                val resource = SniffedResource(
-                    url = pageUrl,
-                    kind = ResourceKind.VIDEO,
-                    fileName = "$safeTitle.mp4",
-                    mimeType = "video/mp4",
-                    pageTitle = info.title,
-                    sourcePage = pageUrl
+                // Direct file URLs do not need a site extractor.
+                val directResource = ResourceSniffer.detect(
+                    rawUrl = normalizedUrl,
+                    pageTitle = "",
+                    sourcePage = normalizedUrl
                 )
-                if (NiconicoUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) != videoId) {
-                    return@launch
-                }
-                _uiState.update { state ->
-                    val transient = state.transientResources
-                        .filterNot { NiconicoUrlParser.extractVideoId(it.sourcePage) == videoId } + resource
-                    val visible = state.resources.filterNot { it.id == resource.id } + resource
-                    state.copy(
-                        transientResources = transient,
-                        resources = visible.distinctBy { it.id }
-                    )
-                }
-                onResult(resource, null)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                if (NiconicoUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) == videoId) {
-                    onResult(null, error.message?.take(180)?.ifBlank { null } ?: "N站视频解析失败")
-                }
-            }
-        }
-    }
+                val resources: List<SniffedResource>
+                val summary: String
 
-    fun extractYouTubeResources(
-        pageUrl: String,
-        onResult: (List<SniffedResource>?, String?) -> Unit
-    ) {
-        val videoId = YouTubeUrlParser.extractVideoId(pageUrl)
-        val playlistId = YouTubeUrlParser.extractPlaylistId(pageUrl)
-        if (videoId == null && playlistId == null) {
-            onResult(null, "不是有效的 YouTube 视频或播放列表链接")
-            return
-        }
-        youtubeExtractionJob?.cancel()
-        youtubeExtractionJob = viewModelScope.launch {
-            try {
-                val resources = if (playlistId != null) {
-                    val playlist = ytDlpRuntime.inspectPlaylist(pageUrl)
-                    playlist.entries.map { entry ->
+                if (directResource != null) {
+                    resources = listOf(directResource)
+                    summary = "检测到直链文件"
+                } else if (YouTubeUrlParser.isPlaylistUrl(normalizedUrl)) {
+                    val playlist = ytDlpRuntime.inspectPlaylist(normalizedUrl)
+                    resources = playlist.entries.map { entry ->
                         val safeTitle = FileNameSanitizer.sanitize(entry.title, entry.videoId)
                         SniffedResource(
-                            url = "https://www.youtube.com/watch?v=" + entry.videoId,
+                            url = entry.webpageUrl,
                             kind = ResourceKind.VIDEO,
-                            fileName = safeTitle + ".mp4",
+                            fileName = "$safeTitle.mp4",
                             mimeType = "video/mp4",
                             pageTitle = entry.title,
-                            sourcePage = pageUrl
+                            sourcePage = normalizedUrl
                         )
                     }
+                    summary = "播放列表：${resources.size} 个视频"
                 } else {
-                    val info = ytDlpRuntime.inspect(pageUrl)
-                    if (info.selectableVideoFormats.isEmpty() && info.audioOnlyFormats.isEmpty()) {
+                    val info = ytDlpRuntime.inspect(normalizedUrl)
+                    val videoFormats = info.selectableVideoFormats
+                    val audioFormats = info.audioOnlyFormats
+                    if (videoFormats.isEmpty() && audioFormats.isEmpty()) {
                         throw IllegalStateException("yt-dlp 没有返回可下载的视频或音频格式")
                     }
-                    val safeTitle = FileNameSanitizer.sanitize(info.title, videoId!!)
-                    listOf(
+
+                    val isAudioOnly = videoFormats.isEmpty()
+                    val safeTitle = FileNameSanitizer.sanitize(
+                        info.title,
+                        info.videoId.ifBlank { "video" }
+                    )
+                    val kind = if (isAudioOnly) ResourceKind.AUDIO else ResourceKind.VIDEO
+                    val extension = if (isAudioOnly) "mp3" else "mp4"
+                    resources = listOf(
                         SniffedResource(
-                            url = pageUrl,
-                            kind = ResourceKind.VIDEO,
-                            fileName = safeTitle + ".mp4",
-                            mimeType = "video/mp4",
+                            url = normalizedUrl,
+                            kind = kind,
+                            fileName = "$safeTitle.$extension",
+                            mimeType = if (isAudioOnly) "audio/mpeg" else "video/mp4",
                             pageTitle = info.title,
-                            sourcePage = pageUrl
+                            sourcePage = normalizedUrl
                         )
                     )
-                }
-                val activeMatches = if (playlistId != null) {
-                    YouTubeUrlParser.extractPlaylistId(_uiState.value.activePageUrl.orEmpty()) == playlistId
-                } else {
-                    YouTubeUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) == videoId
-                }
-                if (!activeMatches) return@launch
-                _uiState.update { state ->
-                    val oldIds = state.transientResources.filter {
-                        if (playlistId != null) {
-                            YouTubeUrlParser.extractPlaylistId(it.sourcePage) == playlistId
+
+                    val bestHeight = videoFormats.mapNotNull { it.height }.maxOrNull()
+                    summary = buildString {
+                        if (isAudioOnly) {
+                            append("可用音频格式：").append(audioFormats.size).append(" 种")
                         } else {
-                            YouTubeUrlParser.extractVideoId(it.sourcePage) == videoId
+                            append("可用视频格式：").append(videoFormats.size).append(" 种")
+                            if (bestHeight != null) append(" · 最高 ").append(bestHeight).append("p")
+                            if (audioFormats.isNotEmpty()) {
+                                append(" · 音频轨道：").append(audioFormats.size).append(" 种")
+                            }
                         }
-                    }.map { it.id }.toSet()
-                    val transient = state.transientResources.filterNot { it.id in oldIds } + resources
-                    val visible = state.resources.filterNot { it.id in oldIds } + resources
-                    state.copy(
-                        transientResources = transient,
-                        resources = visible.distinctBy { it.id }
-                    )
+                        info.uploader?.takeIf { it.isNotBlank() }?.let {
+                            append(" · ").append(it.take(80))
+                        }
+                    }
                 }
+
+                if (_uiState.value.activePageUrl != normalizedUrl) return@launch
+                _uiState.value = SniffingUiState(
+                    activePageUrl = normalizedUrl,
+                    pageTitle = resources.firstOrNull()?.pageTitle.orEmpty(),
+                    isPageLoading = false,
+                    resources = resources,
+                    resultSummary = summary
+                )
                 onResult(resources, null)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                val stillActive = if (playlistId != null) {
-                    YouTubeUrlParser.extractPlaylistId(_uiState.value.activePageUrl.orEmpty()) == playlistId
-                } else {
-                    YouTubeUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) == videoId
-                }
-                if (stillActive) {
-                    onResult(null, error.message?.take(180)?.ifBlank { null } ?: "YouTube 解析失败")
-                }
-            }
-        }
-    }
-
-    fun setPageLoading(loading: Boolean) {
-        _uiState.update { it.copy(isPageLoading = loading) }
-    }
-
-    fun setPageTitle(title: String) {
-        _uiState.update { it.copy(pageTitle = title) }
-    }
-
-    fun addResource(resource: SniffedResource) {
-        val pageUrl = _uiState.value.activePageUrl ?: return
-        viewModelScope.launch {
-            try {
-                resourceRepository.save(
-                    SniffedResourceEntity(
-                        pageUrl = pageUrl,
-                        resourceUrl = resource.url,
-                        resourceKind = resource.kind.name,
-                        fileName = resource.fileName,
-                        mimeType = resource.mimeType,
-                        pageTitle = resource.pageTitle,
-                        firstSeenAtMillis = System.currentTimeMillis()
-                    )
-                )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
                 val message = error.message
-                    ?.take(160)
+                    ?.lineSequence()
+                    ?.firstOrNull()
+                    ?.take(200)
                     ?.takeIf { it.isNotBlank() }
-                    ?: "保存嗅探记录失败"
-                _uiState.update { state ->
-                    if (state.errorMessage == null) state.copy(errorMessage = message) else state
+                    ?: "链接解析失败，请检查链接或更新 yt-dlp"
+                if (_uiState.value.activePageUrl == normalizedUrl) {
+                    _uiState.value = SniffingUiState(
+                        activePageUrl = normalizedUrl,
+                        isPageLoading = false,
+                        errorMessage = message
+                    )
+                    onResult(null, message)
                 }
             }
         }
     }
 
     fun closeInspection() {
-        observePageJob?.cancel()
-        niconicoExtractionJob?.cancel()
-        youtubeExtractionJob?.cancel()
-        observePageJob = null
+        resolveJob?.cancel()
+        resolveJob = null
         _uiState.value = SniffingUiState()
-    }
-
-    private fun toResource(entity: SniffedResourceEntity): SniffedResource? {
-        val kind = runCatching { ResourceKind.valueOf(entity.resourceKind) }.getOrNull() ?: return null
-        return SniffedResource(
-            url = entity.resourceUrl,
-            kind = kind,
-            fileName = entity.fileName,
-            mimeType = entity.mimeType,
-            pageTitle = entity.pageTitle,
-            sourcePage = entity.pageUrl
-        )
     }
 }
