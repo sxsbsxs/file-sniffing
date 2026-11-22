@@ -39,7 +39,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.CenterFocusStrong
 import androidx.compose.material.icons.rounded.Close
@@ -60,7 +59,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
@@ -89,7 +87,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,7 +96,6 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
-import com.sxsbsxs.filesniffing.presentation.auth.NiconicoAccountViewModel
 import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
 import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
 import com.sxsbsxs.filesniffing.data.preferences.DownloadTuning
@@ -148,8 +144,6 @@ private fun FileSniffingApp(sharedLink: String) {
     }
     val sniffingViewModel: SniffingViewModel = hiltViewModel()
     val downloadCenterViewModel: DownloadCenterViewModel = hiltViewModel()
-    val niconicoAccountViewModel: NiconicoAccountViewModel = hiltViewModel()
-    val niconicoAccountState by niconicoAccountViewModel.uiState.collectAsState()
     val sniffingState by sniffingViewModel.uiState.collectAsState()
     val selectedFolderUri by downloadCenterViewModel.selectedDownloadFolder.collectAsState()
     val downloadTuning by downloadCenterViewModel.downloadTuning.collectAsState()
@@ -161,7 +155,6 @@ private fun FileSniffingApp(sharedLink: String) {
     ) { }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var pageUrl by rememberSaveable { mutableStateOf(sharedLink) }
-    var showNiconicoAccountDialog by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(sharedLink) {
         if (sharedLink.isNotBlank()) {
@@ -280,21 +273,6 @@ private fun FileSniffingApp(sharedLink: String) {
         )
     }
 
-    if (showNiconicoAccountDialog) {
-        NiconicoAccountDialog(
-            accountName = niconicoAccountState.accountName,
-            isSaving = niconicoAccountState.isSaving,
-            statusMessage = niconicoAccountState.statusMessage,
-            errorMessage = niconicoAccountState.errorMessage,
-            onSave = niconicoAccountViewModel::save,
-            onRemove = niconicoAccountViewModel::remove,
-            onDismiss = {
-                showNiconicoAccountDialog = false
-                niconicoAccountViewModel.clearMessages()
-            }
-        )
-    }
-
     val enqueueDownload: (SniffedResource) -> Unit = { resource ->
         if (
             Build.VERSION.SDK_INT >= 33 &&
@@ -374,8 +352,6 @@ private fun FileSniffingApp(sharedLink: String) {
                     resources = sniffingState.resources,
                     resultSummary = sniffingState.resultSummary,
                     errorMessage = sniffingState.errorMessage,
-                    hasNiconicoAccount = niconicoAccountState.hasCredentials,
-                    onOpenNiconicoAccount = { showNiconicoAccountDialog = true },
                     onResolve = {
                         val candidate = pageUrl.trim()
                         if (candidate.isBlank()) {
@@ -519,8 +495,6 @@ private fun HomeScreen(
     resources: List<SniffedResource>,
     resultSummary: String,
     errorMessage: String?,
-    hasNiconicoAccount: Boolean,
-    onOpenNiconicoAccount: () -> Unit,
     onResolve: () -> Unit,
     onDownload: (SniffedResource) -> Unit
 ) {
@@ -531,30 +505,12 @@ private fun HomeScreen(
             .padding(horizontal = 20.dp)
             .padding(top = 22.dp, bottom = 12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                "链接解析",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 23.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            IconButton(
-                onClick = onOpenNiconicoAccount,
-                modifier = Modifier.size(42.dp)
-            ) {
-                Icon(
-                    Icons.Rounded.AccountCircle,
-                    contentDescription = "Niconico 账号授权",
-                    tint = if (hasNiconicoAccount) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(23.dp)
-                )
-            }
-        }
+        Text(
+            "链接解析",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 23.sp,
+            fontWeight = FontWeight.SemiBold
+        )
         Spacer(Modifier.height(22.dp))
         UrlInputCard(
             value = pageUrl,
@@ -697,100 +653,6 @@ private fun HomeScreen(
             }
         }
     }
-}
-
-
-@Composable
-private fun NiconicoAccountDialog(
-    accountName: String?,
-    isSaving: Boolean,
-    statusMessage: String?,
-    errorMessage: String?,
-    onSave: (String, String) -> Unit,
-    onRemove: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    var username by remember(accountName) { mutableStateOf(accountName.orEmpty()) }
-    var password by remember { mutableStateOf("") }
-
-    LaunchedEffect(statusMessage) {
-        if (statusMessage?.startsWith("账号已加密保存在本机") == true) {
-            password = ""
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Niconico 账号授权") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    if (accountName.isNullOrBlank()) {
-                        "该视频要求注册用户登录。保存自己的 Niconico 账号后重新解析。"
-                    } else {
-                        "本机已保存账号：$accountName。需要更换密码时，重新输入账号和密码后保存。"
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    enabled = !isSaving,
-                    singleLine = true,
-                    label = { Text("邮箱 / 手机号 / 用户名") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    enabled = !isSaving,
-                    singleLine = true,
-                    label = { Text("Niconico 密码") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    "密码通过 Android Keystore 加密保存在本机。只有解析或下载 Niconico 链接时，才会临时交给 yt-dlp 登录；不会打开内置网页，也不会经过本应用服务器。账号仍必须拥有视频本身的观看权限。",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
-                )
-                if (!statusMessage.isNullOrBlank()) {
-                    Text(statusMessage, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
-                }
-                if (!errorMessage.isNullOrBlank()) {
-                    Text(errorMessage, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(username, password) },
-                enabled = !isSaving && username.isNotBlank() && password.isNotEmpty()
-            ) {
-                Text(if (isSaving) "正在保存…" else "保存账号")
-            }
-        },
-        dismissButton = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!accountName.isNullOrBlank()) {
-                    TextButton(onClick = onRemove, enabled = !isSaving) {
-                        Text("移除账号")
-                    }
-                }
-                TextButton(onClick = onDismiss, enabled = !isSaving) {
-                    Text("完成")
-                }
-            }
-        }
-    )
 }
 
 @Composable
