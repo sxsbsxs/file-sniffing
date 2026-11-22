@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -120,47 +121,57 @@ class YtDlpRuntime @Inject constructor(
                 }
                 addOption("-o", File(outputDirectory, "$outputPrefix.%(ext)s").absolutePath)
             }
-            suspendCancellableCoroutine { continuation ->
-                val executionThread = Thread({
-                    try {
-                        if (!continuation.isActive) return@Thread
-                        executableLock.read {
-                            YoutubeDL.getInstance().execute(request, processId) { progress, eta, line ->
-                                onProgress?.invoke(progress, eta, line.take(240))
+            val executionThread = AtomicReference<Thread?>()
+            try {
+                suspendCancellableCoroutine { continuation ->
+                    val thread = Thread({
+                        try {
+                            if (!continuation.isActive) return@Thread
+                            executableLock.read {
+                                YoutubeDL.getInstance().execute(request, processId) { progress, eta, line ->
+                                    onProgress?.invoke(progress, eta, line.take(240))
+                                }
+                            }
+                            val outputFile = outputDirectory.listFiles()
+                                ?.filter { it.isFile && it.name.startsWith("$outputPrefix.") &&
+                                    !it.name.endsWith(".part", ignoreCase = true) && it.length() > 0L }
+                                ?.maxByOrNull { it.lastModified() }
+                                ?: throw IOException("yt-dlp 已结束，但没有找到输出文件")
+                            if (continuation.isActive) {
+                                runCatching { continuation.resume(outputFile) }
+                            }
+                        } catch (cancelled: CancellationException) {
+                            if (continuation.isActive) {
+                                runCatching { continuation.resumeWithException(cancelled) }
+                            }
+                        } catch (error: Exception) {
+                            if (continuation.isActive) {
+                                runCatching {
+                                    continuation.resumeWithException(
+                                        IOException(sanitizeError(error.message), error)
+                                    )
+                                }
                             }
                         }
-                        val outputFile = outputDirectory.listFiles()
-                            ?.filter { it.isFile && it.name.startsWith("$outputPrefix.") &&
-                                !it.name.endsWith(".part", ignoreCase = true) && it.length() > 0L }
-                            ?.maxByOrNull { it.lastModified() }
-                            ?: throw IOException("yt-dlp 已结束，但没有找到输出文件")
-                        if (continuation.isActive) {
-                            runCatching { continuation.resume(outputFile) }
-                        }
-                    } catch (cancelled: CancellationException) {
-                        if (continuation.isActive) {
-                            runCatching { continuation.resumeWithException(cancelled) }
-                        }
-                    } catch (error: Exception) {
-                        if (continuation.isActive) {
-                            runCatching {
-                                continuation.resumeWithException(
-                                    IOException(sanitizeError(error.message), error)
-                                )
-                            }
-                        }
+                    }, "yt-dlp-" + processId.take(20)).apply {
+                        isDaemon = true
                     }
-                }, "yt-dlp-" + processId.take(20)).apply {
-                    isDaemon = true
-                }
+                    executionThread.set(thread)
 
-                continuation.invokeOnCancellation {
-                    // Cancel the native process immediately; the Worker must not wait for
-                    // the blocking yt-dlp call to return before its pause/cancel takes effect.
-                    cancel(processId)
-                    executionThread.interrupt()
+                    continuation.invokeOnCancellation {
+                        // Cancel the native process immediately; do not wait for the blocking
+                        // execute call before starting the pause/cancel transition.
+                        cancel(processId)
+                        thread.interrupt()
+                    }
+                    thread.start()
                 }
-                executionThread.start()
+            } finally {
+                // A retry with the same stable session must not overlap the previous process
+                // while it still owns the .part files. Wait until it actually exits.
+                withContext(NonCancellable + Dispatchers.IO) {
+                    executionThread.get()?.join()
+                }
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
