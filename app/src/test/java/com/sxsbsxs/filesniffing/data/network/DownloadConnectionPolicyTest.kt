@@ -24,11 +24,14 @@ class DownloadConnectionPolicyTest {
 
     @Test
     fun directDownloadsCanScaleToTwoHundredFiftySixRangeBlocks() {
-        DownloadConnectionPolicy.setPreferredMaximumConnections(256)
-        assertEquals(128, DownloadConnectionPolicy.connectionsFor(128L * 1024L * 1024L))
-        assertEquals(256, DownloadConnectionPolicy.connectionsFor(256L * 1024L * 1024L))
-        assertEquals(256, DownloadConnectionPolicy.connectionsFor(1024L * 1024L * 1024L))
-        DownloadConnectionPolicy.setPreferredMaximumConnections(16)
+        try {
+            DownloadConnectionPolicy.setPreferredMaximumConnections(256)
+            assertEquals(128, DownloadConnectionPolicy.connectionsFor(128L * 1024L * 1024L))
+            assertEquals(256, DownloadConnectionPolicy.connectionsFor(256L * 1024L * 1024L))
+            assertEquals(256, DownloadConnectionPolicy.connectionsFor(1024L * 1024L * 1024L))
+        } finally {
+            DownloadConnectionPolicy.setPreferredMaximumConnections(16)
+        }
     }
 
     @Test
