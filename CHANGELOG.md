@@ -11,8 +11,6 @@
 - Bump app version to 0.9.12 (versionCode 30).
 - The account does not bypass video-level access rights, membership, payment, region restrictions or DRM.
 
-# Changelog
-
 ## 0.9.11
 
 - Remove the in-app webpage viewer, WebView result screen, DOM/JavaScript injection, browser request interception and page-text restriction diagnostics.
