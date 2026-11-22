@@ -1,6 +1,7 @@
 package com.sxsbsxs.filesniffing.data.extractor
 
 import android.content.Context
+import android.util.Log
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -10,6 +11,8 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -22,6 +25,13 @@ import kotlinx.coroutines.withContext
 class YtDlpRuntime @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val initializationMutex = Mutex()
+    @Volatile private var initialized = false
+
+    /** Initializes yt-dlp/FFmpeg and silently refreshes the extractor from the Nightly channel. */
+    suspend fun prepare() = withContext(Dispatchers.IO) {
+        ensureInitialized()
+    }
     suspend fun inspectPlaylist(url: String): YtDlpPlaylistInfo = withContext(Dispatchers.IO) {
         require(YouTubeUrlParser.extractPlaylistId(url) != null) {
             "请输入有效的 YouTube 播放列表链接"
@@ -117,9 +127,53 @@ class YtDlpRuntime @Inject constructor(
         runCatching { YoutubeDL.getInstance().destroyProcessById(processId) }
     }
 
-    private fun ensureInitialized() {
-        YoutubeDL.getInstance().init(context)
-        com.yausername.ffmpeg.FFmpeg.getInstance().init(context)
+    private suspend fun ensureInitialized() {
+        initializationMutex.withLock {
+            if (!initialized) {
+                YoutubeDL.getInstance().init(context)
+                com.yausername.ffmpeg.FFmpeg.getInstance().init(context)
+                initialized = true
+            }
+            updateYtDlpIfDue()
+        }
+    }
+
+    /**
+     * Seal keeps the yt-dlp executable fresh independently of the Android wrapper dependency.
+     * The wrapper stays pinned, while the Python yt-dlp program is silently checked weekly.
+     * Failed checks are retried after a cooldown and never block use of the bundled fallback.
+     */
+    private fun updateYtDlpIfDue() {
+        val preferences = context.getSharedPreferences(UPDATE_PREFERENCES, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val lastAttempt = preferences.getLong(KEY_LAST_ATTEMPT, 0L)
+        val lastSuccess = preferences.getLong(KEY_LAST_SUCCESS, 0L)
+        val installedVersion = YoutubeDL.getInstance().versionName(context)
+        val due = installedVersion.isNullOrBlank() ||
+            now - lastSuccess >= UPDATE_INTERVAL_MILLIS
+        val retryAllowed = lastAttempt == 0L ||
+            now - lastAttempt >= RETRY_COOLDOWN_MILLIS
+
+        if (!due || !retryAllowed) return
+
+        // Record the attempt before network work so a failed/offline check cannot loop each parse.
+        preferences.edit().putLong(KEY_LAST_ATTEMPT, now).apply()
+        try {
+            val status = YoutubeDL.getInstance().updateYoutubeDL(
+                context,
+                YoutubeDL.UpdateChannel.NIGHTLY
+            )
+            val latestVersion = YoutubeDL.getInstance().versionName(context)
+            if (!latestVersion.isNullOrBlank()) {
+                preferences.edit()
+                    .putLong(KEY_LAST_SUCCESS, now)
+                    .putString(KEY_LAST_VERSION, latestVersion)
+                    .apply()
+            }
+            Log.i(TAG, "yt-dlp Nightly check complete: $status, version=$latestVersion")
+        } catch (error: Exception) {
+            Log.w(TAG, "yt-dlp Nightly update failed; keeping the bundled executable", error)
+        }
     }
 
     private fun sanitizeError(message: String?): String {
@@ -139,5 +193,13 @@ class YtDlpRuntime @Inject constructor(
         }
     }
 
-    private companion object
+    private companion object {
+        const val TAG = "YtDlpRuntime"
+        const val UPDATE_PREFERENCES = "yt_dlp_updater"
+        const val KEY_LAST_ATTEMPT = "last_attempt_ms"
+        const val KEY_LAST_SUCCESS = "last_success_ms"
+        const val KEY_LAST_VERSION = "last_version"
+        const val UPDATE_INTERVAL_MILLIS = 7L * 24L * 60L * 60L * 1000L
+        const val RETRY_COOLDOWN_MILLIS = 6L * 60L * 60L * 1000L
+    }
 }
