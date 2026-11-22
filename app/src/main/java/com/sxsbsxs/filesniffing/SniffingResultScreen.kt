@@ -799,7 +799,7 @@ fun SniffingResultScreen(
                             pageError != null -> "页面预览失败不代表资源解析失败，稍后可刷新重试"
                             pageAccessDiagnostic != null -> pageAccessDiagnostic?.message.orEmpty()
                             resources.any { it.kind == ResourceKind.SEGMENT } -> "单个媒体分段不会作为完整视频列出"
-                            isRecognizedYouTubeVideo -> "YouTube 播放地址带有动态签名；普通 WebView 嗅探不能把网页 URL 当成视频文件。仍需接入专用签名 / EJS / PO Token 解析器。"
+                            isRecognizedYouTubeVideo -> "正在使用 yt-dlp 获取实际视频或播放列表条目。若需要 EJS / JavaScript 挑战运行时或 PO Token 的视频，仍可能因 YouTube 验证而无法解析。"
                             else -> "视频、音频、图片、文档和下载链接会显示在这里"
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1155,7 +1155,7 @@ private const val PAGE_ACCESS_DIAGNOSTICS_SCRIPT = """
     function matches(pattern) { return pattern.test(text); }
     return JSON.stringify({
       humanVerification: matches(/captcha|verify you are human|confirm (you are|you're) not a robot|checking your browser|security verification|human verification|人間であることを確認|ロボットではないこと|私はロボットではありません|人机验证|验证码/),
-      regionRestricted: matches(/not available in your (country|region)|unavailable in your (country|region)|not supported in your region|geo.?restricted|region.?blocked|お住まいの国や地域ではご利用いただけません|この国または地域では利用できません|地域制限/),
+      regionRestricted: matches(/not available in your (country|region)|unavailable in your (country|region)|not supported in your region|geo.?restricted|region.?blocked|お住まいの国や地域ではご利用いただけません|お住まいの国.{0,8}地域ではご利用できません|お住いの国.{0,8}地域ではご利用できません|この国または地域では利用できません|地域制限/),
       accessDenied: matches(/access denied|403 forbidden|request blocked|your request has been blocked|access to this page has been denied|アクセスが拒否されました/),
       nicovideodlServiceEnding: matches(/ドメインが11月で期限|サ終/),
       nicovideodlPremiumExpired: matches(/プレミアムが切れちゃったので720pまで|720pまでになります/)
