@@ -1,6 +1,10 @@
 package com.sxsbsxs.filesniffing.data.extractor
 
 import android.content.Context
+import android.system.Os
+import com.sxsbsxs.filesniffing.NiconicoUrlParser
+import com.sxsbsxs.filesniffing.data.auth.NiconicoCredentialStore
+import com.sxsbsxs.filesniffing.data.auth.NiconicoNetrcFormatter
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,7 +24,8 @@ import kotlinx.coroutines.withContext
  */
 @Singleton
 class YtDlpRuntime @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val niconicoCredentialStore: NiconicoCredentialStore
 ) {
     suspend fun inspectPlaylist(url: String): YtDlpPlaylistInfo = withContext(Dispatchers.IO) {
         require(YouTubeUrlParser.extractPlaylistId(url) != null) {
@@ -49,8 +54,14 @@ class YtDlpRuntime @Inject constructor(
             "请输入有效的视频链接"
         }
         ensureInitialized()
+        var authFile: File? = null
         try {
+            authFile = createNiconicoNetrc(url)
             val request = YoutubeDLRequest(url).apply {
+                authFile?.let {
+                    addOption("--netrc")
+                    addOption("--netrc-location", it.absolutePath)
+                }
                 addOption("--dump-single-json")
                 addOption("--no-playlist")
                 addOption("--no-warnings")
@@ -62,6 +73,7 @@ class YtDlpRuntime @Inject constructor(
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
         } finally {
+            authFile?.delete()
         }
     }
 
@@ -84,8 +96,14 @@ class YtDlpRuntime @Inject constructor(
             throw IOException("无法创建下载临时目录")
         }
         val outputPrefix = "ytdlp-$processId"
+        var authFile: File? = null
         try {
+            authFile = createNiconicoNetrc(url)
             val request = YoutubeDLRequest(url).apply {
+                authFile?.let {
+                    addOption("--netrc")
+                    addOption("--netrc-location", it.absolutePath)
+                }
                 addOption("--no-playlist")
                 addOption("--newline")
                 addOption("--no-mtime")
@@ -110,11 +128,32 @@ class YtDlpRuntime @Inject constructor(
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
         } finally {
+            authFile?.delete()
         }
     }
 
     fun cancel(processId: String) {
         runCatching { YoutubeDL.getInstance().destroyProcessById(processId) }
+    }
+
+    private fun createNiconicoNetrc(url: String): File? {
+        if (NiconicoUrlParser.extractVideoId(url) == null) return null
+        val credentials = niconicoCredentialStore.load() ?: return null
+        val authFile = File(context.cacheDir, "niconico-${UUID.randomUUID()}.netrc")
+        try {
+            if (!authFile.createNewFile()) {
+                throw IOException("无法创建 Niconico 临时授权文件")
+            }
+            Os.chmod(authFile.absolutePath, 0x180)
+            authFile.writeText(
+                NiconicoNetrcFormatter.format(credentials.username, credentials.password),
+                Charsets.UTF_8
+            )
+            return authFile
+        } catch (error: Exception) {
+            authFile.delete()
+            throw IOException("无法准备 Niconico 本地授权文件", error)
+        }
     }
 
     private fun ensureInitialized() {
@@ -134,6 +173,13 @@ class YtDlpRuntime @Inject constructor(
             safe.contains("Sign in to confirm", true) ||
                 safe.contains("not a bot", true) ->
                 "YouTube 要求登录或人机验证；当前版本不提供网页登录，请尝试公开可访问的视频，或稍后更新 yt-dlp"
+            safe.contains("This video is only available for registered users", true) ||
+                safe.contains("registered users", true) ->
+                "Niconico 要求账号登录。点击页面右上角账号图标，保存注册账号后重新解析；账号仍需拥有该视频的观看权限"
+            safe.contains("premium members only", true) ||
+                safe.contains("channel members only", true) ||
+                safe.contains("PPV video", true) ->
+                "该视频需要相应的 Premium、频道会员或付费权限，普通账号无法下载"
             safe.contains("Unsupported URL", true) -> "当前 yt-dlp 版本不支持此链接"
             else -> safe
         }
