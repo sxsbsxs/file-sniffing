@@ -202,17 +202,20 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 fileName.endsWith(".mpd", ignoreCase = true))
         var createdDocument: Uri? = null
         var ytDlpOutputReady = false
+        // Site extraction uses the same determinate 0–100 pipeline as merge and file saving.
+        // Direct/unknown-length HTTP transfers keep their existing indeterminate preflight.
+        val initialProgress = if (ytDlpPageUrl != null) 0 else -1
 
         try {
-            setForeground(createForegroundInfo(fileName, -1, "正在准备下载"))
-            publishProgressAsync(-1, "正在准备下载", fileName)
+            setForeground(createForegroundInfo(fileName, initialProgress, "正在准备下载"))
+            publishProgressAsync(initialProgress, "正在准备下载", fileName)
             persistRecord(
                 fileName = fileName,
                 sourceUrl = recordSourceUrl,
                 kind = kind,
                 mimeType = mime,
                 state = "downloading",
-                progress = -1,
+                progress = initialProgress,
                 detail = "正在准备下载",
                 documentUri = null
             )
@@ -223,7 +226,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     youtubePageUrl != null -> "YouTube"
                     else -> "视频站"
                 }
-                publishProgressAsync(-1, "正在通过 yt-dlp 提取 $providerName 媒体流", fileName)
+                publishProgressAsync(0, "正在提取 $providerName 媒体流", fileName)
                 val tempDirectory = requireNotNull(ytDlpTempDirectory)
                 val expectedStreams = ytDlpFormatSelector.substringBefore('/').count { it == '+' } + 1
                 val progressAggregator = YtDlpProgressAggregator(expectedStreams)
@@ -252,7 +255,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
 
                     if (ytDlpPostProcessing) {
                         publishProgressAsync(
-                            progress = -1,
+                            progress = YtDlpOverallProgressPolicy.postProcessingPercent(
+                                metrics.status.takeIf { metrics.isPostProcessing }
+                            ),
                             detail = YtDlpProgressStagePolicy.detailForPostprocessor(
                                 metrics.postProcessor,
                                 line
@@ -264,8 +269,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
                             speedBytesPerSecond = 0L
                         )
                     } else if (aggregate != null) {
-                        val percent = (aggregate.progressPercent * 0.89f)
-                            .toInt().coerceIn(0, 89)
+                        val percent = YtDlpOverallProgressPolicy.streamDownloadPercent(
+                            aggregate.progressPercent
+                        )
                         val detail = when {
                             aggregate.connectionCount > 0 ->
                                 "媒体流下载 · ${aggregate.connectionCount} 路连接 · ${aggregate.completedStreams}/${aggregate.expectedStreams} 路已完成"
@@ -284,8 +290,10 @@ class PersistentDownloadWorker @AssistedInject constructor(
                         )
                     }
                 }
+                // A successful yt-dlp return means every selected stream and postprocessor
+                // (including FFmpeg merge/remux) has completed. This closes the 80–88% phase.
                 publishProgressAsync(
-                    progress = -1,
+                    progress = YtDlpOverallProgressPolicy.postProcessingCompletePercent(),
                     detail = "媒体流处理完毕，正在校验合并输出",
                     fileName = fileName,
                     speedBytesPerSecond = 0L
@@ -371,7 +379,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                                 "保存文件未写完整：已写入 $copiedBytes / $totalBytes 字节"
                             }
                             publishProgressAsync(
-                                progress = -1,
+                                progress = 99,
                                 detail = "文件数据已复制，正在同步存储",
                                 fileName = finalName,
                                 downloadedBytes = totalBytes,
@@ -384,7 +392,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                         }
                     } ?: error("无法打开 Download 输出文件")
                     publishProgressAsync(
-                        progress = -1,
+                        progress = 99,
                         detail = "文件已写入，正在发布到 Download 文件夹",
                         fileName = finalName,
                         downloadedBytes = totalBytes,
@@ -395,7 +403,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     )
                     DownloadOutput.markComplete(applicationContext, destination)
                     publishProgressAsync(
-                        progress = -1,
+                        progress = 99,
                         detail = "文件已发布，正在更新下载记录",
                         fileName = finalName,
                         downloadedBytes = totalBytes,
