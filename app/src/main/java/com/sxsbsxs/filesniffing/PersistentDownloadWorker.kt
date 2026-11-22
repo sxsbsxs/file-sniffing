@@ -506,22 +506,25 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 destinationDocument = destinationDocument,
                 headers = headers
             ) { snapshot ->
+                val transferFinalizing = snapshot.totalBytes > 0L &&
+                    snapshot.downloadedBytes >= snapshot.totalBytes
                 val detail = when {
-                    snapshot.connectionCount > 1 ->
-                        "下载中 · ${snapshot.connectionCount} 路分段连接"
+                    transferFinalizing -> "数据已接收，正在同步文件"
+                    snapshot.blockCount > 1 ->
+                        "下载中 · 文件已拆分为 ${snapshot.blockCount} 段"
                     tuning.connectionsPerTask > 1 ->
-                        "下载中 · 实际 1 路（文件大小或服务器 Range 能力限制）"
-                    snapshot.totalBytes > 0L -> "下载中 · 1 路连接"
-                    else -> "正在接收数据 · 1 路连接"
+                        "下载中 · 当前为单段（文件较小或服务器不支持 Range）"
+                    snapshot.totalBytes > 0L -> "下载中 · 单段传输"
+                    else -> "正在接收数据 · 等待文件总量"
                 }
                 publishProgressAsync(
-                    progress = snapshot.progress,
+                    progress = if (transferFinalizing) -1 else snapshot.progress,
                     detail = detail,
                     fileName = targetName,
                     partialUri = destinationDocument.toString(),
                     downloadedBytes = snapshot.downloadedBytes,
                     totalBytes = snapshot.totalBytes,
-                    speedBytesPerSecond = snapshot.speedBytesPerSecond
+                    speedBytesPerSecond = if (transferFinalizing) 0L else snapshot.speedBytesPerSecond
                 )
             }
 

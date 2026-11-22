@@ -23,7 +23,7 @@ data class DownloadTransferProgress(
     val downloadedBytes: Long,
     val totalBytes: Long,
     val speedBytesPerSecond: Long,
-    val connectionCount: Int = 1
+    val blockCount: Int = 1
 )
 
 data class DownloadTransferResult(
@@ -79,7 +79,7 @@ class OkDownloadTransferEngine @Inject constructor(
             val reportLock = Any()
             val latestResponseHeaders = java.util.concurrent.atomic.AtomicReference<Map<String, List<String>>>(emptyMap())
 
-            fun reportProgress(current: Long, total: Long, connectionCount: Int) {
+            fun reportProgress(current: Long, total: Long, blockCount: Int) {
                 val now = System.nanoTime()
                 val speed = synchronized(reportLock) {
                     val previousBytes = lastReportedBytes.get()
@@ -103,7 +103,7 @@ class OkDownloadTransferEngine @Inject constructor(
                         downloadedBytes = current,
                         totalBytes = total,
                         speedBytesPerSecond = speed,
-                        connectionCount = connectionCount.coerceAtLeast(1)
+                        blockCount = blockCount.coerceAtLeast(1)
                     )
                 )
             }
@@ -205,8 +205,8 @@ class OkDownloadTransferEngine @Inject constructor(
 
                 override fun fetchProgress(task: DownloadTask, blockIndex: Int, increaseBytes: Long) {
                     val current = receivedBytes.addAndGet(increaseBytes)
-                    val activeConnections = runCatching { task.info?.blockCount ?: 1 }.getOrDefault(1)
-                    reportProgress(current, totalBytes.get(), activeConnections)
+                    val blockCount = runCatching { task.info?.blockCount ?: 1 }.getOrDefault(1)
+                    reportProgress(current, totalBytes.get(), blockCount)
                 }
 
                 override fun fetchEnd(task: DownloadTask, blockIndex: Int, contentLength: Long) = Unit
