@@ -177,7 +177,9 @@ object DownloadEngine {
                     onUpdate(queuedTask.copy(state = "failed", progress = 0, detail = detail))
                 }
             } else {
-                observeRequest(context, manager, request.id, onUpdate)
+                Handler(Looper.getMainLooper()).post {
+                    observeRequest(context, manager, request.id, onUpdate)
+                }
             }
         }, Executor { command -> command.run() })
     }
