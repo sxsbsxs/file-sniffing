@@ -955,13 +955,19 @@ private fun DownloadsScreen(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("单任务连接数：$connectionsDraft", fontWeight = FontWeight.Medium)
-                    Slider(
-                        value = connectionsDraft.toFloat(),
-                        onValueChange = { connectionsDraft = it.toInt().coerceIn(1, 16) },
-                        valueRange = 1f..16f,
-                        steps = 14
-                    )
+                    Text("直链分段连接上限：$connectionsDraft", fontWeight = FontWeight.Medium)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(1, 2, 4, 8, 16, 32, 64, 128, 256, 512).forEach { count ->
+                            FilterChip(
+                                selected = connectionsDraft == count,
+                                onClick = { connectionsDraft = count },
+                                label = { Text(count.toString()) }
+                            )
+                        }
+                    }
                     Text("同时下载任务：$parallelDraft", fontWeight = FontWeight.Medium)
                     Slider(
                         value = parallelDraft.toFloat(),
@@ -983,7 +989,7 @@ private fun DownloadsScreen(
                         }
                     }
                     Text(
-                        "连接数只是上限，小文件会自动减少；服务器不支持分段时会退回单连接。速度上限由所有下载任务共享。",
+                        "直链支持 1–512 个分段连接；小文件会自动减少，服务器不支持 Range 时会退回单连接。HLS/DASH 分片并发另行限制，避免创建过多线程。速度上限由所有下载任务共享。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
