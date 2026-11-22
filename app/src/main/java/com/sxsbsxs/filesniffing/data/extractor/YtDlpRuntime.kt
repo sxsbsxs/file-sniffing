@@ -24,6 +24,31 @@ import kotlinx.coroutines.withContext
 class YtDlpRuntime @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    suspend fun inspectPlaylist(url: String): YtDlpPlaylistInfo = withContext(Dispatchers.IO) {
+        require(YouTubeUrlParser.extractPlaylistId(url) != null) {
+            "请输入有效的 YouTube 播放列表链接"
+        }
+        ensureInitialized()
+        val cookies = createTemporaryCookieFile()
+        try {
+            val request = YoutubeDLRequest(url).apply {
+                addOption("--flat-playlist")
+                addOption("--dump-single-json")
+                addOption("--no-warnings")
+                addOption("--skip-download")
+                addOption("--playlist-end", "200")
+                addOption("--socket-timeout", "20")
+                cookies?.let { addOption("--cookies", it.absolutePath) }
+            }
+            val response = YoutubeDL.getInstance().execute(request)
+            YtDlpInfoJsonParser.parsePlaylist(response.out)
+        } catch (error: Exception) {
+            throw IOException(sanitizeError(error.message), error)
+        } finally {
+            cookies?.delete()
+        }
+    }
+
     suspend fun inspect(url: String): YtDlpVideoInfo = withContext(Dispatchers.IO) {
         require(url.startsWith("https://") || url.startsWith("http://")) {
             "请输入有效的视频链接"
