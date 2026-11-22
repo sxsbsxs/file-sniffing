@@ -155,16 +155,17 @@ private fun FileSniffingApp(sharedLink: String) {
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
-
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var pageUrl by rememberSaveable { mutableStateOf(sharedLink) }
+
     LaunchedEffect(sharedLink) {
         if (sharedLink.isNotBlank()) {
             pageUrl = sharedLink
-            sniffingViewModel.closeInspection()
             selectedTab = 0
+            sniffingViewModel.closeInspection()
         }
     }
+
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
     val storedTasksById = storedDownloadHistory.associateBy { it.id }
     val liveTasksWithStoredUri = downloadTasks.map { task ->
@@ -201,6 +202,7 @@ private fun FileSniffingApp(sharedLink: String) {
             )
         }
     ).distinctBy { it.id }
+
     DisposableEffect(context) {
         val removeObserver = DownloadEngine.observeAll(context.applicationContext) { task ->
             val index = downloadTasks.indexOfFirst { it.id == task.id }
@@ -221,9 +223,7 @@ private fun FileSniffingApp(sharedLink: String) {
                 context.contentResolver.takePersistableUriPermission(uri, permissionFlags)
             }
             downloadCenterViewModel.setDownloadFolder(uri.toString())
-            coroutineScope.launch {
-                snackbarHostState.showSnackbar("保存位置已更新")
-            }
+            coroutineScope.launch { snackbarHostState.showSnackbar("保存位置已更新") }
         }
     }
 
@@ -242,7 +242,7 @@ private fun FileSniffingApp(sharedLink: String) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "已在本机保留诊断报告。复制后可以发给开发者定位闪退原因。",
+                        "已在本机保留诊断报告。复制后可以发给开发者定位问题。",
                         fontSize = 13.sp
                     )
                     Text(
@@ -260,9 +260,7 @@ private fun FileSniffingApp(sharedLink: String) {
                         clipboard.setText(AnnotatedString(startupCrashReport))
                         CrashReporter.clear(context)
                         showCrashReportDialog = false
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("诊断报告已复制")
-                        }
+                        coroutineScope.launch { snackbarHostState.showSnackbar("诊断报告已复制") }
                     }
                 ) { Text("复制诊断报告") }
             },
@@ -277,25 +275,28 @@ private fun FileSniffingApp(sharedLink: String) {
         )
     }
 
-    val enqueueDownload: (SniffedResource, Boolean, Int?) -> Unit =
-        { resource, showQueuedMessage, adaptiveVideoHeight ->
+    val enqueueDownload: (SniffedResource) -> Unit = { resource ->
         if (
             Build.VERSION.SDK_INT >= 33 &&
             !askedForNotificationPermission &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
         ) {
             askedForNotificationPermission = true
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         val folder = selectedFolderUri
         if (folder == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            coroutineScope.launch { snackbarHostState.showSnackbar("Android 9 及以下请先选择保存文件夹") }
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Android 9 及以下请先选择保存文件夹")
+            }
         } else {
             DownloadEngine.start(
                 context = context.applicationContext,
                 destinationTree = folder?.let(Uri::parse),
-                resource = resource,
-                adaptiveVideoHeight = adaptiveVideoHeight
+                resource = resource
             ) { task ->
                 val index = downloadTasks.indexOfFirst { it.id == task.id }
                 if (index < 0) downloadTasks.add(0, task)
@@ -305,9 +306,7 @@ private fun FileSniffingApp(sharedLink: String) {
                     coroutineScope.launch { snackbarHostState.showSnackbar(task.detail) }
                 }
             }
-            if (showQueuedMessage) {
-                coroutineScope.launch { snackbarHostState.showSnackbar("已加入下载队列 · Download") }
-            }
+            coroutineScope.launch { snackbarHostState.showSnackbar("已加入下载队列") }
         }
     }
 
@@ -331,102 +330,61 @@ private fun FileSniffingApp(sharedLink: String) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (selectedTab == 0 && sniffingState.activePageUrl != null) {
-                SniffingResultScreen(
-                    pageUrl = sniffingState.activePageUrl.orEmpty(),
-                    resources = sniffingState.resources,
-                    isLoading = sniffingState.isPageLoading,
-                    inspectionError = sniffingState.errorMessage,
-                    onLoadingChange = sniffingViewModel::setPageLoading,
-                    onResourceFound = sniffingViewModel::addResource,
-                    onBack = { sniffingViewModel.closeInspection() },
-                    onDownload = { resource, height -> enqueueDownload(resource, true, height) },
-                    onInspectAdaptiveQualities = { resource, callback ->
-                        sniffingViewModel.inspectAdaptiveQualities(resource, callback)
-                    },
-                    onDownloadBatch = { selected ->
-                        selected.forEach { resource -> enqueueDownload(resource, false, null) }
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("已将 ${selected.size} 项加入下载队列")
-                        }
-                    },
-                    onNiconicoPageReady = { targetUrl ->
-                        sniffingViewModel.extractNiconicoResource(targetUrl) { resource, error ->
-                            if (resource != null) {
-                                // The extractor result must enter the same observable resource list
-                                // as WebView-discovered resources; a toast alone makes it invisible.
-                                sniffingViewModel.addResource(resource)
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("N站解析成功，可下载（当前自动选择最佳格式）")
-                                }
-                            } else if (!error.isNullOrBlank()) {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("N站解析失败：$error")
-                                }
-                            }
-                        }
-                    },
-                    onYouTubePageReady = { targetUrl ->
-                        sniffingViewModel.extractYouTubeResources(targetUrl) { resources, error ->
-                            if (!resources.isNullOrEmpty()) {
-                                resources.forEach(sniffingViewModel::addResource)
-                                coroutineScope.launch {
-                                    val message = if (YouTubeUrlParser.isPlaylistUrl(targetUrl)) {
-                                        "YouTube 播放列表已解析：${resources.size} 个视频"
-                                    } else {
-                                        "YouTube 已通过 yt-dlp 解析，可加入下载"
-                                    }
-                                    snackbarHostState.showSnackbar(message)
-                                }
-                            } else if (!error.isNullOrBlank()) {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("YouTube 解析失败：$error")
-                                }
-                            }
-                        }
-                    }
-                )
-            } else if (selectedTab == 0) {
-                HomeScreen(
+            when (selectedTab) {
+                0 -> HomeScreen(
                     pageUrl = pageUrl,
                     onUrlChange = { pageUrl = it },
-                    folderLabel = folderLabel,
-                    hasFolder = hasOutputFolder,
                     onPaste = {
                         val pasted = clipboard.getText()?.text.orEmpty().trim()
-                        if (pasted.isNotEmpty()) pageUrl = pasted
-                        else coroutineScope.launch {
-                            snackbarHostState.showSnackbar("剪贴板里没有可粘贴的文字")
+                        if (pasted.isNotEmpty()) {
+                            pageUrl = SharedLinkNormalizer.normalize(pasted)
+                                ?: SharedLinkNormalizer.extractCandidate(pasted)
+                                ?: pasted
+                        } else {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("剪贴板里没有可粘贴的文字")
+                            }
                         }
                     },
-                    onClear = { pageUrl = "" },
-                    onPickFolder = { folderPicker.launch(null) },
-                    onStartSniffing = {
-                        val trimmedUrl = pageUrl.trim()
-                        val normalizedUrl = SharedLinkNormalizer.normalize(trimmedUrl)
-                        when {
-                            trimmedUrl.isBlank() -> coroutineScope.launch {
-                                snackbarHostState.showSnackbar("先粘贴一个网页链接")
-                            }
-                            trimmedUrl.length > 4096 -> coroutineScope.launch {
-                                snackbarHostState.showSnackbar("链接过长，请检查后重试")
-                            }
-                            normalizedUrl.isNullOrBlank() -> coroutineScope.launch {
-                                snackbarHostState.showSnackbar("请输入有效网页链接，或粘贴 B 站分享链接")
-                            }
-                            else -> runCatching {
-                                pageUrl = normalizedUrl
-                                sniffingViewModel.beginInspection(normalizedUrl)
-                            }.onFailure {
+                    onClear = {
+                        pageUrl = ""
+                        sniffingViewModel.closeInspection()
+                    },
+                    isResolving = sniffingState.isPageLoading,
+                    resources = sniffingState.resources,
+                    resultSummary = sniffingState.resultSummary,
+                    errorMessage = sniffingState.errorMessage,
+                    onResolve = {
+                        val candidate = pageUrl.trim()
+                        if (candidate.isBlank()) {
+                            coroutineScope.launch { snackbarHostState.showSnackbar("请先粘贴视频链接") }
+                        } else if (candidate.length > 4096) {
+                            coroutineScope.launch { snackbarHostState.showSnackbar("链接过长，请检查后重试") }
+                        } else {
+                            val normalized = SharedLinkNormalizer.normalize(candidate)
+                            if (normalized.isNullOrBlank()) {
                                 coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("无法开始解析，请重试")
+                                    snackbarHostState.showSnackbar("暂不支持这个链接格式")
+                                }
+                            } else {
+                                pageUrl = normalized
+                                sniffingViewModel.resolveUrl(normalized) { resources, error ->
+                                    if (!error.isNullOrBlank()) {
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("解析失败：$error")
+                                        }
+                                    } else if (!resources.isNullOrEmpty()) {
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("解析完成：${resources.size} 项")
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
+                    },
+                    onDownload = enqueueDownload
                 )
-            } else if (selectedTab == 1) {
-                DownloadsScreen(
+                1 -> DownloadsScreen(
                     folderLabel = folderLabel,
                     hasFolder = hasOutputFolder,
                     tasks = visibleDownloadTasks,
@@ -438,7 +396,7 @@ private fun FileSniffingApp(sharedLink: String) {
                         downloadCenterViewModel.loadRetryRecord(task.id) { record ->
                             if (record == null || record.sourceUrl.isBlank()) {
                                 coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("任务缺少原始参数，请重新嗅探后下载")
+                                    snackbarHostState.showSnackbar("任务缺少原始参数，请重新粘贴链接后下载")
                                 }
                             } else {
                                 DownloadEngine.retry(
@@ -463,8 +421,7 @@ private fun FileSniffingApp(sharedLink: String) {
                         task.fileUri?.let(Uri::parse)?.let { openLocalDocument(context, it) }
                     }
                 )
-            } else {
-                LocalFilesScreen(
+                else -> LocalFilesScreen(
                     treeUri = selectedFolderUri?.let(Uri::parse),
                     folderLabel = folderLabel,
                     onChooseFolder = { folderPicker.launch(null) },
@@ -492,7 +449,7 @@ private fun MainNavigationBar(
             selected = selectedTab == 0,
             onClick = { onSelect(0) },
             icon = { Icon(Icons.Rounded.Search, contentDescription = "嗅探", modifier = Modifier.size(21.dp)) },
-            label = { Text("嗅探", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+            label = { Text("解析", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = MaterialTheme.colorScheme.primary,
                 selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -534,37 +491,29 @@ private fun MainNavigationBar(
 private fun HomeScreen(
     pageUrl: String,
     onUrlChange: (String) -> Unit,
-    folderLabel: String,
-    hasFolder: Boolean,
     onPaste: () -> Unit,
     onClear: () -> Unit,
-    onPickFolder: () -> Unit,
-    onStartSniffing: () -> Unit
+    isResolving: Boolean,
+    resources: List<SniffedResource>,
+    resultSummary: String,
+    errorMessage: String?,
+    onResolve: () -> Unit,
+    onDownload: (SniffedResource) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 20.dp)
-            .padding(top = 22.dp, bottom = 16.dp)
+            .padding(top = 22.dp, bottom = 12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "嗅探",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                if (hasFolder) folderLabel else "未设置保存位置",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(Modifier.height(25.dp))
+        Text(
+            "链接解析",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 23.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(22.dp))
         UrlInputCard(
             value = pageUrl,
             onValueChange = onUrlChange,
@@ -573,7 +522,8 @@ private fun HomeScreen(
         )
         Spacer(Modifier.height(10.dp))
         Button(
-            onClick = onStartSniffing,
+            onClick = onResolve,
+            enabled = !isResolving,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
@@ -584,22 +534,126 @@ private fun HomeScreen(
             ),
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
         ) {
-            Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("开始嗅探", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            if (isResolving) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .width(22.dp)
+                        .height(2.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.25f)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text("正在解析", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            } else {
+                Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("解析链接", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
-        Spacer(Modifier.height(18.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant)
-        )
-        FolderPickerCard(
-            folderLabel = folderLabel,
-            hasFolder = hasFolder,
-            onClick = onPickFolder
-        )
+
+        if (!errorMessage.isNullOrBlank()) {
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(9.dp)
+            ) {
+                Text(
+                    errorMessage,
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    fontSize = 12.sp
+                )
+            }
+        }
+
+        if (resources.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            Text(
+                "解析结果",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (resultSummary.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    resultSummary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(resources, key = { it.id }) { resource ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(13.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(
+                                resource.pageTitle.ifBlank { resource.fileName },
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                "${resource.kind.label} · ${resource.fileName}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Button(
+                                    onClick = { onDownload(resource) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        horizontal = 18.dp,
+                                        vertical = 7.dp
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Download,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("下载", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    if (isResolving) "正在直接请求视频站解析接口…" else "粘贴视频链接后解析。应用不会打开网页。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 }
 
@@ -647,7 +701,7 @@ private fun UrlInputCard(
                     Box {
                         if (value.isEmpty()) {
                             Text(
-                                "粘贴或输入网页地址",
+                                "粘贴或输入视频链接",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 14.sp
                             )
@@ -923,7 +977,7 @@ private fun DownloadsScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     TextButton(onClick = onBackToSniff) {
-                        Text("开始嗅探", color = MaterialTheme.colorScheme.primary)
+                        Text("开始解析", color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
