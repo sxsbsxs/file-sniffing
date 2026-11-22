@@ -3,7 +3,7 @@
 ## 0.9.8
 
 - Increased the configurable direct HTTP byte-range connection ceiling from 16 to 512, with presets for 1/2/4/8/16/32/64/128/256/512 and a 64-connection default for very large files.
-- Scaled block counts by file size: small files keep a small number of ranges, while multi-gigabyte files can use the configured 256/512 ceiling when the server supports byte ranges.
+- Scaled block counts by file size: small files keep a small number of ranges, while large files target roughly one range per 4 MiB and can use the configured 256/512 ceiling when the server supports byte ranges.
 - Kept HLS/DASH segment concurrency separate and capped its worker pool at 32 so the direct-file range setting cannot create hundreds of Media3 worker threads.
 - Added regression tests for 128/256/512 connection selection and the supported setting ceiling.
 - Increased app version to 0.9.8 (versionCode 26).
