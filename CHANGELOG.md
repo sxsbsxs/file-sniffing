@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.16
+
+- Show each real yt-dlp video format as an explicit download choice instead of summarizing available formats but exposing only one generic download item.
+- Show audio-only tracks as separate choices and pair video-only formats with the best real audio-only format from the same video.
+- Pass the selected yt-dlp format selector into the download worker; use the selected audio format rather than silently overriding it with bestaudio.
+- Persist selected format selectors in Room (database migration 3 to 4) and WorkManager retry input so retries retain the chosen quality.
+- Include the format selector in task identity so duplicate taps for the same quality are blocked while different qualities of one video can be queued independently.
+- Bump app version to 0.9.16 (versionCode 34).
+
 ## 0.9.15
 
 - Replace the single universal debug APK with three ABI-specific APK artifacts: arm64-v8a, armeabi-v7a and x86_64.
