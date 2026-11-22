@@ -78,6 +78,7 @@ object DownloadEngine {
         context: Context,
         record: DownloadRecordEntity,
         partialUri: String? = null,
+        taskId: UUID = UUID.randomUUID(),
         onUpdate: (DownloadTaskUi) -> Unit
     ) {
         val destinationTree = record.destinationTreeUri
@@ -95,7 +96,7 @@ object DownloadEngine {
         }
 
         val retryData = Data.Builder()
-            .putString(PersistentDownloadWorker.KEY_TASK_ID, UUID.randomUUID().toString())
+            .putString(PersistentDownloadWorker.KEY_TASK_ID, taskId.toString())
             .putString(PersistentDownloadWorker.KEY_URL, record.sourceUrl)
             .putString(PersistentDownloadWorker.KEY_TREE, destinationTree)
             .putString(PersistentDownloadWorker.KEY_FILE_NAME, record.fileName)
@@ -114,6 +115,7 @@ object DownloadEngine {
             .build()
 
         val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
+            .setId(taskId)
             .setInputData(retryData)
             .addTag(DOWNLOAD_TAG)
             .addTag(fileNameTag(record.fileName))
@@ -135,9 +137,14 @@ object DownloadEngine {
             )
         )
 
-        val manager = WorkManager.getInstance(context.applicationContext)
+        val appContext = context.applicationContext
+        appContext.getSharedPreferences(PAUSE_REQUESTS_PREF, Context.MODE_PRIVATE)
+            .edit()
+            .remove(record.id)
+            .apply()
+        val manager = WorkManager.getInstance(appContext)
         manager.enqueue(request)
-        observeRequest(context.applicationContext, manager, request.id, onUpdate)
+        observeRequest(appContext, manager, request.id, onUpdate)
     }
 
     private fun fileNameTag(fileName: String): String =
@@ -182,7 +189,12 @@ object DownloadEngine {
 
     fun cancel(context: Context, taskId: String) {
         runCatching {
-            WorkManager.getInstance(context.applicationContext)
+            val appContext = context.applicationContext
+            appContext.getSharedPreferences(PAUSE_REQUESTS_PREF, Context.MODE_PRIVATE)
+                .edit()
+                .remove(taskId)
+                .apply()
+            WorkManager.getInstance(appContext)
                 .cancelWorkById(UUID.fromString(taskId))
         }
     }
