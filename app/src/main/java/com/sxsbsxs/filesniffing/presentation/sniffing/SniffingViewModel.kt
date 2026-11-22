@@ -155,7 +155,7 @@ class SniffingViewModel @Inject constructor(
                             fileName = safeTitle + ".mp4",
                             mimeType = "video/mp4",
                             pageTitle = entry.title,
-                            sourcePage = "https://www.youtube.com/watch?v=" + entry.videoId
+                            sourcePage = pageUrl
                         )
                     }
                 } else {
