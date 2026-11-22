@@ -32,7 +32,7 @@ The app does not open supplied URLs in a WebView, inject scripts into pages, sca
 ## Supported workflows
 
 - Single video or audio URLs supported by yt-dlp.
-- YouTube watch URLs and playlists, plus common non-YouTube playlist URL shapes when yt-dlp exposes real HTTP(S) item page URLs.
+- YouTube watch URLs and playlists, plus common non-YouTube playlist URL shapes when yt-dlp exposes real HTTP(S) item page URLs. Playlist item pages are routed through yt-dlp; direct MP4/MP3 file links remain on the HTTP engine.
 - Niconico watch URLs through yt-dlp's Niconico extractor.
 - Bilibili and other URLs supported by the installed yt-dlp extractor set, subject to extractor version and site access rules.
 - Direct HTTP(S) file and media URLs recognized by the resource classifier.
