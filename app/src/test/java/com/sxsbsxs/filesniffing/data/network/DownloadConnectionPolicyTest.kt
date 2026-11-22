@@ -29,10 +29,10 @@ class DownloadConnectionPolicyTest {
             assertEquals(8, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
 
             DownloadConnectionPolicy.setPreferredMaximumConnections(16)
-            assertEquals(32, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
+            assertEquals(16, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
 
             DownloadConnectionPolicy.setPreferredMaximumConnections(32)
-            assertEquals(16, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
+            assertEquals(32, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
         } finally {
             DownloadConnectionPolicy.setPreferredMaximumConnections(16)
         }
