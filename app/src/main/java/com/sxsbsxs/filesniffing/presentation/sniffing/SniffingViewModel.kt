@@ -10,7 +10,6 @@ import com.sxsbsxs.filesniffing.data.local.SniffedResourceEntity
 import com.sxsbsxs.filesniffing.data.repository.SniffedResourceRepository
 import com.sxsbsxs.filesniffing.data.media.AdaptiveQualityOption
 import com.sxsbsxs.filesniffing.data.media.Media3AdaptiveProcessor
-import com.sxsbsxs.filesniffing.data.extractor.NiconicoExtractor
 import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,7 +26,6 @@ import kotlinx.coroutines.launch
 class SniffingViewModel @Inject constructor(
     private val resourceRepository: SniffedResourceRepository,
     private val media3AdaptiveProcessor: Media3AdaptiveProcessor,
-    private val niconicoExtractor: NiconicoExtractor,
     private val ytDlpRuntime: YtDlpRuntime
 ) : ViewModel() {
 
@@ -108,7 +106,19 @@ class SniffingViewModel @Inject constructor(
         niconicoExtractionJob?.cancel()
         niconicoExtractionJob = viewModelScope.launch {
             try {
-                val resource = niconicoExtractor.extract(pageUrl)
+                val info = ytDlpRuntime.inspect(pageUrl)
+                if (info.selectableVideoFormats.isEmpty() && info.audioOnlyFormats.isEmpty()) {
+                    throw IllegalStateException("yt-dlp 没有从 N站返回可用的视频或音频格式")
+                }
+                val safeTitle = FileNameSanitizer.sanitize(info.title, videoId)
+                val resource = SniffedResource(
+                    url = pageUrl,
+                    kind = ResourceKind.VIDEO,
+                    fileName = "$safeTitle.mp4",
+                    mimeType = "video/mp4",
+                    pageTitle = info.title,
+                    sourcePage = pageUrl
+                )
                 if (NiconicoUrlParser.extractVideoId(_uiState.value.activePageUrl.orEmpty()) != videoId) {
                     return@launch
                 }
