@@ -142,7 +142,18 @@ class PersistentDownloadWorker @AssistedInject constructor(
         if ((requestedUrl.isBlank() && ytDlpPageUrl == null) ||
             requestedFileName.isBlank()
         ) {
-            return@withContext Result.failure(workDataOf(KEY_ERROR to "下载任务参数不完整"))
+            val detail = "下载任务参数不完整（缺少链接或文件名）"
+            persistRecord(
+                fileName = requestedFileName.ifBlank { "download.bin" },
+                sourceUrl = ytDlpPageUrl ?: requestedUrl,
+                kind = requestedKind,
+                mimeType = requestedMime,
+                state = "failed",
+                progress = 0,
+                detail = detail,
+                documentUri = null
+            )
+            return@withContext Result.failure(workDataOf(KEY_ERROR to detail))
         }
 
         var url = requestedUrl
