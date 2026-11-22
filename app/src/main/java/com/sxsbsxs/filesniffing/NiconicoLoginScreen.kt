@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sxsbsxs.filesniffing.data.extractor.NiconicoCookieProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun NiconicoLoginScreen(
@@ -45,12 +48,17 @@ fun NiconicoLoginScreen(
     var loggedIn by rememberSaveable { mutableStateOf(false) }
     var checked by rememberSaveable { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     fun refreshLoginState() {
-        CookieManager.getInstance().flush()
         loggedIn = NiconicoCookieProvider.hasSessionInWebView()
         checked = true
         onLoginStateChanged(loggedIn)
+        if (loggedIn) {
+            coroutineScope.launch(Dispatchers.IO) {
+                runCatching { CookieManager.getInstance().flush() }
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -136,6 +144,9 @@ fun NiconicoLoginScreen(
                                 loggedIn = true
                                 checked = true
                                 onLoginStateChanged(true)
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    runCatching { CookieManager.getInstance().flush() }
+                                }
                             }
                         }
                     }
