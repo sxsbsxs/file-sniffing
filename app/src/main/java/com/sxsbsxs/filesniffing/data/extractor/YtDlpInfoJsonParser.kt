@@ -90,7 +90,7 @@ data class YtDlpFormat(
 }
 
 data class YtDlpPlaylistEntry(
-    val videoId: String,
+    val entryId: String,
     val title: String,
     val webpageUrl: String
 )
@@ -116,27 +116,51 @@ internal object YtDlpInfoJsonParser {
             ?.takeIf { it.isJsonObject }
             ?.asJsonObject
             ?: throw IllegalArgumentException("yt-dlp 播放列表 JSON 无效")
+        require(root.has("entries")) {
+            "yt-dlp 返回的内容不是播放列表"
+        }
+        val extractor = (
+            root.string("extractor_key") ?: root.string("extractor")
+        ).orEmpty()
+        val isYouTube = extractor.contains("youtube", ignoreCase = true)
         val entries = root.array("entries")
             ?.mapNotNull { element ->
                 if (!element.isJsonObject) return@mapNotNull null
                 val item = element.asJsonObject
-                val id = item.string("id")
-                    ?.takeIf { it.matches(Regex("^[A-Za-z0-9_-]{11}$")) }
+                val id = (item.string("id") ?: item.string("display_id"))
+                    ?.take(160)
+                    ?.takeIf { it.isNotBlank() }
                     ?: return@mapNotNull null
                 val title = item.string("title")?.take(180) ?: id
-                val page = item.string("webpage_url")
-                    ?: item.string("url")?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-                    ?: "https://www.youtube.com/watch?v=$id"
+                val suppliedPage = sequenceOf(
+                    item.string("webpage_url"),
+                    item.string("original_url"),
+                    item.string("url")
+                ).filterNotNull().firstOrNull(::isSafeWebPageUrl)
+                val page = suppliedPage ?: if (
+                    isYouTube && id.matches(Regex("^[A-Za-z0-9_-]{11}$"))
+                ) {
+                    "https://www.youtube.com/watch?v=$id"
+                } else {
+                    null
+                } ?: return@mapNotNull null
                 YtDlpPlaylistEntry(id, title, page)
             }
             .orEmpty()
-            .distinctBy { it.videoId }
+            .distinctBy { it.webpageUrl }
             .take(200)
-        require(entries.isNotEmpty()) { "yt-dlp 没有返回可用的播放列表视频" }
+        require(entries.isNotEmpty()) { "yt-dlp 没有返回可用的播放列表视频链接" }
         return YtDlpPlaylistInfo(
-            title = root.string("title")?.take(180) ?: "YouTube 播放列表",
+            title = root.string("title")?.take(180) ?: "媒体播放列表",
             entries = entries
         )
+    }
+
+    private fun isSafeWebPageUrl(value: String): Boolean {
+        val uri = runCatching { java.net.URI(value) }.getOrNull() ?: return false
+        return (uri.scheme.equals("https", true) || uri.scheme.equals("http", true)) &&
+            !uri.host.isNullOrBlank() &&
+            uri.rawUserInfo == null
     }
 
     fun parse(json: String): YtDlpVideoInfo {
