@@ -47,6 +47,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -59,6 +60,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -96,6 +98,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
 import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
 import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
+import com.sxsbsxs.filesniffing.data.preferences.DownloadTuning
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -144,6 +147,7 @@ private fun FileSniffingApp(sharedLink: String) {
     val downloadCenterViewModel: DownloadCenterViewModel = hiltViewModel()
     val sniffingState by sniffingViewModel.uiState.collectAsState()
     val selectedFolderUri by downloadCenterViewModel.selectedDownloadFolder.collectAsState()
+    val downloadTuning by downloadCenterViewModel.downloadTuning.collectAsState()
     val storedDownloadHistory by downloadCenterViewModel.downloadHistory.collectAsState()
 
     var askedForNotificationPermission by rememberSaveable { mutableStateOf(false) }
@@ -224,7 +228,8 @@ private fun FileSniffingApp(sharedLink: String) {
 
     val folderLabel = selectedFolderUri
         ?.let { folderNameFromUri(Uri.parse(it)) }
-        ?: "选择手机文件夹"
+        ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "Download（默认）" else "选择手机文件夹"
+    val hasOutputFolder = selectedFolderUri != null || Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
     if (showCrashReportDialog && !startupCrashReport.isNullOrBlank()) {
         AlertDialog(
@@ -282,12 +287,12 @@ private fun FileSniffingApp(sharedLink: String) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         val folder = selectedFolderUri
-        if (folder == null) {
-            coroutineScope.launch { snackbarHostState.showSnackbar("请先选择保存文件夹") }
+        if (folder == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            coroutineScope.launch { snackbarHostState.showSnackbar("Android 9 及以下请先选择保存文件夹") }
         } else {
             DownloadEngine.start(
                 context = context.applicationContext,
-                destinationTree = Uri.parse(folder),
+                destinationTree = folder?.let(Uri::parse),
                 resource = resource,
                 adaptiveVideoHeight = adaptiveVideoHeight
             ) { task ->
@@ -300,7 +305,7 @@ private fun FileSniffingApp(sharedLink: String) {
                 }
             }
             if (showQueuedMessage) {
-                coroutineScope.launch { snackbarHostState.showSnackbar("已加入下载队列") }
+                coroutineScope.launch { snackbarHostState.showSnackbar("已加入下载队列 · Download") }
             }
         }
     }
@@ -339,13 +344,9 @@ private fun FileSniffingApp(sharedLink: String) {
                         sniffingViewModel.inspectAdaptiveQualities(resource, callback)
                     },
                     onDownloadBatch = { selected ->
-                        if (selectedFolderUri == null) {
-                            coroutineScope.launch { snackbarHostState.showSnackbar("请先选择保存文件夹") }
-                        } else {
-                            selected.forEach { resource -> enqueueDownload(resource, false, null) }
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("已将 ${selected.size} 项加入下载队列")
-                            }
+                        selected.forEach { resource -> enqueueDownload(resource, false, null) }
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("已将 ${selected.size} 项加入下载队列")
                         }
                     },
                     onNiconicoPageReady = { targetUrl ->
@@ -367,7 +368,7 @@ private fun FileSniffingApp(sharedLink: String) {
                     pageUrl = pageUrl,
                     onUrlChange = { pageUrl = it },
                     folderLabel = folderLabel,
-                    hasFolder = selectedFolderUri != null,
+                    hasFolder = hasOutputFolder,
                     onPaste = {
                         val pasted = clipboard.getText()?.text.orEmpty().trim()
                         if (pasted.isNotEmpty()) pageUrl = pasted
@@ -406,13 +407,13 @@ private fun FileSniffingApp(sharedLink: String) {
                     folderLabel = folderLabel,
                     hasFolder = selectedFolderUri != null,
                     tasks = visibleDownloadTasks,
+                    tuning = downloadTuning,
+                    onUpdateTuning = downloadCenterViewModel::updateDownloadTuning,
                     onChooseFolder = { folderPicker.launch(null) },
                     onBackToSniff = { selectedTab = 0 },
                     onRetryTask = { task ->
                         downloadCenterViewModel.loadRetryRecord(task.id) { record ->
-                            if (record == null || record.sourceUrl.isBlank() ||
-                                record.destinationTreeUri.isNullOrBlank()
-                            ) {
+                            if (record == null || record.sourceUrl.isBlank()) {
                                 coroutineScope.launch {
                                     snackbarHostState.showSnackbar("任务缺少原始参数，请重新嗅探后下载")
                                 }
@@ -713,9 +714,21 @@ private fun DownloadsScreen(
     onRetryTask: (DownloadTaskUi) -> Unit,
     onPauseTask: (DownloadTaskUi) -> Unit,
     onCancelTask: (DownloadTaskUi) -> Unit,
-    onOpenTask: (DownloadTaskUi) -> Unit
+    onOpenTask: (DownloadTaskUi) -> Unit,
+    tuning: DownloadTuning,
+    onUpdateTuning: (DownloadTuning) -> Unit
 ) {
     var statusFilter by rememberSaveable { mutableStateOf("全部") }
+    var showDownloadSettings by rememberSaveable { mutableStateOf(false) }
+    var connectionsDraft by remember(tuning.connectionsPerTask) {
+        mutableIntStateOf(tuning.connectionsPerTask)
+    }
+    var parallelDraft by remember(tuning.parallelDownloads) {
+        mutableIntStateOf(tuning.parallelDownloads)
+    }
+    var speedLimitDraft by remember(tuning.speedLimitMegabytesPerSecond) {
+        mutableIntStateOf(tuning.speedLimitMegabytesPerSecond)
+    }
     var kindFilter by rememberSaveable { mutableStateOf("全部") }
     val activeCount = tasks.count { it.state == "downloading" || it.state == "queued" }
     val pausedCount = tasks.count { it.state == "paused" }
@@ -754,6 +767,9 @@ private fun DownloadsScreen(
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.weight(1f))
+            IconButton(onClick = { showDownloadSettings = true }) {
+                Icon(Icons.Rounded.Tune, contentDescription = "下载设置")
+            }
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(7.dp)
@@ -928,6 +944,67 @@ private fun DownloadsScreen(
                 }
             }
         }
+    }
+
+    if (showDownloadSettings) {
+        AlertDialog(
+            onDismissRequest = { showDownloadSettings = false },
+            title = { Text("下载性能") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("单任务连接数：$connectionsDraft", fontWeight = FontWeight.Medium)
+                    Slider(
+                        value = connectionsDraft.toFloat(),
+                        onValueChange = { connectionsDraft = it.toInt().coerceIn(1, 16) },
+                        valueRange = 1f..16f,
+                        steps = 14
+                    )
+                    Text("同时下载任务：$parallelDraft", fontWeight = FontWeight.Medium)
+                    Slider(
+                        value = parallelDraft.toFloat(),
+                        onValueChange = { parallelDraft = it.toInt().coerceIn(1, 4) },
+                        valueRange = 1f..4f,
+                        steps = 2
+                    )
+                    Text("总速度上限", fontWeight = FontWeight.Medium)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(0, 1, 2, 5, 10, 20).forEach { limit ->
+                            FilterChip(
+                                selected = speedLimitDraft == limit,
+                                onClick = { speedLimitDraft = limit },
+                                label = { Text(if (limit == 0) "不限" else "${limit} MB/s") }
+                            )
+                        }
+                    }
+                    Text(
+                        "连接数只是上限，小文件会自动减少；服务器不支持分段时会退回单连接。速度上限由所有下载任务共享。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onUpdateTuning(
+                        DownloadTuning(
+                            connectionsPerTask = connectionsDraft,
+                            parallelDownloads = parallelDraft,
+                            speedLimitMegabytesPerSecond = speedLimitDraft
+                        )
+                    )
+                    showDownloadSettings = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDownloadSettings = false }) { Text("取消") }
+            }
+        )
     }
 }
 
