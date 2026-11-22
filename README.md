@@ -2,7 +2,7 @@
 
 File Sniffing is an Android link resolver and download manager. It no longer contains an in-app browser or webpage-sniffing screen.
 
-Current app version: 0.9.14
+Current app version: 0.9.15
 
 ## How it works
 
@@ -60,4 +60,4 @@ Open the project in Android Studio with JDK 17 and Android SDK 36, or run:
     python3 tools/validate_media_fixtures.py
     ./gradlew :app:assembleDebug
 
-GitHub Actions builds a debug APK on pushes and pull requests to main, publishing the APK as the file-sniffing-debug artifact.
+GitHub Actions builds separate debug APKs on pushes and pull requests to main. Download only the artifact matching the phone CPU architecture: `file-sniffing-arm64-v8a` for most modern 64-bit Android phones, `file-sniffing-armeabi-v7a` for 32-bit ARM devices, or `file-sniffing-x86_64` for x86_64 emulators. There is no universal APK containing all three copies of Python and FFmpeg.
