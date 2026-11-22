@@ -5,7 +5,7 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
 /**
- * Converts shared links and supported app deep links into browser-loadable URLs.
+ * Converts shared text and supported app deep links into direct extractor URLs.
  *
  * Bilibili share links may wrap a normal mobile-web URL in the "open_app_url"
  * query parameter. The wrapper is URL-encoded, so it must be decoded before a
