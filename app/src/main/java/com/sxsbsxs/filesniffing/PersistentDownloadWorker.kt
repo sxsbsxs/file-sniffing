@@ -57,7 +57,8 @@ class PersistentDownloadWorker @AssistedInject constructor(
             executeDownload()
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (error: Exception) {
+        } catch (error: Throwable) {
+            if (error is VirtualMachineError || error is ThreadDeath) throw error
             val detail = formatUnexpectedFailure(error)
             // Persist the original URL and failure even when setup fails before the main try block.
             runCatching {
@@ -85,7 +86,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
         }
     }
 
-    private fun formatUnexpectedFailure(error: Exception): String {
+    private fun formatUnexpectedFailure(error: Throwable): String {
         var root: Throwable = error
         while (root.cause != null && root.cause !== root) {
             root = root.cause!!
@@ -538,7 +539,8 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 )
             }
             throw cancelled
-        } catch (error: Exception) {
+        } catch (error: Throwable) {
+            if (error is VirtualMachineError || error is ThreadDeath) throw error
             if (ytDlpPageUrl != null && !ytDlpOutputReady) {
                 runCatching { ytDlpTempDirectory?.deleteRecursively() }
             }
