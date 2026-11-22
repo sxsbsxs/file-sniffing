@@ -97,6 +97,7 @@ import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
 import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
+import java.util.UUID
 import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
 import com.sxsbsxs.filesniffing.data.preferences.DownloadTuning
 
@@ -303,24 +304,42 @@ private fun FileSniffingApp(sharedLink: String) {
                 snackbarHostState.showSnackbar("Android 9 及以下请先选择保存文件夹")
             }
         } else {
-            DownloadEngine.start(
-                context = context.applicationContext,
-                destinationTree = folder?.let(Uri::parse),
-                resource = resource
-            ) { task ->
-                val index = downloadTasks.indexOfFirst { it.id == task.id }
-                if (index < 0) downloadTasks.add(0, task)
-                else downloadTasks[index] = task
-                if (task.state == "queued" || task.state == "downloading") {
-                    activeDownloadUrls[task.id] = resource.url
-                } else {
-                    activeDownloadUrls.remove(task.id)
-                }
-                if (task.state == "failed") {
-                    coroutineScope.launch { snackbarHostState.showSnackbar(task.detail) }
+            val taskId = UUID.randomUUID()
+            activeDownloadUrls[taskId.toString()] = resource.url
+            coroutineScope.launch {
+                try {
+                    // Commit the retry source before enqueue, so a fast Worker cannot race this write.
+                    downloadCenterViewModel.persistInitialTask(
+                        taskId = taskId,
+                        resource = resource,
+                        destinationTreeUri = folder
+                    )
+                    DownloadEngine.start(
+                        context = context.applicationContext,
+                        destinationTree = folder?.let(Uri::parse),
+                        resource = resource,
+                        taskId = taskId
+                    ) { task ->
+                        val index = downloadTasks.indexOfFirst { it.id == task.id }
+                        if (index < 0) downloadTasks.add(0, task)
+                        else downloadTasks[index] = task
+                        if (task.state == "queued" || task.state == "downloading") {
+                            activeDownloadUrls[task.id] = resource.url
+                        } else {
+                            activeDownloadUrls.remove(task.id)
+                        }
+                        if (task.state == "failed") {
+                            coroutineScope.launch { snackbarHostState.showSnackbar(task.detail) }
+                        }
+                    }
+                    snackbarHostState.showSnackbar("已加入下载队列")
+                } catch (error: Exception) {
+                    activeDownloadUrls.remove(taskId.toString())
+                    snackbarHostState.showSnackbar(
+                        "无法创建下载任务：" + (error.message ?: "请重试")
+                    )
                 }
             }
-            coroutineScope.launch { snackbarHostState.showSnackbar("已加入下载队列") }
         }
     }
 
