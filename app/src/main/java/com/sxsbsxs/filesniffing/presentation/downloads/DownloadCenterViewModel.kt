@@ -117,8 +117,8 @@ class DownloadCenterViewModel @Inject constructor(
     ) {
         val now = System.currentTimeMillis()
         val superseded = previous.copy(
-            state = "cancelled",
-            detail = "已由新的继续下载任务替代",
+            state = "superseded",
+            detail = "已由新的重试任务替代",
             speedBytesPerSecond = -1L,
             updatedAtMillis = now
         )
@@ -154,6 +154,9 @@ class DownloadCenterViewModel @Inject constructor(
 
     suspend fun reconcileWorkManagerTask(task: com.sxsbsxs.filesniffing.DownloadTaskUi) {
         val previous = repository.findById(task.id) ?: return
+        // A superseded retry row is historical metadata. The old WorkManager request may
+        // still report FAILED; never let that terminal snapshot resurrect the old card.
+        if (previous.state == "superseded") return
         val isTerminal = task.state in setOf("paused", "cancelled", "completed", "failed")
         val staleDownloadingRow = task.state == "queued" && previous.state == "downloading"
         if (!isTerminal && !staleDownloadingRow) return
