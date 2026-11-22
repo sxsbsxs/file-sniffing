@@ -989,7 +989,7 @@ private fun DownloadsScreen(
                         }
                     }
                     Text(
-                        "直链支持 1–512 个分段连接；小文件会自动减少，服务器不支持 Range 时会退回单连接。HLS/DASH 分片并发另行限制，避免创建过多线程。速度上限由所有下载任务共享。",
+                        "直链支持 1–512 个分段连接；大文件约每 4 MiB 分一段，小文件自动减少。服务器不支持 Range 时会退回单连接。HLS/DASH 分片并发另行限制为最多 32。速度上限由所有下载任务共享。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
