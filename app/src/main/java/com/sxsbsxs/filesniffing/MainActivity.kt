@@ -341,7 +341,14 @@ private fun FileSniffingApp(sharedLink: String) {
                             activeDownloadUrls.remove(task.id)
                         }
                         if (task.state == "failed") {
-                            coroutineScope.launch { snackbarHostState.showSnackbar(task.detail) }
+                            coroutineScope.launch {
+                                downloadCenterViewModel.updateTaskState(
+                                    task.id,
+                                    state = "failed",
+                                    detail = task.detail
+                                )
+                                snackbarHostState.showSnackbar(task.detail)
+                            }
                         }
                     }
                     snackbarHostState.showSnackbar("已加入下载队列")
@@ -479,6 +486,15 @@ private fun FileSniffingApp(sharedLink: String) {
                                                 activeDownloadUrls[updated.id] = retryKey
                                             } else {
                                                 activeDownloadUrls.remove(updated.id)
+                                            }
+                                            if (updated.state == "failed") {
+                                                coroutineScope.launch {
+                                                    downloadCenterViewModel.updateTaskState(
+                                                        updated.id,
+                                                        state = "failed",
+                                                        detail = updated.detail
+                                                    )
+                                                }
                                             }
                                         }
                                     } catch (error: Exception) {
