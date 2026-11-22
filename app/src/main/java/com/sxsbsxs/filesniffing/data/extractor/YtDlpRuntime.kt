@@ -134,15 +134,21 @@ class YtDlpRuntime @Inject constructor(
             throw IOException("无法创建下载临时目录")
         }
         val outputPrefix = "ytdlp-$processId"
-        val reusableOutput = outputDirectory.listFiles()
-            ?.filter { it.isFile && it.name.startsWith("$outputPrefix.") &&
-                !it.name.endsWith(".part", ignoreCase = true) && it.length() > 0L }
-            ?.maxByOrNull { it.lastModified() }
-        if (reusableOutput != null) return@withContext reusableOutput
+        // Only reuse an output that this runtime previously marked complete after yt-dlp
+        // exited successfully. Raw video/audio streams left by a paused merge are not outputs.
+        YtDlpOutputFilePolicy.findCompletedOutput(outputDirectory, outputPrefix)
+            ?.let { return@withContext it }
         try {
+            // Remove an unmarked final file left by an interrupted FFmpeg merge, but keep
+            // yt-dlp's format-specific files and .part data so --continue can resume them.
+            YtDlpOutputFilePolicy.prepareForDownload(outputDirectory, outputPrefix)
             val request = YoutubeDLRequest(url).apply {
                 addOption("--no-playlist")
                 addOption("--newline")
+                addOption("--socket-timeout", "30")
+                addOption("--retries", "3")
+                addOption("--fragment-retries", "3")
+                addOption("--extractor-retries", "2")
                 addOption("--progress-delta", "0.5")
                 addOption(
                     "--progress-template",
@@ -189,11 +195,10 @@ class YtDlpRuntime @Inject constructor(
             executeCancellable(request, processId) { progress, eta, line ->
                 onProgress?.invoke(progress, eta, line.take(240))
             }
-            outputDirectory.listFiles()
-                ?.filter { it.isFile && it.name.startsWith("$outputPrefix.") &&
-                    !it.name.endsWith(".part", ignoreCase = true) && it.length() > 0L }
-                ?.maxByOrNull { it.lastModified() }
-                ?: throw IOException("yt-dlp 已结束，但没有找到输出文件")
+            val completedOutput = YtDlpOutputFilePolicy.findFinalOutput(outputDirectory, outputPrefix)
+                ?: throw IOException("yt-dlp 已结束，但没有找到合并后的最终媒体文件")
+            YtDlpOutputFilePolicy.markCompleted(outputDirectory, outputPrefix, completedOutput)
+            completedOutput
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {

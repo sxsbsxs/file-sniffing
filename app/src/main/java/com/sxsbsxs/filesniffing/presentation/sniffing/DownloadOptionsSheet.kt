@@ -3,6 +3,7 @@ package com.sxsbsxs.filesniffing.presentation.sniffing
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,9 +13,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Download
@@ -120,79 +121,106 @@ fun DownloadOptionsSheet(
         "audio" -> DownloadFormatComposer.audio(selectedAudio)
         else -> directChoice
     }
-
     val isReady = selectedResource != null &&
         (mode != "video" || selectedResource.formatSelector?.isNotBlank() == true)
+
+    val uploader = resources.firstNotNullOfOrNull { it.uploader }?.takeIf { it.isNotBlank() }
+    val duration = resources.firstNotNullOfOrNull { it.durationSeconds }?.let(::formatMediaDuration)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surface
     ) {
-        Column(
+        // A single LazyColumn participates in the bottom sheet's nested-scroll system.
+        // The previous Column + verticalScroll composed every codec row and could fight
+        // the sheet's own drag/overscroll at the lower edge on long Niconico format lists.
+        LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 680.dp)
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 22.dp)
-                .padding(bottom = 20.dp),
+                .navigationBarsPadding(),
+            contentPadding = PaddingValues(
+                start = 22.dp,
+                top = 8.dp,
+                end = 22.dp,
+                bottom = 24.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                "下载配置",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 21.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                resources.firstOrNull()?.pageTitle?.ifBlank { "媒体文件" } ?: "媒体文件",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val uploader = resources.firstNotNullOfOrNull { it.uploader }?.takeIf { it.isNotBlank() }
-            val duration = resources.firstNotNullOfOrNull { it.durationSeconds }?.let(::formatMediaDuration)
-            if (uploader != null || duration != null) {
+            item(key = "options-title") {
                 Text(
-                    listOfNotNull(uploader, duration).joinToString(" · "),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
+                    "下载配置",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
+            }
+            item(key = "options-media-title") {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        resources.firstOrNull()?.pageTitle?.ifBlank { "媒体文件" } ?: "媒体文件",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (uploader != null || duration != null) {
+                        Text(
+                            listOfNotNull(uploader, duration).joinToString(" · "),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
             }
 
             if (videoChoices.isNotEmpty() && audioChoices.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = mode == "video",
-                        onClick = { mode = "video" },
-                        label = { Text("视频") },
-                        leadingIcon = {
-                            Icon(Icons.Rounded.VideoFile, contentDescription = null, modifier = Modifier.size(17.dp))
-                        }
-                    )
-                    FilterChip(
-                        selected = mode == "audio",
-                        onClick = { mode = "audio" },
-                        label = { Text("仅音频") },
-                        leadingIcon = {
-                            Icon(Icons.Rounded.AudioFile, contentDescription = null, modifier = Modifier.size(17.dp))
-                        }
-                    )
+                item(key = "options-mode") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = mode == "video",
+                            onClick = { mode = "video" },
+                            label = { Text("视频") },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Rounded.VideoFile,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
+                        )
+                        FilterChip(
+                            selected = mode == "audio",
+                            onClick = { mode = "audio" },
+                            label = { Text("仅音频") },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Rounded.AudioFile,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
             when (mode) {
                 "video" -> {
-                    Text(
-                        "视频画质",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    videoChoices.forEach { choice ->
+                    item(key = "video-quality-heading") {
+                        Text(
+                            "视频画质",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    items(
+                        items = videoChoices,
+                        key = { choice -> "video:${choice.downloadKey}" }
+                    ) { choice ->
                         FormatChoiceRow(
                             selected = choice.downloadKey == selectedVideo?.downloadKey,
                             title = choice.qualityLabel ?: "视频格式",
@@ -202,50 +230,67 @@ fun DownloadOptionsSheet(
                     }
 
                     selectedVideo?.let { video ->
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            "音轨",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (video.hasEmbeddedAudio) {
-                            FormatChoiceRow(
-                                selected = true,
-                                title = "使用视频自带音轨",
-                                subtitle = video.codecLabel?.let { "内嵌 · " + it } ?: "此视频格式已包含音频",
-                                onClick = { selectedAudioId = "" }
+                        item(key = "audio-heading") {
+                            Text(
+                                "音轨",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
+                        }
+                        if (video.hasEmbeddedAudio) {
+                            item(key = "embedded-audio") {
+                                FormatChoiceRow(
+                                    selected = true,
+                                    title = "使用视频自带音轨",
+                                    subtitle = video.codecLabel?.let { "内嵌 · $it" }
+                                        ?: "此视频格式已包含音频",
+                                    onClick = { selectedAudioId = "" }
+                                )
+                            }
                         } else {
-                            audioChoices.forEach { choice ->
+                            items(
+                                items = audioChoices,
+                                key = { choice ->
+                                    "audio:${choice.audioFormatId ?: choice.formatSelector.orEmpty()}"
+                                }
+                            ) { choice ->
                                 val audioId = choice.audioFormatId ?: choice.formatSelector.orEmpty()
                                 FormatChoiceRow(
                                     selected = selectedAudioId == audioId,
                                     title = choice.qualityLabel ?: "音频格式",
                                     subtitle = buildFormatDetails(choice),
-                                    onClick = {
-                                                                                selectedAudioId = audioId
-                                    }
+                                    onClick = { selectedAudioId = audioId }
                                 )
                             }
                         }
                         if (!video.hasEmbeddedAudio && selectedAudio == null) {
-                            Text(
-                                "此画质没有内嵌音轨，请选择一个可用音轨。",
-                                color = MaterialTheme.colorScheme.error,
-                                fontSize = 12.sp
-                            )
+                            item(key = "audio-warning") {
+                                Text(
+                                    "此画质没有内嵌音轨，请选择一个可用音轨。",
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                     }
                 }
+
                 "audio" -> {
-                    Text(
-                        "音频质量",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    audioChoices.forEach { choice ->
+                    item(key = "audio-quality-heading") {
+                        Text(
+                            "音频质量",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    items(
+                        items = audioChoices,
+                        key = { choice ->
+                            "audio-only:${choice.audioFormatId ?: choice.formatSelector.orEmpty()}"
+                        }
+                    ) { choice ->
                         val audioId = choice.audioFormatId ?: choice.formatSelector.orEmpty()
                         FormatChoiceRow(
                             selected = selectedAudioId == audioId,
@@ -255,71 +300,86 @@ fun DownloadOptionsSheet(
                         )
                     }
                 }
+
                 else -> {
-                    Text(
-                        directChoice?.fileName ?: "原始文件",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp
-                    )
+                    item(key = "direct-file") {
+                        Text(
+                            directChoice?.fileName ?: "原始文件",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
 
-            Divider(color = MaterialTheme.colorScheme.outlineVariant)
-            Text(
-                "将下载",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(13.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
+            item(key = "options-divider") {
+                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            item(key = "options-summary") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        when (mode) {
-                            "video" -> "视频 · " + (selectedResource?.qualityLabel ?: "请选择画质")
-                            "audio" -> "仅音频 · " + (selectedResource?.qualityLabel ?: "请选择音质")
-                            else -> directChoice?.kind?.label ?: "文件"
-                        },
+                        "将下载",
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.SemiBold
                     )
-                    Text(
-                        selectedResource?.let {
-                            buildString {
-                                append(it.fileName)
-                                it.fileSizeBytes?.takeIf { size -> size > 0L }?.let {
-                                    append(" · ").append(formatMediaBytes(it))
-                                }
-                            }
-                        } ?: "选择有效的视频画质与音轨",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(13.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                when (mode) {
+                                    "video" -> "视频 · " + (selectedResource?.qualityLabel ?: "请选择画质")
+                                    "audio" -> "仅音频 · " + (selectedResource?.qualityLabel ?: "请选择音质")
+                                    else -> directChoice?.kind?.label ?: "文件"
+                                },
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                selectedResource?.let {
+                                    buildString {
+                                        append(it.fileName)
+                                        it.fileSizeBytes?.takeIf { size -> size > 0L }?.let { size ->
+                                            append(" · ").append(formatMediaBytes(size))
+                                        }
+                                    }
+                                } ?: "选择有效的视频画质与音轨",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
-            Button(
-                onClick = {
-                    selectedResource?.let(onStartDownload)
-                    onDismiss()
-                },
-                enabled = isReady,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("加入下载队列")
+            item(key = "options-start-download") {
+                Button(
+                    onClick = {
+                        selectedResource?.let(onStartDownload)
+                        onDismiss()
+                    },
+                    enabled = isReady,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("加入下载队列")
+                }
             }
         }
     }
@@ -383,6 +443,6 @@ private fun formatMediaDuration(seconds: Double): String {
     return if (hours > 0L) {
         String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, remaining)
     } else {
-        String.format(Locale.ROOT, "%d:%02d", minutes, remaining)
+        String.format(Locale.ROOT, "%d:%02d", minutes, seconds)
     }
 }
