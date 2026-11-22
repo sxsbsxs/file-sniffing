@@ -2,7 +2,7 @@ package com.sxsbsxs.filesniffing.data.extractor
 
 internal object YtDlpProgressStagePolicy {
     private val completedDownloadLine = Regex(
-        """(?i)(?:\\[download\\]\\s*100(?:\\.0+)?%|\\(100(?:\\.0+)?%\\))"""
+        """(?i)(?:\[download\]\s*100(?:\.0+)?%|\(100(?:\.0+)?%\))"""
     )
     private val postProcessingMarkers = listOf(
         "[merger]",
