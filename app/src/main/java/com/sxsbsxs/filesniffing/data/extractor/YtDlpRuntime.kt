@@ -227,7 +227,10 @@ class YtDlpRuntime @Inject constructor(
             ".youtube.com" to "https://www.youtube.com/",
             ".google.com" to "https://accounts.google.com/",
             ".nicovideo.jp" to "https://www.nicovideo.jp/",
-            ".nicovideo.jp" to "https://account.nicovideo.jp/"
+            ".nicovideo.jp" to "https://account.nicovideo.jp/",
+            ".bilibili.com" to "https://www.bilibili.com/",
+            ".bilibili.com" to "https://passport.bilibili.com/",
+            ".bilibili.tv" to "https://www.bilibili.tv/"
         )
         return sources.flatMap { (domain, origin) ->
             runCatching { cookieManager.getCookie(origin).orEmpty() }
@@ -276,7 +279,9 @@ class YtDlpRuntime @Inject constructor(
             "youtube.com",
             "google.com",
             "nicovideo.jp",
-            "nimg.jp"
+            "nimg.jp",
+            "bilibili.com",
+            "bilibili.tv"
         )
     }
 }
