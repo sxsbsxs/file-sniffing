@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.17
+
+- Add a 26-project open-source benchmark and repository-specific product improvement plan in `docs/OPEN_SOURCE_BENCHMARK.md`.
+- Replace the resolver's per-format card stack with one media preview card per source URL, showing a thumbnail, uploader, duration, available video qualities and audio track count.
+- Add a download configuration bottom sheet with separate Video and Audio-only modes, actual yt-dlp format IDs, audio selection for video-only streams, and a preview of the output name and estimated size before enqueue.
+- Preserve a muxed format's embedded audio; do not append an additional audio-only stream to formats that already contain audio.
+- Distinguish direct MP4/audio file links from extractor format choices; direct files go straight to download without a fake quality picker.
+- Add search by filename/error text and sorting by recent, filename and progress in Download Center.
+- Load media thumbnails with Coil while keeping URLs and signed stream credentials out of Room task records.
+- Keep existing WorkManager, Room, HTTP, HLS/DASH and yt-dlp download engines; this change improves their product flow instead of replacing them.
+- Bump app version to 0.9.17 (versionCode 35).
+
 ## 0.9.16
 
 - Show each real yt-dlp video format as an explicit download choice instead of summarizing available formats but exposing only one generic download item.
