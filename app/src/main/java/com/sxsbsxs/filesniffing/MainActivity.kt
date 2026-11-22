@@ -1,5 +1,7 @@
 package com.sxsbsxs.filesniffing
 
+import com.sxsbsxs.filesniffing.presentation.downloads.DownloadTaskDetailPolicy
+
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -14,8 +16,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +33,8 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,16 +44,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.CenterFocusStrong
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,16 +59,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
@@ -81,9 +85,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -96,15 +100,14 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
+import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
 import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
+import java.util.UUID
 import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
-
-private val AppBackground = Color(0xFFF6F7F9)
-private val Ink = Color(0xFF17191F)
-private val SecondaryText = Color(0xFF777D88)
-private val Hairline = Color(0xFFE9EBEF)
-private val Accent = Color(0xFF4B66E8)
-private val SoftAccent = Color(0xFFEEF1FF)
+import com.sxsbsxs.filesniffing.presentation.sniffing.DownloadOptionsSheet
+import com.sxsbsxs.filesniffing.data.preferences.DownloadTuning
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -130,31 +133,12 @@ class MainActivity : ComponentActivity() {
         if (source == null) return ""
         val sharedText = when (source.action) {
             Intent.ACTION_SEND -> source.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
-            Intent.ACTION_VIEW -> source.dataString.orEmpty()
             else -> ""
         }.trim()
-        val prefixes = listOf("https://", "http://")
-        val match = prefixes.mapNotNull { prefix ->
-            val index = sharedText.indexOf(prefix, ignoreCase = true)
-            if (index >= 0) sharedText.substring(index).takeWhile { !it.isWhitespace() } else null
-        }.firstOrNull()?.trimEnd(')', ']', '}', ',', '.', '!', '?', ';')
-        return match ?: sharedText
+        return SharedLinkNormalizer.normalize(sharedText)
+            ?: SharedLinkNormalizer.extractCandidate(sharedText)
+            ?: sharedText
     }
-}
-
-@Composable
-private fun FileSniffingTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = Ink,
-            onPrimary = Color.White,
-            background = AppBackground,
-            surface = Color.White,
-            onSurface = Ink,
-            secondary = Accent
-        ),
-        content = content
-    )
 }
 
 @Composable
@@ -163,50 +147,98 @@ private fun FileSniffingApp(sharedLink: String) {
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    val startupCrashReport = remember(context) { CrashReporter.read(context) }
+    var showCrashReportDialog by rememberSaveable {
+        mutableStateOf(!startupCrashReport.isNullOrBlank())
+    }
     val sniffingViewModel: SniffingViewModel = hiltViewModel()
     val downloadCenterViewModel: DownloadCenterViewModel = hiltViewModel()
     val sniffingState by sniffingViewModel.uiState.collectAsState()
     val selectedFolderUri by downloadCenterViewModel.selectedDownloadFolder.collectAsState()
+    val downloadTuning by downloadCenterViewModel.downloadTuning.collectAsState()
     val storedDownloadHistory by downloadCenterViewModel.downloadHistory.collectAsState()
 
     var askedForNotificationPermission by rememberSaveable { mutableStateOf(false) }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
-
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var pageUrl by rememberSaveable { mutableStateOf(sharedLink) }
+    var pendingDownloadOptions by remember { mutableStateOf<List<SniffedResource>?>(null) }
+
     LaunchedEffect(sharedLink) {
         if (sharedLink.isNotBlank()) {
             pageUrl = sharedLink
-            sniffingViewModel.closeInspection()
             selectedTab = 0
+            sniffingViewModel.closeInspection()
         }
     }
+
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
+    // Prevent a fast double tap from creating duplicate WorkManager requests for one URL.
+    val activeDownloadUrls = remember { mutableMapOf<String, String>() }
     val storedTasksById = storedDownloadHistory.associateBy { it.id }
-    val liveTasksWithStoredUri = downloadTasks.map { task ->
-        if (task.fileUri != null) task
-        else task.copy(fileUri = storedTasksById[task.id]?.destinationUri)
+    val liveTasksWithStoredUri = downloadTasks
+        .filterNot { storedTasksById[it.id]?.state == "superseded" }
+        .map { task ->
+        val stored = storedTasksById[task.id]
+        val detail = if (stored == null) {
+            task.detail
+        } else {
+            DownloadTaskDetailPolicy.choose(
+                previousState = stored.state,
+                previousDetail = stored.detail,
+                incomingState = task.state,
+                incomingDetail = task.detail
+            )
+        }
+        when {
+            stored?.state == "paused" -> task.copy(
+                state = "paused",
+                progress = stored.progress,
+                detail = stored.detail,
+                fileUri = task.fileUri ?: stored.destinationUri,
+                downloadedBytes = stored.downloadedBytes,
+                totalBytes = stored.totalBytes,
+                speedBytesPerSecond = stored.speedBytesPerSecond
+            )
+            else -> task.copy(
+                detail = detail,
+                fileUri = task.fileUri ?: stored?.destinationUri
+            )
+        }
     }
     val visibleDownloadTasks = (
-        liveTasksWithStoredUri + storedDownloadHistory.map { record ->
+        liveTasksWithStoredUri + storedDownloadHistory
+            .filterNot { it.state == "superseded" }
+            .map { record ->
             DownloadTaskUi(
                 id = record.id,
                 fileName = record.fileName,
                 progress = record.progress,
                 state = record.state,
                 detail = record.detail,
-                fileUri = record.destinationUri
+                fileUri = record.destinationUri,
+                resourceKind = record.resourceKind,
+                mimeType = record.mimeType,
+                downloadedBytes = record.downloadedBytes,
+                totalBytes = record.totalBytes,
+                speedBytesPerSecond = record.speedBytesPerSecond,
+                adaptiveVideoHeight = record.adaptiveVideoHeight
             )
         }
     ).distinctBy { it.id }
+
     DisposableEffect(context) {
         val removeObserver = DownloadEngine.observeAll(context.applicationContext) { task ->
             val index = downloadTasks.indexOfFirst { it.id == task.id }
             if (index < 0) downloadTasks.add(0, task)
             else downloadTasks[index] = task
-            downloadCenterViewModel.persistTask(task)
+            if (task.state in setOf("queued", "paused", "cancelled", "completed", "failed")) {
+                coroutineScope.launch {
+                    downloadCenterViewModel.reconcileWorkManagerTask(task)
+                }
+            }
         }
         onDispose { removeObserver() }
     }
@@ -221,49 +253,135 @@ private fun FileSniffingApp(sharedLink: String) {
                 context.contentResolver.takePersistableUriPermission(uri, permissionFlags)
             }
             downloadCenterViewModel.setDownloadFolder(uri.toString())
-            coroutineScope.launch {
-                snackbarHostState.showSnackbar("保存位置已更新")
-            }
+            coroutineScope.launch { snackbarHostState.showSnackbar("保存位置已更新") }
         }
     }
 
     val folderLabel = selectedFolderUri
         ?.let { folderNameFromUri(Uri.parse(it)) }
-        ?: "选择手机文件夹"
+        ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "Download（默认）" else "选择手机文件夹"
+    val hasOutputFolder = selectedFolderUri != null || Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
-    val enqueueDownload: (SniffedResource, Boolean) -> Unit = { resource, showQueuedMessage ->
+    if (showCrashReportDialog && !startupCrashReport.isNullOrBlank()) {
+        AlertDialog(
+            onDismissRequest = {
+                showCrashReportDialog = false
+                CrashReporter.clear(context)
+            },
+            title = { Text("检测到上次异常退出") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "已在本机保留诊断报告。复制后可以发给开发者定位问题。",
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        startupCrashReport.lineSequence().take(9).joinToString("\n"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        maxLines = 9,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(startupCrashReport))
+                        CrashReporter.clear(context)
+                        showCrashReportDialog = false
+                        coroutineScope.launch { snackbarHostState.showSnackbar("诊断报告已复制") }
+                    }
+                ) { Text("复制诊断报告") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        CrashReporter.clear(context)
+                        showCrashReportDialog = false
+                    }
+                ) { Text("关闭") }
+            }
+        )
+    }
+
+    val enqueueDownload: (SniffedResource) -> Unit = enqueue@{ resource ->
+        val alreadyActive = DownloadQueuePolicy.isAlreadyActive(
+            sourceUrl = resource.downloadKey,
+            activeSessionUrls = activeDownloadUrls.values,
+            persistedActiveUrls = storedDownloadHistory
+                .filter { it.state == "queued" || it.state == "downloading" || it.state == "paused" }
+                .map { "${it.sourceUrl}#${it.formatSelector ?: it.resourceKind}" }
+        )
+        if (alreadyActive) {
+            coroutineScope.launch { snackbarHostState.showSnackbar("相同链接已在下载队列中") }
+            return@enqueue
+        }
         if (
             Build.VERSION.SDK_INT >= 33 &&
             !askedForNotificationPermission &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
         ) {
             askedForNotificationPermission = true
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         val folder = selectedFolderUri
-        if (folder == null) {
-            coroutineScope.launch { snackbarHostState.showSnackbar("请先选择保存文件夹") }
-        } else {
-            DownloadEngine.start(
-                context = context.applicationContext,
-                destinationTree = Uri.parse(folder),
-                resource = resource
-            ) { task ->
-                val index = downloadTasks.indexOfFirst { it.id == task.id }
-                if (index < 0) downloadTasks.add(0, task)
-                else downloadTasks[index] = task
-                if (task.state == "failed") {
-                    coroutineScope.launch { snackbarHostState.showSnackbar(task.detail) }
-                }
+        if (folder == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Android 9 及以下请先选择保存文件夹")
             }
-            if (showQueuedMessage) {
-                coroutineScope.launch { snackbarHostState.showSnackbar("已加入下载队列") }
+        } else {
+            val taskId = UUID.randomUUID()
+            activeDownloadUrls[taskId.toString()] = resource.downloadKey
+            coroutineScope.launch {
+                try {
+                    // Commit the retry source before enqueue, so a fast Worker cannot race this write.
+                    downloadCenterViewModel.persistInitialTask(
+                        taskId = taskId,
+                        resource = resource,
+                        destinationTreeUri = folder
+                    )
+                    DownloadEngine.start(
+                        context = context.applicationContext,
+                        destinationTree = folder?.let(Uri::parse),
+                        resource = resource,
+                        taskId = taskId
+                    ) { task ->
+                        val index = downloadTasks.indexOfFirst { it.id == task.id }
+                        if (index < 0) downloadTasks.add(0, task)
+                        else downloadTasks[index] = task
+                        if (task.state == "queued" || task.state == "downloading") {
+                            activeDownloadUrls[task.id] = resource.downloadKey
+                        } else {
+                            activeDownloadUrls.remove(task.id)
+                        }
+                        if (task.state == "failed") {
+                            coroutineScope.launch {
+                                downloadCenterViewModel.updateTaskState(
+                                    task.id,
+                                    state = "failed",
+                                    detail = task.detail
+                                )
+                                snackbarHostState.showSnackbar(task.detail)
+                            }
+                        }
+                    }
+                    snackbarHostState.showSnackbar("已加入下载队列")
+                } catch (error: Exception) {
+                    activeDownloadUrls.remove(taskId.toString())
+                    snackbarHostState.showSnackbar(
+                        "无法创建下载任务：" + (error.message ?: "请重试")
+                    )
+                }
             }
         }
     }
 
     Scaffold(
-        containerColor = AppBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
@@ -282,101 +400,178 @@ private fun FileSniffingApp(sharedLink: String) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (selectedTab == 0 && sniffingState.activePageUrl != null) {
-                SniffingResultScreen(
-                    pageUrl = sniffingState.activePageUrl.orEmpty(),
-                    resources = sniffingState.resources,
-                    isLoading = sniffingState.isPageLoading,
-                    onLoadingChange = sniffingViewModel::setPageLoading,
-                    onResourceFound = sniffingViewModel::addResource,
-                    onBack = { sniffingViewModel.closeInspection() },
-                    onDownload = { resource -> enqueueDownload(resource, true) },
-                    onDownloadBatch = { selected ->
-                        if (selectedFolderUri == null) {
-                            coroutineScope.launch { snackbarHostState.showSnackbar("请先选择保存文件夹") }
-                        } else {
-                            selected.forEach { resource -> enqueueDownload(resource, false) }
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("已将 ${selected.size} 项加入下载队列")
-                            }
-                        }
-                    }
-                )
-            } else if (selectedTab == 0) {
-                HomeScreen(
+            when (selectedTab) {
+                0 -> HomeScreen(
                     pageUrl = pageUrl,
                     onUrlChange = { pageUrl = it },
-                    folderLabel = folderLabel,
-                    hasFolder = selectedFolderUri != null,
                     onPaste = {
                         val pasted = clipboard.getText()?.text.orEmpty().trim()
-                        if (pasted.isNotEmpty()) pageUrl = pasted
-                        else coroutineScope.launch {
-                            snackbarHostState.showSnackbar("剪贴板里没有可粘贴的文字")
-                        }
-                    },
-                    onClear = { pageUrl = "" },
-                    onPickFolder = { folderPicker.launch(null) },
-                    onStartSniffing = {
-                        val candidate = Uri.parse(pageUrl.trim())
-                        val valid = (candidate.scheme == "http" || candidate.scheme == "https") &&
-                            !candidate.host.isNullOrBlank()
-                        when {
-                            pageUrl.isBlank() -> coroutineScope.launch {
-                                snackbarHostState.showSnackbar("先粘贴一个网页链接")
-                            }
-                            !valid -> coroutineScope.launch {
-                                snackbarHostState.showSnackbar("请输入有效的 http 或 https 链接")
-                            }
-                            else -> {
-                                sniffingViewModel.beginInspection(pageUrl.trim())
+                        if (pasted.isNotEmpty()) {
+                            pageUrl = SharedLinkNormalizer.normalize(pasted)
+                                ?: SharedLinkNormalizer.extractCandidate(pasted)
+                                ?: pasted
+                        } else {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("剪贴板里没有可粘贴的文字")
                             }
                         }
-                    }
-                )
-            } else {
-                DownloadsScreen(
-                    folderLabel = folderLabel,
-                    hasFolder = selectedFolderUri != null,
-                    tasks = visibleDownloadTasks,
-                    onChooseFolder = { folderPicker.launch(null) },
-                    onBackToSniff = { selectedTab = 0 },
-                    onRetryTask = { task ->
-                        DownloadEngine.retry(
-                            context.applicationContext,
-                            task.id,
-                            partialUri = task.fileUri
-                        ) { updated ->
-                            val index = downloadTasks.indexOfFirst { it.id == updated.id }
-                            if (index < 0) downloadTasks.add(0, updated)
-                            else downloadTasks[index] = updated
-                        }
                     },
-                    onCancelTask = { task ->
-                        DownloadEngine.cancel(context.applicationContext, task.id)
+                    onClear = {
+                        pageUrl = ""
+                        sniffingViewModel.closeInspection()
                     },
-                    onOpenTask = { task ->
-                        val uri = task.fileUri?.let(Uri::parse)
-                        if (uri != null) {
-                            val mime = context.contentResolver.getType(uri) ?: "*/*"
-                            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, mime)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            runCatching {
-                                context.startActivity(Intent.createChooser(viewIntent, "打开文件"))
-                            }.onFailure {
+                    isResolving = sniffingState.isPageLoading,
+                    resources = sniffingState.resources,
+                    resultSummary = sniffingState.resultSummary,
+                    errorMessage = sniffingState.errorMessage,
+                    onResolve = {
+                        val candidate = pageUrl.trim()
+                        if (candidate.isBlank()) {
+                            coroutineScope.launch { snackbarHostState.showSnackbar("请先粘贴视频链接") }
+                        } else if (candidate.length > 4096) {
+                            coroutineScope.launch { snackbarHostState.showSnackbar("链接过长，请检查后重试") }
+                        } else {
+                            val normalized = SharedLinkNormalizer.normalize(candidate)
+                            if (normalized.isNullOrBlank()) {
                                 coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("没有找到可以打开此文件的应用")
+                                    snackbarHostState.showSnackbar("暂不支持这个链接格式")
+                                }
+                            } else {
+                                pageUrl = normalized
+                                sniffingViewModel.resolveUrl(normalized) { resources, error ->
+                                    // Detailed failures are already rendered in the persistent error card.
+                                    // Do not repeat the full extractor trace in a second snackbar.
+                                    if (error.isNullOrBlank() && !resources.isNullOrEmpty()) {
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("解析完成：${resources.size} 项")
+                                        }
+                                    }
                                 }
                             }
                         }
+                    },
+                    onConfigureDownload = { pendingDownloadOptions = it }
+                )
+                1 -> DownloadsScreen(
+                    folderLabel = folderLabel,
+                    hasFolder = hasOutputFolder,
+                    tasks = visibleDownloadTasks,
+                    tuning = downloadTuning,
+                    onUpdateTuning = downloadCenterViewModel::updateDownloadTuning,
+                    onChooseFolder = { folderPicker.launch(null) },
+                    onBackToSniff = { selectedTab = 0 },
+                    onRetryTask = { task ->
+                        downloadCenterViewModel.loadRetryRecord(task.id) { record ->
+                            if (record == null || record.sourceUrl.isBlank()) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("任务缺少原始参数，请重新粘贴链接后下载")
+                                }
+                            } else {
+                                val retryKey = "${record.sourceUrl}#${record.formatSelector ?: record.resourceKind}"
+                                val alreadyRunning = retryKey in activeDownloadUrls.values ||
+                                    storedDownloadHistory.any { existing ->
+                                        existing.id != task.id &&
+                                            existing.state in setOf("queued", "downloading") &&
+                                            "${existing.sourceUrl}#${existing.formatSelector ?: existing.resourceKind}" == retryKey
+                                    }
+                                if (alreadyRunning) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("相同格式已经在下载队列中")
+                                    }
+                                    return@loadRetryRecord
+                                }
+                                val retryTaskId = UUID.randomUUID()
+                                activeDownloadUrls[retryTaskId.toString()] = retryKey
+                                coroutineScope.launch {
+                                    try {
+                                        downloadCenterViewModel.persistRetryTask(
+                                            taskId = retryTaskId,
+                                            previous = record,
+                                            partialUri = task.fileUri
+                                        )
+                                        DownloadEngine.retry(
+                                            context = context.applicationContext,
+                                            record = record,
+                                            partialUri = task.fileUri,
+                                            taskId = retryTaskId
+                                        ) { updated ->
+                                            val index = downloadTasks.indexOfFirst { it.id == updated.id }
+                                            if (index < 0) downloadTasks.add(0, updated)
+                                            else downloadTasks[index] = updated
+                                            if (updated.state == "queued" || updated.state == "downloading") {
+                                                activeDownloadUrls[updated.id] = retryKey
+                                            } else {
+                                                activeDownloadUrls.remove(updated.id)
+                                            }
+                                            if (updated.state == "failed") {
+                                                coroutineScope.launch {
+                                                    downloadCenterViewModel.updateTaskState(
+                                                        updated.id,
+                                                        state = "failed",
+                                                        detail = updated.detail
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } catch (error: Exception) {
+                                        activeDownloadUrls.remove(retryTaskId.toString())
+                                        snackbarHostState.showSnackbar(
+                                            "无法重新加入下载队列：" + (error.message ?: "请重试")
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onPauseTask = { task ->
+                        DownloadEngine.pause(context.applicationContext, task.id) {
+                            coroutineScope.launch {
+                                downloadCenterViewModel.updateTaskState(
+                                    task.id,
+                                    state = "paused",
+                                    detail = "已暂停，可继续下载"
+                                )
+                            }
+                        }
+                    },
+                    onCancelTask = { task ->
+                        DownloadEngine.cancel(context.applicationContext, task.id) {
+                            coroutineScope.launch {
+                                downloadCenterViewModel.updateTaskState(
+                                    task.id,
+                                    state = "cancelled",
+                                    detail = "下载已取消，可重新下载"
+                                )
+                            }
+                        }
+                    },
+                    onOpenTask = { task ->
+                        task.fileUri?.let(Uri::parse)?.let { openLocalDocument(context, it) }
+                    }
+                )
+                else -> LocalFilesScreen(
+                    treeUri = selectedFolderUri?.let(Uri::parse),
+                    folderLabel = folderLabel,
+                    onChooseFolder = { folderPicker.launch(null) },
+                    onBackToParse = { selectedTab = 0 },
+                    onOpenFile = { uri, mimeType ->
+                        openLocalDocument(context, uri, mimeType)
                     }
                 )
             }
         }
     }
 
+    pendingDownloadOptions?.let { options ->
+        DownloadOptionsSheet(
+            resources = options,
+            onDismiss = { pendingDownloadOptions = null },
+            onStartDownload = { resource ->
+                pendingDownloadOptions = null
+                enqueueDownload(resource)
+            }
+        )
+    }
 }
 
 @Composable
@@ -385,51 +580,48 @@ private fun MainNavigationBar(
     onSelect: (Int) -> Unit
 ) {
     NavigationBar(
-        containerColor = Color.White,
-        contentColor = Ink,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
         windowInsets = WindowInsets.navigationBars
     ) {
         NavigationBarItem(
             selected = selectedTab == 0,
             onClick = { onSelect(0) },
-            icon = {
-                Icon(
-                    imageVector = Icons.Rounded.Search,
-                    contentDescription = "嗅探",
-                    modifier = Modifier.size(22.dp)
-                )
-            },
-            label = {
-                Text("嗅探", fontSize = 11.sp, fontWeight = FontWeight.Medium)
-            },
+            icon = { Icon(Icons.Rounded.Search, contentDescription = "解析", modifier = Modifier.size(21.dp)) },
+            label = { Text("解析", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
             colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = Accent,
-                selectedTextColor = Accent,
-                unselectedIconColor = SecondaryText,
-                unselectedTextColor = SecondaryText,
-                indicatorColor = SoftAccent
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                indicatorColor = MaterialTheme.colorScheme.surface
             )
         )
         NavigationBarItem(
             selected = selectedTab == 1,
             onClick = { onSelect(1) },
-            icon = {
-                Icon(
-                    imageVector = Icons.Rounded.Download,
-                    contentDescription = "下载",
-                    modifier = Modifier.size(22.dp)
-                )
-            },
-            label = {
-                Text("下载", fontSize = 11.sp, fontWeight = FontWeight.Medium)
-            },
+            icon = { Icon(Icons.Rounded.Download, contentDescription = "下载", modifier = Modifier.size(21.dp)) },
+            label = { Text("下载", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
             colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = Accent,
-                selectedTextColor = Accent,
-                unselectedIconColor = SecondaryText,
-                unselectedTextColor = SecondaryText,
-                indicatorColor = SoftAccent
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                indicatorColor = MaterialTheme.colorScheme.surface
+            )
+        )
+        NavigationBarItem(
+            selected = selectedTab == 2,
+            onClick = { onSelect(2) },
+            icon = { Icon(Icons.Rounded.FolderOpen, contentDescription = "文件", modifier = Modifier.size(21.dp)) },
+            label = { Text("文件", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                indicatorColor = MaterialTheme.colorScheme.surface
             )
         )
     }
@@ -439,152 +631,239 @@ private fun MainNavigationBar(
 private fun HomeScreen(
     pageUrl: String,
     onUrlChange: (String) -> Unit,
-    folderLabel: String,
-    hasFolder: Boolean,
     onPaste: () -> Unit,
     onClear: () -> Unit,
-    onPickFolder: () -> Unit,
-    onStartSniffing: () -> Unit
+    isResolving: Boolean,
+    resources: List<SniffedResource>,
+    resultSummary: String,
+    errorMessage: String?,
+    onResolve: () -> Unit,
+    onConfigureDownload: (List<SniffedResource>) -> Unit
 ) {
+    val resourceGroups = remember(resources) {
+        resources.groupBy { it.url }.values.toList()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 22.dp)
-            .padding(top = 20.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(0.dp)
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 20.dp)
+            .padding(top = 22.dp, bottom = 12.dp)
     ) {
-        HeaderBrand()
-        Spacer(modifier = Modifier.height(34.dp))
-
         Text(
-            text = "找到网页里的\n媒体资源。",
-            color = Ink,
-            fontSize = 34.sp,
-            lineHeight = 41.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-1.2).sp
+            "链接解析",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 23.sp,
+            fontWeight = FontWeight.SemiBold
         )
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "粘贴链接，识别页面中可访问的视频、音频与图片。",
-            color = SecondaryText,
-            fontSize = 15.sp,
-            lineHeight = 23.sp
-        )
-
-        Spacer(modifier = Modifier.height(30.dp))
+        Spacer(Modifier.height(22.dp))
         UrlInputCard(
             value = pageUrl,
             onValueChange = onUrlChange,
             onPaste = onPaste,
             onClear = onClear
         )
-        Spacer(modifier = Modifier.height(16.dp))
-
+        Spacer(Modifier.height(10.dp))
         Button(
-            onClick = onStartSniffing,
+            onClick = onResolve,
+            enabled = !isResolving,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(58.dp),
-            shape = RoundedCornerShape(18.dp),
+                .height(50.dp),
+            shape = RoundedCornerShape(9.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Ink,
-                contentColor = Color.White
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ),
-            elevation = ButtonDefaults.buttonElevation(
-                defaultElevation = 0.dp,
-                pressedElevation = 1.dp
-            )
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
         ) {
+            if (isResolving) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .width(22.dp)
+                        .height(2.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.25f)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text("正在解析", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            } else {
+                Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("解析链接", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        if (!errorMessage.isNullOrBlank()) {
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(9.dp)
+            ) {
+                Text(
+                    errorMessage,
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    fontSize = 12.sp
+                )
+            }
+        }
+
+        if (resources.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
             Text(
-                text = "开始嗅探",
-                fontSize = 16.sp,
+                "解析结果",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold
             )
-            Spacer(modifier = Modifier.width(10.dp))
-            Icon(
-                imageVector = Icons.Rounded.ArrowForward,
-                contentDescription = null,
-                modifier = Modifier.size(19.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-        Text(
-            text = "保存位置",
-            color = Ink,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        FolderPickerCard(
-            folderLabel = folderLabel,
-            hasFolder = hasFolder,
-            onClick = onPickFolder
-        )
-
-        Spacer(modifier = Modifier.height(26.dp))
-        SupportedTypesRow()
-        Spacer(modifier = Modifier.height(22.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.CheckCircle,
-                contentDescription = null,
-                tint = Color(0xFF8B929D),
-                modifier = Modifier.size(15.dp)
-            )
-            Spacer(modifier = Modifier.width(7.dp))
-            Text(
-                text = "本地优先 · 不需要注册账号",
-                color = Color(0xFF8B929D),
-                fontSize = 12.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun HeaderBrand() {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0xFF526DF0), Color(0xFF344BC4))
-                    )
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.CenterFocusStrong,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(25.dp)
-            )
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(
-                text = "FILE SNIFFING",
-                color = Ink,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.1.sp
-            )
-            Text(
-                text = "资源发现工具",
-                color = SecondaryText,
-                fontSize = 11.sp
-            )
+            if (resultSummary.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    resultSummary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(resourceGroups, key = { group -> group.first().url }) { group ->
+                    val representative = group.first()
+                    val videoFormats = group.filter {
+                        it.kind == ResourceKind.VIDEO &&
+                            !it.videoFormatId.isNullOrBlank() &&
+                            !it.formatSelector.isNullOrBlank()
+                    }
+                    val audioFormats = group.filter {
+                        it.kind == ResourceKind.AUDIO &&
+                            (!it.audioFormatId.isNullOrBlank() || !it.formatSelector.isNullOrBlank())
+                    }
+                    val hasVideoResource = group.any { it.kind == ResourceKind.VIDEO }
+                    val highestVideoHeight = videoFormats.mapNotNull { option ->
+                        option.qualityLabel?.substringBefore('p')?.toIntOrNull()
+                    }.maxOrNull()
+                    val groupDetails = buildList {
+                        if (videoFormats.isNotEmpty()) {
+                            add("视频 " + videoFormats.size + " 种")
+                            highestVideoHeight?.let { add("最高 " + it + "p") }
+                        }
+                        if (audioFormats.isNotEmpty()) add("音轨 " + audioFormats.size + " 种")
+                        if (videoFormats.isEmpty() && audioFormats.isEmpty()) {
+                            add(representative.kind.label + " · 直链文件")
+                        }
+                    }.joinToString(" · ")
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(15.dp),
+                            verticalArrangement = Arrangement.spacedBy(9.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val thumbnailPainter = rememberAsyncImagePainter(representative.thumbnailUrl)
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(11.dp),
+                                    modifier = Modifier.size(width = 80.dp, height = 54.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        if (thumbnailPainter.state is AsyncImagePainter.State.Success) {
+                                            Image(
+                                                painter = thumbnailPainter,
+                                                contentDescription = "视频封面",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        } else {
+                                            Icon(
+                                                if (videoFormats.isNotEmpty()) Icons.Rounded.VideoLibrary
+                                                else Icons.Rounded.Download,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Text(
+                                        representative.pageTitle.ifBlank { representative.fileName },
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val metadata = buildList {
+                                        representative.uploader?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                        representative.durationSeconds?.let { add(formatResourceDuration(it)) }
+                                    }
+                                    Text(
+                                        metadata.ifEmpty { listOf(groupDetails) }.joinToString(" · "),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Text(
+                                groupDetails,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                            Button(
+                                onClick = { onConfigureDownload(group) },
+                                modifier = Modifier.fillMaxWidth().height(46.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    when {
+                                        videoFormats.isNotEmpty() -> "选择画质与音轨"
+                                        audioFormats.isNotEmpty() -> "选择音质"
+                                        else -> "下载文件"
+                                    },
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    if (isResolving) "正在直接请求视频站解析接口…" else "粘贴视频链接后解析。应用不会打开网页。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
@@ -598,87 +877,83 @@ private fun UrlInputCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(1.dp, Hairline)
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 17.dp)) {
-            Text(
-                text = "网页链接",
-                color = SecondaryText,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(58.dp)
+                .padding(start = 14.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Rounded.Link,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(19.dp)
             )
-            Spacer(modifier = Modifier.height(13.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+            Spacer(Modifier.width(12.dp))
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = TextStyle(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp
+                ),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                decorationBox = { innerTextField ->
+                    Box {
+                        if (value.isEmpty()) {
+                            Text(
+                                "粘贴或输入视频链接",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = if (value.isEmpty()) onPaste else onClear,
+                modifier = Modifier.size(44.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Link,
-                    contentDescription = null,
-                    tint = Color(0xFF9AA0AA),
-                    modifier = Modifier.size(20.dp)
+                    imageVector = if (value.isEmpty()) Icons.Rounded.ContentPaste else Icons.Rounded.Close,
+                    contentDescription = if (value.isEmpty()) "粘贴链接" else "清空链接",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
-                Spacer(modifier = Modifier.width(11.dp))
-                Box(modifier = Modifier.weight(1f)) {
-                    BasicTextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        singleLine = true,
-                        textStyle = TextStyle(
-                            color = Ink,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
-                        ),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Uri,
-                            imeAction = ImeAction.Done
-                        ),
-                        cursorBrush = Brush.solidColor(Accent),
-                        decorationBox = { innerTextField ->
-                            if (value.isEmpty()) {
-                                Text(
-                                    text = "https://example.com/video",
-                                    color = Color(0xFFB3B8C1),
-                                    fontSize = 14.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            innerTextField()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                if (value.isNotEmpty()) {
-                    IconButton(
-                        onClick = onClear,
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = "清空链接",
-                            tint = SecondaryText,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                } else {
-                    IconButton(
-                        onClick = onPaste,
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.ContentPaste,
-                            contentDescription = "粘贴链接",
-                            tint = Accent,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
-                }
             }
         }
     }
+}
+
+private fun formatResourceDuration(seconds: Double): String {
+    val total = seconds.toLong().coerceAtLeast(0L)
+    val hours = total / 3600L
+    val minutes = (total % 3600L) / 60L
+    val remaining = total % 60L
+    return if (hours > 0L) {
+        String.format(java.util.Locale.ROOT, "%d:%02d:%02d", hours, minutes, remaining)
+    } else {
+        String.format(java.util.Locale.ROOT, "%d:%02d", minutes, remaining)
+    }
+}
+
+private fun formatResourceBytes(value: Long): String = when {
+    value >= 1024L * 1024L * 1024L -> String.format("%.2f GB", value / (1024.0 * 1024.0 * 1024.0))
+    value >= 1024L * 1024L -> String.format("%.1f MB", value / (1024.0 * 1024.0))
+    value >= 1024L -> String.format("%.1f KB", value / 1024.0)
+    else -> "$value B"
 }
 
 @Composable
@@ -687,118 +962,52 @@ private fun FolderPickerCard(
     hasFolder: Boolean,
     onClick: () -> Unit
 ) {
-    Surface(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = Color.White,
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, Hairline)
+            .clickable(onClick = onClick)
+            .padding(vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(9.dp),
+            modifier = Modifier.size(38.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(SoftAccent),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = Icons.Rounded.FolderOpen,
+                    Icons.Rounded.FolderOpen,
                     contentDescription = null,
-                    tint = Accent,
-                    modifier = Modifier.size(21.dp)
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(19.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(13.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (hasFolder) "已选择文件夹" else "选择保存文件夹",
-                    color = Ink,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = folderLabel,
-                    color = SecondaryText,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Text(
-                text = "更改",
-                color = Accent,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
-            )
         }
-    }
-}
-
-@Composable
-private fun SupportedTypesRow() {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(9.dp)
-    ) {
-        ResourceTypePill(
+        Spacer(Modifier.width(12.dp))
+        Column(
             modifier = Modifier.weight(1f),
-            icon = Icons.Rounded.VideoLibrary,
-            label = "视频"
-        )
-        ResourceTypePill(
-            modifier = Modifier.weight(1f),
-            icon = Icons.Rounded.MusicNote,
-            label = "音频"
-        )
-        ResourceTypePill(
-            modifier = Modifier.weight(1f),
-            icon = Icons.Rounded.Image,
-            label = "图片"
-        )
-    }
-}
-
-@Composable
-private fun ResourceTypePill(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    label: String
-) {
-    Surface(
-        modifier = modifier,
-        color = Color(0xFFF0F1F4),
-        shape = RoundedCornerShape(13.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(vertical = 11.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Box(
-                modifier = Modifier.size(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = Color(0xFF6B7280),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = label,
-                color = Color(0xFF5F6570),
-                fontSize = 12.sp,
+                "保存位置",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
+            Text(
+                folderLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
+        Text(
+            if (hasFolder) "更改" else "选择",
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
@@ -810,229 +1019,677 @@ private fun DownloadsScreen(
     onChooseFolder: () -> Unit,
     onBackToSniff: () -> Unit,
     onRetryTask: (DownloadTaskUi) -> Unit,
+    onPauseTask: (DownloadTaskUi) -> Unit,
     onCancelTask: (DownloadTaskUi) -> Unit,
-    onOpenTask: (DownloadTaskUi) -> Unit
+    onOpenTask: (DownloadTaskUi) -> Unit,
+    tuning: DownloadTuning,
+    onUpdateTuning: (DownloadTuning) -> Unit
 ) {
+    var statusFilter by rememberSaveable { mutableStateOf("全部") }
+    var showDownloadSettings by rememberSaveable { mutableStateOf(false) }
+    var connectionsDraft by remember(tuning.connectionsPerTask) {
+        mutableIntStateOf(tuning.connectionsPerTask)
+    }
+    var parallelDraft by remember(tuning.parallelDownloads) {
+        mutableIntStateOf(tuning.parallelDownloads)
+    }
+    var speedLimitDraft by remember(tuning.speedLimitMegabytesPerSecond) {
+        mutableIntStateOf(tuning.speedLimitMegabytesPerSecond)
+    }
+    var kindFilter by rememberSaveable { mutableStateOf("全部") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var sortOrder by rememberSaveable { mutableStateOf("最近") }
+    val activeCount = tasks.count { it.state == "downloading" || it.state == "queued" }
+    val pausedCount = tasks.count { it.state == "paused" }
+    val completedCount = tasks.count { it.state == "completed" }
+    val failedCount = tasks.count { it.state == "failed" || it.state == "cancelled" }
+    val availableKinds = tasks.mapNotNull { task ->
+        task.resourceKind?.let { raw -> runCatching { ResourceKind.valueOf(raw) }.getOrNull() }
+    }.distinctBy { it.name }.sortedBy { it.label }
+    val statusFilteredTasks = tasks.filter { task ->
+        when (statusFilter) {
+            "进行中" -> task.state == "downloading" || task.state == "queued"
+            "已暂停" -> task.state == "paused"
+            "已完成" -> task.state == "completed"
+            "异常" -> task.state == "failed" || task.state == "cancelled"
+            else -> true
+        }
+    }
+    val filteredTasks = if (kindFilter == "全部") {
+        statusFilteredTasks
+    } else {
+        statusFilteredTasks.filter { it.resourceKind == kindFilter }
+    }
+    val searchedTasks = filteredTasks.filter { task ->
+        searchQuery.isBlank() ||
+            task.fileName.contains(searchQuery, ignoreCase = true) ||
+            task.detail.contains(searchQuery, ignoreCase = true)
+    }
+    val displayedTasks = when (sortOrder) {
+        "名称" -> searchedTasks.sortedBy { it.fileName.lowercase(java.util.Locale.ROOT) }
+        "进度" -> searchedTasks.sortedByDescending { it.progress.coerceAtLeast(0) }
+        else -> searchedTasks
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 22.dp)
-            .padding(top = 24.dp, bottom = 30.dp)
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 20.dp)
+            .padding(top = 20.dp, bottom = 8.dp)
     ) {
-        Text(
-            text = "下载",
-            color = Ink,
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.7).sp
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "下载中心",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 23.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.weight(1f))
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(7.dp)
+            ) {
+                Text(
+                    tasks.size.toString() + " 个任务",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                activeCount to "进行中",
+                pausedCount to "已暂停",
+                completedCount to "已完成",
+                failedCount to "异常"
+            ).forEach { pair ->
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        pair.first.toString(),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        pair.second,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+        FolderPickerCard(folderLabel, hasFolder, onChooseFolder)
+        Spacer(Modifier.height(8.dp))
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showDownloadSettings = true },
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Rounded.Tune,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(11.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        "下载性能设置",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "${connectionsDraft} 路并发上限 · ${parallelDraft} 个直链任务 · " +
+                            if (speedLimitDraft == 0) "不限速" else "${speedLimitDraft} MB/s",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+                Text(
+                    "调整",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant)
         )
-        Spacer(modifier = Modifier.height(7.dp))
-        Text(
-            text = "查看和管理保存到手机的文件",
-            color = SecondaryText,
-            fontSize = 14.sp
-        )
-
-        Spacer(modifier = Modifier.height(26.dp))
-        FolderPickerCard(
-            folderLabel = folderLabel,
-            hasFolder = hasFolder,
-            onClick = onChooseFolder
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-        if (tasks.isEmpty()) {
-            Box(
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            listOf("全部", "进行中", "已暂停", "已完成", "异常").forEach { filter ->
+                FilterChip(
+                    selected = statusFilter == filter,
+                    onClick = { statusFilter = filter },
+                    label = { Text(filter, fontSize = 12.sp) },
+                    shape = RoundedCornerShape(8.dp)
+                )
+            }
+        }
+        if (availableKinds.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color.White)
-                    .padding(horizontal = 26.dp, vertical = 38.dp),
-                contentAlignment = Alignment.Center
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .size(76.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFF1F2F5)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Download,
-                            contentDescription = null,
-                            tint = Color(0xFF9AA1AC),
-                            modifier = Modifier.size(33.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Text(
-                        text = "还没有下载任务",
-                        color = Ink,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
+                FilterChip(
+                    selected = kindFilter == "全部",
+                    onClick = { kindFilter = "全部" },
+                    label = { Text("全部类型", fontSize = 11.sp) },
+                    shape = RoundedCornerShape(8.dp)
+                )
+                availableKinds.forEach { kind ->
+                    FilterChip(
+                        selected = kindFilter == kind.name,
+                        onClick = { kindFilter = kind.name },
+                        label = { Text(kind.label, fontSize = 11.sp) },
+                        shape = RoundedCornerShape(8.dp)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "嗅探到资源并开始下载后，任务进度会显示在这里。",
-                        color = SecondaryText,
-                        fontSize = 13.sp,
-                        lineHeight = 21.sp,
-                        textAlign = TextAlign.Center
+                }
+            }
+        }
+
+        if (tasks.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(11.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.height(22.dp))
-                    TextButton(onClick = onBackToSniff) {
-                        Text("去嗅探资源", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(9.dp))
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 13.sp
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { innerTextField ->
+                            Box {
+                                if (searchQuery.isBlank()) {
+                                    Text(
+                                        "搜索文件名或错误信息",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+                    if (searchQuery.isNotBlank()) {
+                        IconButton(
+                            onClick = { searchQuery = "" },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = "清除搜索",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
                     }
                 }
             }
-        } else {
+            Spacer(Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "下载任务",
-                    color = Ink,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = "${tasks.size} 项",
-                    color = SecondaryText,
-                    fontSize = 12.sp
-                )
+                listOf("最近", "名称", "进度").forEach { order ->
+                    FilterChip(
+                        selected = sortOrder == order,
+                        onClick = { sortOrder = order },
+                        label = { Text("按" + order, fontSize = 11.sp) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            tasks.forEach { task ->
-                DownloadTaskCard(
-                    task,
-                    onOpen = { onOpenTask(task) },
-                    onRetry = { onRetryTask(task) },
-                    onCancel = { onCancelTask(task) }
-                )
-                Spacer(modifier = Modifier.height(10.dp))
+        }
+
+        when {
+            tasks.isEmpty() -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.size(60.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Download,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "暂无下载任务",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        "解析网页并下载资源后，会显示在这里",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = onBackToSniff) {
+                        Text("开始解析", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            displayedTasks.isEmpty() -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        if (searchQuery.isNotBlank()) "没有匹配的下载任务" else "没有符合条件的任务",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = {
+                        statusFilter = "全部"
+                        kindFilter = "全部"
+                        searchQuery = ""
+                    }) {
+                        Text("清除筛选", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    items(displayedTasks, key = { it.id }) { task ->
+                        DownloadTaskCard(
+                            task = task,
+                            onOpen = { onOpenTask(task) },
+                            onRetry = { onRetryTask(task) },
+                            onPause = { onPauseTask(task) },
+                            onCancel = { onCancelTask(task) }
+                        )
+                    }
+                }
             }
         }
     }
-}
 
+    if (showDownloadSettings) {
+        AlertDialog(
+            onDismissRequest = { showDownloadSettings = false },
+            title = { Text("下载性能") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("单任务分段上限：$connectionsDraft", fontWeight = FontWeight.Medium)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(1, 2, 4, 8, 16, 32, 64, 128, 256).forEach { count ->
+                            FilterChip(
+                                selected = connectionsDraft == count,
+                                onClick = { connectionsDraft = count },
+                                label = { Text(count.toString()) }
+                            )
+                        }
+                    }
+                    Text("直链同时下载任务：$parallelDraft", fontWeight = FontWeight.Medium)
+                    Slider(
+                        value = parallelDraft.toFloat(),
+                        onValueChange = { parallelDraft = it.toInt().coerceIn(1, 4) },
+                        valueRange = 1f..4f,
+                        steps = 2
+                    )
+                    Text("总速度上限", fontWeight = FontWeight.Medium)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(0, 1, 2, 5, 10, 20).forEach { limit ->
+                            FilterChip(
+                                selected = speedLimitDraft == limit,
+                                onClick = { speedLimitDraft = limit },
+                                label = { Text(if (limit == 0) "不限" else "${limit} MB/s") }
+                            )
+                        }
+                    }
+                    Text(
+                        "普通直链使用 OkDownload，单任务分段上限提高到 256。这里是上限，不保证每个文件始终建立 256 条连接：实际分段数还受文件大小、源站 Range 支持和目标存储随机写入能力影响。设置为 128/256 时会自动减少同时运行的直链任务数，避免连接总量失控。当前 OkDownload 使用预先分段调度，尚未实现 Gopeed 的动态慢启动和慢连接任务窃取。视频站仍由 yt-dlp/aria2 处理，单源站最多 16 路连接；服务器限流时调高上限反而可能变慢。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onUpdateTuning(
+                        DownloadTuning(
+                            connectionsPerTask = connectionsDraft,
+                            parallelDownloads = parallelDraft,
+                            speedLimitMegabytesPerSecond = speedLimitDraft
+                        )
+                    )
+                    showDownloadSettings = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDownloadSettings = false }) { Text("取消") }
+            }
+        )
+    }
+}
 
 @Composable
 private fun DownloadTaskCard(
     task: DownloadTaskUi,
     onOpen: () -> Unit,
     onRetry: () -> Unit,
+    onPause: () -> Unit,
     onCancel: () -> Unit
 ) {
     val finished = task.state == "completed"
     val failed = task.state == "failed"
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(17.dp),
-        border = BorderStroke(1.dp, Hairline)
+    val kindLabel = task.resourceKind
+        ?.let { raw -> runCatching { ResourceKind.valueOf(raw).label }.getOrNull() }
+        ?: "文件"
+    val statusLabel = when {
+        finished -> "已完成"
+        failed -> "下载失败"
+        task.state == "paused" -> "已暂停"
+        task.state == "cancelled" -> "已取消"
+        task.state == "downloading" -> "正在下载"
+        else -> "等待中"
+    }
+    val statusColor = when {
+        failed -> MaterialTheme.colorScheme.error
+        finished -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val transferSummary = buildList {
+        if (task.downloadedBytes >= 0L && task.totalBytes > 0L) {
+            add("已接收 " + formatDownloadBytes(task.downloadedBytes) + " / " + (if (task.totalBytesEstimated) "约 " else "") + formatDownloadBytes(task.totalBytes))
+        } else if (task.downloadedBytes > 0L) {
+            add("已下载 " + formatDownloadBytes(task.downloadedBytes) + " · 总大小未知")
+        } else if (task.totalBytes > 0L) {
+            add((if (task.totalBytesEstimated) "预计大小 " else "文件大小 ") + formatDownloadBytes(task.totalBytes))
+        }
+        if (task.state == "downloading" && task.totalBytes > task.downloadedBytes &&
+            task.speedBytesPerSecond > 0L
+        ) {
+            val remaining = (task.totalBytes - task.downloadedBytes) / task.speedBytesPerSecond
+            add("剩余 " + formatDownloadDuration(remaining))
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 13.dp)
     ) {
-        Column(modifier = Modifier.padding(15.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(SoftAccent),
-                    contentAlignment = Alignment.Center
-                ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(9.dp),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Rounded.Download,
+                        Icons.Rounded.Download,
                         contentDescription = null,
-                        tint = Accent,
-                        modifier = Modifier.size(19.dp)
+                        tint = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(11.dp))
-                Column(modifier = Modifier.weight(1f)) {
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    task.fileName,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    kindLabel + " · " + statusLabel,
+                    color = statusColor,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (task.state == "downloading" && task.detail.isNotBlank()) {
                     Text(
-                        text = task.fileName,
-                        color = Ink,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        task.detail,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = when {
-                            finished -> "已完成"
-                            failed -> "下载失败"
-                            task.state == "cancelled" -> "已取消"
-                            task.state == "downloading" -> "正在下载"
-                            else -> "等待下载"
-                        },
-                        color = when {
-                            finished -> Color(0xFF299B68)
-                            failed -> Color(0xFFD24B4B)
-                            task.state == "cancelled" -> SecondaryText
-                            else -> SecondaryText
-                        },
-                        fontSize = 11.sp
-                    )
                 }
+            }
+            if (task.state == "downloading" && task.speedBytesPerSecond > 0L) {
                 Text(
-                    text = if (finished) "100%" else if (task.state == "downloading" && task.progress >= 0) "${task.progress}%" else "—",
-                    color = Ink,
-                    fontSize = 12.sp,
+                    formatDownloadBytes(task.speedBytesPerSecond) + "/s",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            if (task.progress < 0 && task.state == "downloading") {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
-                    color = Accent,
-                    trackColor = Color(0xFFEDEFF3)
-                )
             } else {
-                LinearProgressIndicator(
-                    progress = task.progress.coerceAtLeast(0) / 100f,
-                    modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
-                    color = if (failed) Color(0xFFD24B4B) else Accent,
-                    trackColor = Color(0xFFEDEFF3)
+                Text(
+                    if (finished) "100%" else if (task.state == "downloading" && task.progress >= 0) {
+                        task.progress.coerceIn(0, 100).toString() + "%"
+                    } else " ",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
-            Spacer(modifier = Modifier.height(7.dp))
+        }
+        if (transferSummary.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 52.dp, top = 8.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    transferSummary.joinToString(" · "),
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (task.state == "downloading" && task.speedBytesPerSecond > 0L) {
+                    Text(
+                        if (task.progress >= 0) task.progress.coerceIn(0, 100).toString() + "%" else "下载中",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        if (task.progress < 0 && task.state == "downloading") {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 52.dp)
+                    .height(3.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        } else {
+            LinearProgressIndicator(
+                progress = if (finished) 1f else task.progress.coerceIn(0, 100) / 100f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 52.dp)
+                    .height(3.dp),
+                color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        }
+        if (failed && task.detail.isNotBlank()) {
             Text(
-                text = task.detail,
-                color = SecondaryText,
+                task.detail,
+                modifier = Modifier.padding(start = 52.dp, top = 7.dp),
+                color = MaterialTheme.colorScheme.error,
                 fontSize = 11.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Spacer(Modifier.weight(1f))
             when {
-                finished && task.fileUri != null -> {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    TextButton(onClick = onOpen) {
-                        Text("打开文件", color = Accent, fontWeight = FontWeight.SemiBold)
-                    }
+                finished && task.fileUri != null -> TextButton(onClick = onOpen) {
+                    Text("打开文件", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                 }
-                failed || task.state == "cancelled" -> {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    TextButton(onClick = onRetry) {
-                        Text(
-                            text = if (task.fileUri != null) "继续断点下载" else "重新下载",
-                            color = Accent,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                failed || task.state == "cancelled" || task.state == "paused" -> TextButton(onClick = onRetry) {
+                    Text(
+                        if (task.state == "paused" || task.fileUri != null) "继续下载" else "重新下载",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 12.sp
+                    )
                 }
-                task.state == "downloading" || task.state == "queued" -> {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    TextButton(onClick = onCancel) {
-                        Text("取消任务", color = Color(0xFFD24B4B), fontWeight = FontWeight.SemiBold)
+                task.state == "downloading" ->
+                    TextButton(onClick = onPause) {
+                        Text("暂停", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                     }
+                task.state == "downloading" || task.state == "queued" -> TextButton(onClick = onCancel) {
+                    Text("取消", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             }
         }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant)
+        )
+    }
+}
+
+private fun formatDownloadBytes(value: Long): String {
+    if (value < 1024L) return "$value B"
+    val kb = value / 1024.0
+    if (kb < 1024.0) return String.format(java.util.Locale.ROOT, "%.1f KB", kb)
+    val mb = kb / 1024.0
+    if (mb < 1024.0) return String.format(java.util.Locale.ROOT, "%.1f MB", mb)
+    return String.format(java.util.Locale.ROOT, "%.2f GB", mb / 1024.0)
+}
+
+private fun formatDownloadDuration(seconds: Long): String {
+    val safeSeconds = seconds.coerceAtLeast(0L)
+    return when {
+        safeSeconds < 60L -> "$safeSeconds 秒"
+        safeSeconds < 3600L -> "${safeSeconds / 60} 分"
+        else -> "${safeSeconds / 3600} 小时 ${(safeSeconds % 3600) / 60} 分"
+    }
+}
+
+private fun openLocalDocument(
+    context: android.content.Context,
+    uri: Uri,
+    mimeType: String? = null
+) {
+    val resolvedMime = mimeType
+        ?: context.contentResolver.getType(uri)
+        ?: "*/*"
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, resolvedMime)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    runCatching {
+        context.startActivity(Intent.createChooser(intent, "打开文件"))
+    }.onFailure {
+        android.widget.Toast.makeText(
+            context,
+            "没有找到可以打开此文件的应用",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
 }
 

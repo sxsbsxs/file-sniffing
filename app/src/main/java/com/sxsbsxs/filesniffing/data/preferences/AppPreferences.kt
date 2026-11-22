@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -16,16 +17,47 @@ private val Context.fileSniffingDataStore: DataStore<Preferences> by preferences
     name = "file_sniffing_preferences"
 )
 
+data class DownloadTuning(
+    val connectionsPerTask: Int = 16,
+    val parallelDownloads: Int = 3,
+    val speedLimitMegabytesPerSecond: Int = 0
+) {
+    val speedLimitBytesPerSecond: Long
+        get() = speedLimitMegabytesPerSecond.coerceAtLeast(0).toLong() * 1024L * 1024L
+}
+
 @Singleton
 class AppPreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val selectedFolderKey = stringPreferencesKey("selected_download_folder")
+    private val connectionsPerTaskKey = intPreferencesKey("download_connections_per_task")
+    private val parallelDownloadsKey = intPreferencesKey("download_parallel_tasks")
+    private val speedLimitKey = intPreferencesKey("download_speed_limit_mbps")
 
     val selectedDownloadFolder: Flow<String?>
         get() = context.fileSniffingDataStore.data.map { preferences ->
             preferences[selectedFolderKey]
         }
+
+    val downloadTuning: Flow<DownloadTuning>
+        get() = context.fileSniffingDataStore.data.map { preferences ->
+            DownloadTuning(
+                connectionsPerTask = (preferences[connectionsPerTaskKey] ?: 16).coerceIn(1, MAX_CONNECTIONS_PER_TASK),
+                parallelDownloads = (preferences[parallelDownloadsKey] ?: 3).coerceIn(1, 4),
+                speedLimitMegabytesPerSecond = (preferences[speedLimitKey] ?: 0)
+                    .takeIf { it in SPEED_LIMIT_OPTIONS } ?: 0
+            )
+        }
+
+    suspend fun updateDownloadTuning(tuning: DownloadTuning) {
+        context.fileSniffingDataStore.edit { preferences ->
+            preferences[connectionsPerTaskKey] = tuning.connectionsPerTask.coerceIn(1, MAX_CONNECTIONS_PER_TASK)
+            preferences[parallelDownloadsKey] = tuning.parallelDownloads.coerceIn(1, 4)
+            preferences[speedLimitKey] = tuning.speedLimitMegabytesPerSecond
+                .takeIf { it in SPEED_LIMIT_OPTIONS } ?: 0
+        }
+    }
 
     suspend fun migrateLegacyFolderIfNeeded() {
         context.fileSniffingDataStore.edit { preferences ->
@@ -49,5 +81,10 @@ class AppPreferences @Inject constructor(
         context.fileSniffingDataStore.edit { preferences ->
             preferences.remove(selectedFolderKey)
         }
+    }
+
+    private companion object {
+        const val MAX_CONNECTIONS_PER_TASK = 256
+        val SPEED_LIMIT_OPTIONS = setOf(0, 1, 2, 5, 10, 20)
     }
 }

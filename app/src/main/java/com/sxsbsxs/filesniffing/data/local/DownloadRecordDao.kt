@@ -2,6 +2,7 @@ package com.sxsbsxs.filesniffing.data.local
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -13,6 +14,14 @@ interface DownloadRecordDao {
 
     @Upsert
     suspend fun upsertAll(records: List<DownloadRecordEntity>)
+
+    @Transaction
+    suspend fun replaceForRetry(
+        previous: DownloadRecordEntity,
+        retry: DownloadRecordEntity
+    ) {
+        upsertAll(listOf(previous, retry))
+    }
 
     @Query("SELECT * FROM download_records ORDER BY updatedAtMillis DESC")
     fun observeAll(): Flow<List<DownloadRecordEntity>>

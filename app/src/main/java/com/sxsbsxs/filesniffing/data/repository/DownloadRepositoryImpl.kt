@@ -15,6 +15,8 @@ class DownloadRepositoryImpl @Inject constructor(
     override suspend fun findById(id: String): DownloadRecordEntity? = dao.findById(id)
 
     override suspend fun save(record: DownloadRecordEntity) = dao.upsert(record)
+    override suspend fun replaceForRetry(previous: DownloadRecordEntity, retry: DownloadRecordEntity) =
+        dao.replaceForRetry(previous, retry)
 
     override suspend fun delete(id: String) = dao.deleteById(id)
 }

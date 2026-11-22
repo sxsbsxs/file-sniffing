@@ -1,16 +1,17 @@
 package com.sxsbsxs.filesniffing
 
-import android.net.Uri
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
-
 enum class ResourceKind(val label: String) {
     VIDEO("视频"),
     SEGMENT("媒体分段"),
     AUDIO("音频"),
     IMAGE("图片"),
     PLAYLIST("媒体清单"),
-    OTHER("文件")
+    DOCUMENT("文档"),
+    ARCHIVE("压缩包"),
+    APPLICATION("应用与安装包"),
+    FONT("字体"),
+    TEXT_DATA("代码与数据"),
+    OTHER("其他文件")
 }
 
 data class SniffedResource(
@@ -19,80 +20,56 @@ data class SniffedResource(
     val fileName: String,
     val mimeType: String?,
     val pageTitle: String,
-    val sourcePage: String
+    val sourcePage: String,
+    /** Real yt-dlp format_id or video+audio format selector; never a signed media URL. */
+    val formatSelector: String? = null,
+    val qualityLabel: String? = null,
+    val fileSizeBytes: Long? = null,
+    val videoFormatId: String? = null,
+    val audioFormatId: String? = null,
+    val hasEmbeddedAudio: Boolean = false,
+    val audioQualityLabel: String? = null,
+    val audioLanguage: String? = null,
+    val audioFileSizeBytes: Long? = null,
+    val thumbnailUrl: String? = null,
+    val durationSeconds: Double? = null,
+    val uploader: String? = null,
+    val codecLabel: String? = null,
+    val frameRate: Double? = null
 ) {
-    val id: String get() = url
+    val downloadKey: String
+        get() {
+            val stableSource = if (kind == ResourceKind.PLAYLIST) {
+                NiconicoUrlParser.extractVideoId(sourcePage)
+                    ?.let(NiconicoUrlParser::canonicalWatchUrl)
+                    ?: url
+            } else {
+                url
+            }
+            return "$stableSource#${formatSelector ?: kind.name}"
+        }
+    val id: String get() = downloadKey
 }
 
 object ResourceSniffer {
-    private val videoExtensions = setOf("mp4", "webm", "mov", "m4v", "3gp", "mkv")
-    private val segmentExtensions = setOf("ts", "m4s")
-    private val audioExtensions = setOf("mp3", "m4a", "aac", "ogg", "oga", "wav", "flac", "opus")
-    private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "bmp")
-    private val playlistExtensions = setOf("m3u8", "mpd")
-
     fun detect(
         rawUrl: String,
         hintedKind: String? = null,
         hintedMime: String? = null,
+        hintedFileName: String? = null,
         pageTitle: String = "",
         sourcePage: String = ""
     ): SniffedResource? {
-        val parsed = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return null
-        if (parsed.scheme != "http" && parsed.scheme != "https") return null
-        if (parsed.host.isNullOrBlank()) return null
-
-        val path = parsed.lastPathSegment.orEmpty()
-        val extension = path.substringAfterLast('.', "").lowercase()
-        val mime = hintedMime?.substringBefore(';')?.trim()?.lowercase()
-        val kind = when {
-            extension in playlistExtensions || mime?.contains("mpegurl") == true ||
-                mime?.contains("dash+xml") == true -> ResourceKind.PLAYLIST
-            extension in segmentExtensions -> ResourceKind.SEGMENT
-            extension in videoExtensions || mime?.startsWith("video/") == true ||
-                hintedKind.equals("video", ignoreCase = true) -> ResourceKind.VIDEO
-            extension in audioExtensions || mime?.startsWith("audio/") == true ||
-                hintedKind.equals("audio", ignoreCase = true) -> ResourceKind.AUDIO
-            extension in imageExtensions || mime?.startsWith("image/") == true ||
-                hintedKind.equals("image", ignoreCase = true) -> ResourceKind.IMAGE
-            else -> return null
-        }
-
-        val decodedName = runCatching {
-            URLDecoder.decode(path, StandardCharsets.UTF_8.name())
-        }.getOrDefault(path)
-        val inferredExtension = extension.ifBlank {
-            when {
-                mime?.contains("webp") == true -> "webp"
-                mime?.contains("png") == true -> "png"
-                mime?.contains("jpeg") == true -> "jpg"
-                mime?.contains("gif") == true -> "gif"
-                mime?.contains("mp4") == true -> "mp4"
-                mime?.contains("webm") == true -> "webm"
-                mime?.contains("mpegurl") == true -> "m3u8"
-                mime?.contains("dash+xml") == true -> "mpd"
-                kind == ResourceKind.AUDIO -> "mp3"
-                kind == ResourceKind.IMAGE -> "jpg"
-                kind == ResourceKind.VIDEO -> "mp4"
-                else -> "bin"
-            }
-        }
-        val baseName = decodedName
-            .substringAfterLast('/')
-            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            .takeIf { it.isNotBlank() && it != "." }
-            ?: "media_resource"
-        val fileName = if (baseName.substringAfterLast('.', "").isBlank()) {
-            "$baseName.$inferredExtension"
-        } else {
-            baseName
-        }
+        val detection = ResourceClassifier.detect(rawUrl, hintedKind, hintedMime, hintedFileName) ?: return null
+        val kind = runCatching {
+            ResourceKind.valueOf(detection.kind.name)
+        }.getOrNull() ?: return null
 
         return SniffedResource(
-            url = parsed.toString(),
+            url = detection.url,
             kind = kind,
-            fileName = fileName,
-            mimeType = mime,
+            fileName = detection.fileName,
+            mimeType = detection.mimeType,
             pageTitle = pageTitle,
             sourcePage = sourcePage
         )
@@ -105,5 +82,12 @@ data class DownloadTaskUi(
     val progress: Int,
     val state: String,
     val detail: String,
-    val fileUri: String? = null
+    val fileUri: String? = null,
+    val resourceKind: String? = null,
+    val mimeType: String? = null,
+    val downloadedBytes: Long = -1L,
+    val totalBytes: Long = -1L,
+    val totalBytesEstimated: Boolean = false,
+    val speedBytesPerSecond: Long = -1L,
+    val adaptiveVideoHeight: Int? = null
 )

@@ -1,54 +1,55 @@
 # Architecture
 
-## Runtime data flow
+## Direct link workflow
 
-```mermaid
-flowchart TD
-    A[Compose URL Entry] --> B[SniffingViewModel]
-    B --> C[WebView]
-    C --> D[shouldInterceptRequest]
-    C --> E[Injected JavaScript]
-    D --> F[ResourceSniffer]
-    E --> F
-    F --> G[SniffedResourceRepository]
-    G --> H[Room]
-    H --> B
+    Paste or share URL
+      -> SharedLinkNormalizer
+      -> Direct file URL? -- yes --> ResourceSniffer / Java ResourceClassifier
+      -> no --> SniffingViewModel -> YtDlpRuntime -> Site extractor and metadata
+      -> Resolver result -> Download action -> WorkManager
+      -> Direct HTTP file -> OkDownload + OkHttp
+      -> Supported site page -> yt-dlp + FFmpeg
+      -> Direct HLS/DASH manifest -> Media3
+      -> MediaStore Download / SAF -> Room download history / Local files
 
-    B --> I[Resource Selection]
-    I --> J[DownloadCenterViewModel]
-    J --> K[DownloadRepository]
-    K --> L[Room Download History]
-    J --> M[WorkManager]
-
-    M --> N[PersistentDownloadWorker]
-    N --> O{Resource Type}
-    O -->|Direct file| P[OkDownloadTransferEngine]
-    P --> Q[OkHttp]
-    O -->|HLS / DASH| R[Media3 DownloadHelper]
-    R --> S[Media3 Transformer]
-    S --> T[Temporary MP4]
-    P --> U[SAF content URI]
-    T --> U
-    U --> K
-```
+There is no WebView screen, webpage navigation flow, DOM injection, browser request interception or general webpage sniffing.
 
 ## Package responsibilities
 
-- `presentation.sniffing`: sniffing screen state and WebView callbacks.
-- `presentation.downloads`: DataStore output-folder state and Room-backed download history.
-- `data.network`: OkDownload adapter, using the app's shared OkHttp configuration.
-- `data.media`: Media3 DownloadHelper track preparation and Transformer export.
-- `data.local`: Room entities, DAOs and database.
-- `data.preferences`: DataStore preferences.
-- `data.repository`: repository interfaces and implementations.
-- `di`: Hilt bindings for network, storage and repositories.
+- MainActivity.kt: URL-first shell, share-sheet URL intake, tab routing and download orchestration.
+- presentation.sniffing.DownloadOptionsSheet: grouped media configuration; it exposes only real extractor formats and sends the user's selected format selector to the download queue.
+- presentation.sniffing.DownloadFormatComposer: pure Kotlin validation for muxed/separate video+audio format selections, including source URL matching and safe format ID validation.
+- Resolver result cards use safe yt-dlp metadata (thumbnail, duration, uploader, codec, frame rate and file size) for preview; signed media URLs and authorization headers are never retained.
+- presentation.sniffing: direct URL resolution state; calls yt-dlp and does not observe webpage or WebView state.
+- presentation.downloads: DataStore output-folder/performance preferences and Room-backed download history; Download Center supports filename/error search and recent/name/progress sorting. Room retry-row replacement is transactional; WorkManager terminal states repair history after process death. Worker preflight and WorkManager enqueue failures are persisted as terminal failed rows.
+- Download source metadata is committed to Room before WorkManager enqueue; PersistentDownloadWorker owns subsequent durable state transitions. WorkManager UI observers only render live state. Legacy rows that already lost their source URL require re-parsing because WorkInfo does not expose inputData.
+- DownloadQueuePolicy: prevents duplicate active tasks for the same URL while allowing a later retry after the task finishes.
+- data.extractor.YtDlpRuntime: initializes the Android yt-dlp/FFmpeg runtime, refreshes the separate yt-dlp executable from the Nightly channel at startup and weekly thereafter, inspects metadata and downloads/merges media. Parse and download commands share a cancellable process executor; pause/retry waits for the prior process to exit. Failed/offline update attempts leave the bundled executable intact and are retried after a six-hour cooldown.\n- YtDlpSessionKey: hashes the stable source, selected formats, output name and destination to isolate resumable private yt-dlp partial files without exposing signed stream URLs in filenames.\n- YtDlpFormatSelectorPolicy: whitelists yt-dlp format selector shapes accepted by the app.
+- data.extractor.YtDlpUpdatePolicy: pure scheduling rules for first-run, weekly refresh and failed-update retry.
+- data.extractor.YouTubeUrlParser, YtDlpPlaylistDetector and NiconicoUrlParser: validate known URL shapes before selecting site-specific handling. Generic playlist results are accepted only when yt-dlp supplies a real HTTP(S) item page URL. A video/audio page item is routed through yt-dlp even when its referer is the parent playlist URL; known direct media extensions remain on OkDownload.
+- data.extractor.YtDlpInfoJsonParser: parses safe metadata and actual format availability without retaining signed media URLs or authorization headers.
+- data.network: OkDownload adapter, size-aware byte-range strategy, shared speed limiter and DownloadIntegrityPolicy for empty/truncated/error payload rejection before publication.
+- NativeMediaProbe (C++17/JNI): detects common media/container signatures plus HTML/JSON error payloads; a verified media signature is not rejected solely because a server sent the wrong text/plain MIME header.
+- data.media: Media3 DownloadHelper track selection, adaptive cache and Transformer export for direct HLS/DASH manifests.
+- data.storage.DownloadOutput: MediaStore Download publication on Android 10+ and optional SAF output; pending-to-visible publication is verified and failures are surfaced. Worker final copies compare bytes written with source file length; Media3 verifies its exported MP4 signature before copying.
+- data.local: Room entities, DAOs and database.
+- data.preferences: DataStore-backed preferences.
+- data.repository: repository interfaces and implementations.
+- di: Hilt bindings for network, storage and repositories.
+- ResourceClassifier.java: platform-independent direct URL/MIME/extension classification.
+- FileNameSanitizer.java: shared safe filename normalization.
+- NativeMediaProbe.kt and app/src/main/cpp: C++17/JNI payload signature inspection; it is not a decoder.
+- tools/validate_media_fixtures.py: offline HLS/DASH fixture and native signature validation.
 
 ## Design constraints
 
-1. UI code calls ViewModels; it does not own database/network work.
-2. ViewModels expose observable state with Kotlin Flow.
-3. WorkManager persists job scheduling and runs downloads in a foreground worker.
-4. Room is the durable app-facing download history; OkDownload's breakpoint store is the transport-level resume metadata for direct downloads.
-5. All output files are created through the user-granted SAF tree URI.
-6. Adaptive streams are exported through Media3, not manually concatenated by app code.
-7. Credentials are not uploaded. WebView cookies are not currently bridged into downloader requests.
+1. UI calls ViewModels; it does not own network or database work.
+2. Supported site video pages are passed to yt-dlp directly; the app does not open those pages.
+3. WorkManager persists download scheduling and runs long transfers in a foreground worker.
+4. Room stores app-facing download history. OkDownload's breakpoint store retains direct-file resume metadata.
+5. Android 10+ downloads are published to the public MediaStore Download collection by default; user-granted SAF is an optional override.
+6. Adaptive HLS/DASH manifests are exported through Media3 where supported; app code does not manually concatenate media segments.
+7. The app does not implement DRM decryption, login bypass, region bypass or account-entitlement bypass.
+8. The Android yt-dlp wrapper dependency is pinned, but the executable is refreshed independently from the yt-dlp Nightly channel at startup and weekly thereafter, so extractor changes are not frozen at the dependency release date.
+9. Public Niconico links are attempted through yt-dlp's guest route without a sign-in prompt; the service still enforces genuine visibility, membership, payment, region and DRM restrictions.
+10. Network access remains enabled because yt-dlp, OkHttp and Media3 request site APIs and media streams. This is separate from opening pages in an in-app browser.

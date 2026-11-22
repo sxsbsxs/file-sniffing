@@ -23,6 +23,10 @@ object StorageModule {
             context,
             FileSniffDatabase::class.java,
             "file-sniffing.db"
+        ).addMigrations(
+            FileSniffDatabase.MIGRATION_1_2,
+            FileSniffDatabase.MIGRATION_2_3,
+            FileSniffDatabase.MIGRATION_3_4
         ).build()
 
     @Provides

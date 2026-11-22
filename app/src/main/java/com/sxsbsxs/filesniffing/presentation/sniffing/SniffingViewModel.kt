@@ -2,85 +2,207 @@ package com.sxsbsxs.filesniffing.presentation.sniffing
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sxsbsxs.filesniffing.FileNameSanitizer
 import com.sxsbsxs.filesniffing.ResourceKind
+import com.sxsbsxs.filesniffing.ResourceSniffer
+import com.sxsbsxs.filesniffing.SharedLinkNormalizer
 import com.sxsbsxs.filesniffing.SniffedResource
-import com.sxsbsxs.filesniffing.data.local.SniffedResourceEntity
-import com.sxsbsxs.filesniffing.data.repository.SniffedResourceRepository
+import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpInfoJsonParser
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpPlaylistDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/**
+ * Direct link resolver. It never creates a WebView or opens the supplied page.
+ * Supported extractors fetch metadata/media information directly through yt-dlp.
+ */
 @HiltViewModel
 class SniffingViewModel @Inject constructor(
-    private val resourceRepository: SniffedResourceRepository
+    private val ytDlpRuntime: YtDlpRuntime
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SniffingUiState())
     val uiState = _uiState.asStateFlow()
 
-    private var observePageJob: Job? = null
+    private var resolveJob: Job? = null
 
-    fun beginInspection(pageUrl: String) {
-        observePageJob?.cancel()
+    fun resolveUrl(rawUrl: String, onResult: (List<SniffedResource>?, String?) -> Unit) {
+        val normalizedUrl = SharedLinkNormalizer.normalize(rawUrl)
+        if (normalizedUrl.isNullOrBlank()) {
+            onResult(null, "请输入有效的视频或文件链接")
+            return
+        }
+
+        resolveJob?.cancel()
         _uiState.value = SniffingUiState(
-            activePageUrl = pageUrl,
+            activePageUrl = normalizedUrl,
             isPageLoading = true
         )
-        observePageJob = viewModelScope.launch {
-            resourceRepository.observeForPage(pageUrl).collectLatest { stored ->
-                val mapped = stored.mapNotNull(::toResource)
-                _uiState.update { state ->
-                    if (state.activePageUrl == pageUrl) state.copy(resources = mapped) else state
+
+        resolveJob = viewModelScope.launch {
+            try {
+                // Direct file URLs do not need a site extractor.
+                val directResource = ResourceSniffer.detect(
+                    rawUrl = normalizedUrl,
+                    pageTitle = "",
+                    sourcePage = normalizedUrl
+                )
+                val resources: List<SniffedResource>
+                val summary: String
+
+                if (directResource != null) {
+                    resources = listOf(directResource)
+                    summary = "检测到直链文件"
+                } else if (YtDlpPlaylistDetector.isLikelyPlaylistUrl(normalizedUrl)) {
+                    val playlist = ytDlpRuntime.inspectPlaylist(normalizedUrl)
+                    resources = playlist.entries.map { entry ->
+                        val safeTitle = FileNameSanitizer.sanitize(entry.title, entry.entryId)
+                        SniffedResource(
+                            url = entry.webpageUrl,
+                            kind = ResourceKind.VIDEO,
+                            fileName = "$safeTitle.mp4",
+                            mimeType = "video/mp4",
+                            pageTitle = entry.title,
+                            sourcePage = normalizedUrl
+                        )
+                    }
+                    summary = "播放列表：${resources.size} 个视频"
+                } else {
+                    val info = ytDlpRuntime.inspect(normalizedUrl)
+                    val videoFormats = info.selectableVideoFormats
+                    val audioFormats = info.audioOnlyFormats
+                    if (videoFormats.isEmpty() && audioFormats.isEmpty()) {
+                        throw IllegalStateException("yt-dlp 没有返回可下载的视频或音频格式")
+                    }
+
+                    val isAudioOnly = videoFormats.isEmpty()
+                    val safeTitle = FileNameSanitizer.sanitize(
+                        info.title,
+                        info.videoId.ifBlank { "video" }
+                    )
+                    val bestAudio = audioFormats.firstOrNull()
+                    val videoChoices = videoFormats.map { format ->
+                        val selector = if (format.hasAudio || bestAudio == null) {
+                            format.formatId
+                        } else {
+                            YtDlpInfoJsonParser.buildFormatSelector(format, bestAudio)
+                        }
+                        val suffix = (format.qualityLabel + "-" + format.formatId)
+                            .replace(Regex("[^A-Za-z0-9.-]"), "-")
+                        SniffedResource(
+                            url = normalizedUrl,
+                            kind = ResourceKind.VIDEO,
+                            fileName = FileNameSanitizer.sanitize(
+                                "$safeTitle-$suffix.mp4",
+                                "$safeTitle.mp4"
+                            ),
+                            mimeType = "video/mp4",
+                            pageTitle = info.title,
+                            sourcePage = normalizedUrl,
+                            formatSelector = selector,
+                            qualityLabel = format.qualityLabel,
+                            fileSizeBytes = format.fileSizeBytes,
+                            videoFormatId = format.formatId,
+                            audioFormatId = if (format.hasAudio) null else bestAudio?.formatId,
+                            hasEmbeddedAudio = format.hasAudio,
+                            audioQualityLabel = if (format.hasAudio) "内嵌音轨" else bestAudio?.qualityLabel,
+                            audioLanguage = if (format.hasAudio) null else bestAudio?.language,
+                            audioFileSizeBytes = if (format.hasAudio) null else bestAudio?.fileSizeBytes,
+                            thumbnailUrl = info.thumbnailUrl,
+                            durationSeconds = info.durationSeconds,
+                            uploader = info.uploader,
+                            codecLabel = format.videoCodec?.takeUnless { it.equals("none", true) },
+                            frameRate = format.framesPerSecond
+                        )
+                    }
+                    val audioChoices = audioFormats.map { format ->
+                        val suffix = (format.qualityLabel + "-" + format.formatId)
+                            .replace(Regex("[^A-Za-z0-9.-]"), "-")
+                        SniffedResource(
+                            url = normalizedUrl,
+                            kind = ResourceKind.AUDIO,
+                            fileName = FileNameSanitizer.sanitize(
+                                "$safeTitle-audio-$suffix.mp3",
+                                "$safeTitle-audio.mp3"
+                            ),
+                            mimeType = "audio/mpeg",
+                            pageTitle = info.title,
+                            sourcePage = normalizedUrl,
+                            formatSelector = format.formatId,
+                            qualityLabel = format.qualityLabel,
+                            fileSizeBytes = format.fileSizeBytes,
+                            audioFormatId = format.formatId,
+                            audioLanguage = format.language,
+                            hasEmbeddedAudio = true,
+                            thumbnailUrl = info.thumbnailUrl,
+                            durationSeconds = info.durationSeconds,
+                            uploader = info.uploader,
+                            codecLabel = format.audioCodec
+                        )
+                    }
+                    resources = if (videoChoices.isNotEmpty()) {
+                        videoChoices + audioChoices
+                    } else {
+                        audioChoices
+                    }
+
+                    val bestHeight = videoFormats.mapNotNull { it.height }.maxOrNull()
+                    summary = buildString {
+                        if (isAudioOnly) {
+                            append("可用音频格式：").append(audioFormats.size).append(" 种")
+                        } else {
+                            append("可用视频格式：").append(videoFormats.size).append(" 种")
+                            if (bestHeight != null) append(" · 最高 ").append(bestHeight).append("p")
+                            if (audioFormats.isNotEmpty()) {
+                                append(" · 音频轨道：").append(audioFormats.size).append(" 种")
+                            }
+                        }
+                        info.uploader?.takeIf { it.isNotBlank() }?.let {
+                            append(" · ").append(it.take(80))
+                        }
+                    }
+                }
+
+                if (_uiState.value.activePageUrl != normalizedUrl) return@launch
+                _uiState.value = SniffingUiState(
+                    activePageUrl = normalizedUrl,
+                    pageTitle = resources.firstOrNull()?.pageTitle.orEmpty(),
+                    isPageLoading = false,
+                    resources = resources,
+                    resultSummary = summary
+                )
+                onResult(resources, null)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                val message = error.message
+                    ?.lineSequence()
+                    ?.firstOrNull()
+                    ?.take(200)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "链接解析失败，请检查链接或更新 yt-dlp"
+                if (_uiState.value.activePageUrl == normalizedUrl) {
+                    _uiState.value = SniffingUiState(
+                        activePageUrl = normalizedUrl,
+                        isPageLoading = false,
+                        errorMessage = message
+                    )
+                    onResult(null, message)
                 }
             }
         }
     }
 
-    fun setPageLoading(loading: Boolean) {
-        _uiState.update { it.copy(isPageLoading = loading) }
-    }
-
-    fun setPageTitle(title: String) {
-        _uiState.update { it.copy(pageTitle = title) }
-    }
-
-    fun addResource(resource: SniffedResource) {
-        val pageUrl = _uiState.value.activePageUrl ?: return
-        viewModelScope.launch {
-            resourceRepository.save(
-                SniffedResourceEntity(
-                    pageUrl = pageUrl,
-                    resourceUrl = resource.url,
-                    resourceKind = resource.kind.name,
-                    fileName = resource.fileName,
-                    mimeType = resource.mimeType,
-                    pageTitle = resource.pageTitle,
-                    firstSeenAtMillis = System.currentTimeMillis()
-                )
-            )
-        }
-    }
-
     fun closeInspection() {
-        observePageJob?.cancel()
-        observePageJob = null
+        resolveJob?.cancel()
+        resolveJob = null
         _uiState.value = SniffingUiState()
-    }
-
-    private fun toResource(entity: SniffedResourceEntity): SniffedResource? {
-        val kind = runCatching { ResourceKind.valueOf(entity.resourceKind) }.getOrNull() ?: return null
-        return SniffedResource(
-            url = entity.resourceUrl,
-            kind = kind,
-            fileName = entity.fileName,
-            mimeType = entity.mimeType,
-            pageTitle = entity.pageTitle,
-            sourcePage = entity.pageUrl
-        )
     }
 }

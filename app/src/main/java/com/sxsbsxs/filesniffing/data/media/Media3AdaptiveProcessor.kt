@@ -4,13 +4,21 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.provider.DocumentsContract
+import com.sxsbsxs.filesniffing.data.storage.DownloadOutput
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.Clock
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.NoOpCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.exoplayer.offline.DefaultDownloaderFactory
 import androidx.media3.exoplayer.offline.DownloadHelper
+import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.transformer.DefaultDecoderFactory
@@ -18,14 +26,18 @@ import androidx.media3.transformer.ExoPlayerAssetLoader
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.sxsbsxs.filesniffing.SniffedResource
+import com.sxsbsxs.filesniffing.NativeMediaProbe
+import com.sxsbsxs.filesniffing.DownloadOutputCopyProgressPolicy
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.Executors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -39,6 +51,16 @@ data class Media3ExportResult(
     val fileName: String
 )
 
+data class AdaptiveQualityOption(
+    val height: Int,
+    val width: Int,
+    val bitrate: Int
+) {
+    val label: String get() = "${height}p"
+    val bitrateLabel: String?
+        get() = bitrate.takeIf { it > 0 }?.let { "${it / 1000} kbps" }
+}
+
 @OptIn(UnstableApi::class)
 @Singleton
 class Media3AdaptiveProcessor @Inject constructor(
@@ -47,9 +69,54 @@ class Media3AdaptiveProcessor @Inject constructor(
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    suspend fun inspectAdaptiveQualities(resource: SniffedResource): List<AdaptiveQualityOption> =
+        withContext(Dispatchers.IO) {
+            require(resource.fileName.endsWith(".m3u8", true) ||
+                resource.fileName.endsWith(".mpd", true)) {
+                "Media3 画质探测只支持 HLS 或 DASH 清单"
+            }
+            val helper = prepareHelper(
+                createMediaItem(resource),
+                createDataSourceFactory(resource),
+                null
+            )
+            try {
+                val options = mutableListOf<AdaptiveQualityOption>()
+                for (periodIndex in 0 until helper.periodCount) {
+                    val mapped = helper.getMappedTrackInfo(periodIndex)
+                    for (rendererIndex in 0 until mapped.rendererCount) {
+                        if (mapped.getRendererType(rendererIndex) != C.TRACK_TYPE_VIDEO) continue
+                        val groups = mapped.getTrackGroups(rendererIndex)
+                        for (groupIndex in 0 until groups.length) {
+                            val group = groups.get(groupIndex)
+                            for (trackIndex in 0 until group.length) {
+                                val format = group.getFormat(trackIndex)
+                                if (format.height > 0) {
+                                    options += AdaptiveQualityOption(
+                                        height = format.height,
+                                        width = format.width,
+                                        bitrate = format.bitrate
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                options
+                    .groupBy { it.height }
+                    .values
+                    .map { candidates -> candidates.maxBy { it.bitrate } }
+                    .sortedByDescending { it.height }
+            } finally {
+                helper.release()
+            }
+        }
+
     suspend fun exportAdaptiveStream(
         resource: SniffedResource,
-        destinationTree: Uri,
+        destinationTree: Uri?,
+        maxVideoHeight: Int? = null,
+        maxConcurrentConnections: Int = 8,
         onProgress: (Int, String) -> Unit
     ): Media3ExportResult = withContext(Dispatchers.IO) {
         require(resource.fileName.endsWith(".m3u8", true) ||
@@ -57,49 +124,63 @@ class Media3AdaptiveProcessor @Inject constructor(
             "Media3 导出只处理 HLS 或 DASH 自适应媒体清单"
         }
 
-        val headers = buildMap {
-            put("User-Agent", android.webkit.WebSettings.getDefaultUserAgent(context))
-            put("Accept", "*/*")
-            if (resource.sourcePage.isNotBlank()) put("Referer", resource.sourcePage)
-        }
-        val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
-            .setDefaultRequestProperties(headers)
-        val sourceMediaItem = MediaItem.Builder()
-            .setUri(resource.url)
-            .setMimeType(
-                when {
-                    resource.fileName.endsWith(".m3u8", ignoreCase = true) ->
-                        MimeTypes.APPLICATION_M3U8
-                    resource.fileName.endsWith(".mpd", ignoreCase = true) ->
-                        MimeTypes.APPLICATION_MPD
-                    else -> resource.mimeType
-                }
-            )
-            .build()
-
-        onProgress(-1, "Media3 正在分析播放轨道")
-        val downloadRequest = prepareDownloadRequest(sourceMediaItem, dataSourceFactory)
-        val selectedMediaItem = downloadRequest.toMediaItem()
+        val dataSourceFactory = createDataSourceFactory(resource)
+        val sourceMediaItem = createMediaItem(resource)
+        val cacheDirectory = adaptiveCacheDirectory(resource, destinationTree, maxVideoHeight)
+        val databaseProvider = StandaloneDatabaseProvider(context)
+        val cache = SimpleCache(cacheDirectory, NoOpCacheEvictor(), databaseProvider)
+        var exportCompleted = false
 
         val tempFile = File(context.cacheDir, "media3-${UUID.randomUUID()}.mp4")
         try {
-            onProgress(-1, "已选择自适应音视频轨道，正在转封装")
-            runTransformer(selectedMediaItem, dataSourceFactory, tempFile, onProgress)
+            onProgress(-1, "Media3 正在分析播放轨道")
+            val downloadRequest = prepareDownloadRequest(
+                sourceMediaItem,
+                dataSourceFactory,
+                maxVideoHeight
+            )
+            val selectedMediaItem = downloadRequest.toMediaItem()
+            val cacheDataSourceFactory = CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(dataSourceFactory)
+
+            onProgress(0, "正在缓存已选音视频轨道，暂停后可从已缓存分片继续")
+            downloadSelectedTracks(
+                downloadRequest,
+                cacheDataSourceFactory,
+                maxConcurrentConnections,
+                onProgress
+            )
+
+            onProgress(55, "分片缓存完成，正在合并并转封装")
+            runTransformer(
+                selectedMediaItem,
+                cacheDataSourceFactory,
+                tempFile,
+                progressBase = 55,
+                progressRange = 35,
+                onProgress = onProgress
+            )
 
             require(tempFile.exists() && tempFile.length() > 0L) {
                 "Media3 导出结束，但没有生成有效文件"
             }
+            val outputPrefix = FileInputStream(tempFile).use { source ->
+                val bytes = ByteArray(4096)
+                val count = source.read(bytes)
+                if (count > 0) bytes.copyOf(count) else ByteArray(0)
+            }
+            val detectedContainer = NativeMediaProbe.detectContainer(outputPrefix)
+            check(detectedContainer == "mp4") {
+                "Media3 输出文件头无效：预期 MP4，实际为 $detectedContainer"
+            }
             val outputName = buildOutputName(resource.fileName)
-            val parent = DocumentsContract.buildDocumentUriUsingTree(
-                destinationTree,
-                DocumentsContract.getTreeDocumentId(destinationTree)
+            val destination = DownloadOutput.create(
+                context = context,
+                destinationTree = destinationTree,
+                displayName = outputName,
+                mimeType = "video/mp4"
             )
-            val destination = DocumentsContract.createDocument(
-                context.contentResolver,
-                parent,
-                "video/mp4",
-                outputName
-            ) ?: error("无法在所选文件夹创建 MP4 文件")
 
             try {
                 FileInputStream(tempFile).use { source ->
@@ -115,37 +196,168 @@ class Media3AdaptiveProcessor @Inject constructor(
                             if (count < 0) break
                             sink.write(buffer, 0, count)
                             copied += count
-                            val progress = if (total > 0L) {
-                                (90 + (copied * 10.0 / total).toInt()).coerceIn(90, 99)
-                            } else {
-                                -1
-                            }
+                            val progress = DownloadOutputCopyProgressPolicy.percent(copied, total)
                             onProgress(progress, "正在保存 MP4：$copied / $total 字节")
                         }
+                        check(copied == total) {
+                            "Media3 MP4 保存未写完整：已写入 $copied / $total 字节"
+                        }
+                        onProgress(-1, "MP4 数据已写入，正在同步存储")
                         sink.flush()
                     }
                 }
+                onProgress(-1, "MP4 已写入，正在发布文件")
+                DownloadOutput.markComplete(context, destination)
+                onProgress(-1, "MP4 已发布，正在完成下载记录")
             } catch (error: Exception) {
-                runCatching { context.contentResolver.delete(destination, null, null) }
+                DownloadOutput.delete(context, destination)
                 throw error
             }
-            onProgress(100, "Media3 已导出 MP4")
+            onProgress(-1, "MP4 导出完成，正在更新下载记录")
+            exportCompleted = true
             Media3ExportResult(destination, outputName)
         } finally {
             runCatching { tempFile.delete() }
+            runCatching { cache.release() }
+            if (exportCompleted) {
+                runCatching { SimpleCache.delete(cacheDirectory, databaseProvider) }
+            }
         }
     }
 
+    suspend fun discardAdaptiveCache(
+        resource: SniffedResource,
+        destinationTree: Uri?,
+        maxVideoHeight: Int? = null
+    ) = withContext(Dispatchers.IO) {
+        val directory = adaptiveCacheDirectory(resource, destinationTree, maxVideoHeight)
+        if (directory.exists() && !SimpleCache.isCacheFolderLocked(directory)) {
+            SimpleCache.delete(directory, StandaloneDatabaseProvider(context))
+        }
+    }
+
+    private fun adaptiveCacheDirectory(
+        resource: SniffedResource,
+        destinationTree: Uri?,
+        maxVideoHeight: Int?
+    ): File {
+        // Cookie contents remain in memory; only a digest is used to isolate cache sessions.
+        val sessionCookie = runCatching {
+            android.webkit.CookieManager.getInstance().getCookie(resource.url).orEmpty()
+        }.getOrDefault("")
+        val key = AdaptiveCacheKey.create(
+            sourceUrl = resource.url,
+            referer = resource.sourcePage,
+            fileName = resource.fileName,
+            destinationTree = destinationTree?.toString() ?: DownloadOutput.PUBLIC_DOWNLOADS_CACHE_KEY,
+            maxVideoHeight = maxVideoHeight,
+            sessionCookies = sessionCookie
+        )
+        return File(File(context.noBackupFilesDir, "media3-adaptive-cache"), key)
+    }
+
+    private suspend fun downloadSelectedTracks(
+        request: DownloadRequest,
+        cacheDataSourceFactory: CacheDataSource.Factory,
+        maxConcurrentConnections: Int,
+        onProgress: (Int, String) -> Unit
+    ) {
+        // HLS/DASH work is segment-based, not byte-range splitting. Keep a separate
+        // bounded pool so a 256/512 direct-file setting cannot spawn that many threads here.
+        val executor = Executors.newFixedThreadPool(maxConcurrentConnections.coerceIn(1, 32)) { runnable ->
+            Thread(runnable, "media3-segment-fetch").apply { isDaemon = true }
+        }
+        val downloader = DefaultDownloaderFactory(cacheDataSourceFactory, executor)
+            .createDownloader(request)
+        var downloadThread: Thread? = null
+
+        try {
+            suspendCancellableCoroutine<Unit> { continuation ->
+                val thread = Thread({
+                    try {
+                        downloader.download { contentLength, bytesDownloaded, percentDownloaded ->
+                            val percent = if (percentDownloaded.isFinite() && percentDownloaded >= 0f) {
+                                (percentDownloaded * 0.55f).toInt().coerceIn(0, 54)
+                            } else {
+                                -1
+                            }
+                            val size = if (contentLength > 0L) {
+                                "${bytesDownloaded} / ${contentLength} 字节"
+                            } else {
+                                "${bytesDownloaded} 字节"
+                            }
+                            onProgress(percent, "正在缓存 HLS/DASH 分片：$size")
+                        }
+                        if (continuation.isActive) runCatching { continuation.resume(Unit) }
+                    } catch (error: Exception) {
+                        if (continuation.isActive) runCatching {
+                            continuation.resumeWithException(error)
+                        }
+                    } finally {
+                        executor.shutdown()
+                    }
+                }, "media3-adaptive-downloader").apply { isDaemon = true }
+                downloadThread = thread
+                continuation.invokeOnCancellation {
+                    runCatching { downloader.cancel() }
+                    thread.interrupt()
+                    executor.shutdownNow()
+                }
+                thread.start()
+            }
+        } finally {
+            // Wait for segment writers before releasing SimpleCache after a pause/cancel.
+            withContext(NonCancellable + Dispatchers.IO) {
+                runCatching { downloadThread?.join() }
+            }
+            executor.shutdownNow()
+        }
+    }
+
+    private fun createDataSourceFactory(resource: SniffedResource): OkHttpDataSource.Factory {
+        val headers = buildMap {
+            put("User-Agent", android.webkit.WebSettings.getDefaultUserAgent(context))
+            put("Accept", "*/*")
+            if (resource.sourcePage.isNotBlank()) put("Referer", resource.sourcePage)
+        }
+        return OkHttpDataSource.Factory(okHttpClient).setDefaultRequestProperties(headers)
+    }
+
+    private fun createMediaItem(resource: SniffedResource): MediaItem =
+        MediaItem.Builder()
+            .setUri(resource.url)
+            .setMimeType(
+                when {
+                    resource.fileName.endsWith(".m3u8", ignoreCase = true) -> MimeTypes.APPLICATION_M3U8
+                    resource.fileName.endsWith(".mpd", ignoreCase = true) -> MimeTypes.APPLICATION_MPD
+                    else -> resource.mimeType
+                }
+            )
+            .build()
+
     private suspend fun prepareDownloadRequest(
         mediaItem: MediaItem,
-        dataSourceFactory: OkHttpDataSource.Factory
-    ) = suspendCancellableCoroutine { continuation ->
-        val trackSelection = DefaultTrackSelector.Parameters.Builder(context)
+        dataSourceFactory: OkHttpDataSource.Factory,
+        maxVideoHeight: Int?
+    ) = prepareHelper(mediaItem, dataSourceFactory, maxVideoHeight).let { helper ->
+        try {
+            helper.getDownloadRequest(null)
+        } finally {
+            helper.release()
+        }
+    }
+
+    private suspend fun prepareHelper(
+        mediaItem: MediaItem,
+        dataSourceFactory: OkHttpDataSource.Factory,
+        maxVideoHeight: Int?
+    ): DownloadHelper = suspendCancellableCoroutine { continuation ->
+        val parametersBuilder = DefaultTrackSelector.Parameters.Builder(context)
             .setForceHighestSupportedBitrate(true)
-            .build()
+        maxVideoHeight?.let { parametersBuilder.setMaxVideoSize(Int.MAX_VALUE, it) }
         val helper = DownloadHelper.Factory()
             .setDataSourceFactory(dataSourceFactory)
-            .setTrackSelectionParameters(trackSelection)
+            .setTrackSelectionParameters(parametersBuilder.build())
             .create(mediaItem)
 
         continuation.invokeOnCancellation {
@@ -158,15 +370,12 @@ class Media3AdaptiveProcessor @Inject constructor(
                     helper.release()
                     return
                 }
-                runCatching {
-                    helper.getDownloadRequest(null)
-                }.onSuccess { request ->
+                if (!tracksInfoAvailable) {
                     helper.release()
-                    continuation.resume(request)
-                }.onFailure { error ->
-                    helper.release()
-                    continuation.resumeWithException(error)
+                    continuation.resumeWithException(IOException("媒体清单没有可读取的轨道信息"))
+                    return
                 }
+                continuation.resume(helper)
             }
 
             override fun onPrepareError(helper: DownloadHelper, error: IOException) {
@@ -178,8 +387,10 @@ class Media3AdaptiveProcessor @Inject constructor(
 
     private suspend fun runTransformer(
         mediaItem: MediaItem,
-        dataSourceFactory: OkHttpDataSource.Factory,
+        dataSourceFactory: DataSource.Factory,
         outputFile: File,
+        progressBase: Int,
+        progressRange: Int,
         onProgress: (Int, String) -> Unit
     ) = withContext(Dispatchers.Main.immediate) {
         suspendCancellableCoroutine { continuation ->
@@ -198,9 +409,12 @@ class Media3AdaptiveProcessor @Inject constructor(
                     if (!continuation.isActive) return
                     val state = transformer.getProgress(progressHolder)
                     if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
+                        val mappedProgress = (
+                            progressBase + progressHolder.progress * progressRange / 100
+                        ).coerceIn(progressBase, progressBase + progressRange)
                         onProgress(
-                            (progressHolder.progress * 0.9f).toInt().coerceIn(0, 89),
-                            "Media3 正在转封装：${progressHolder.progress}%"
+                            mappedProgress,
+                            "Media3 正在合并并转封装：${progressHolder.progress}%"
                         )
                     }
                     mainHandler.postDelayed(this, 500L)
