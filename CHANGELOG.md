@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.13
+
+- Remove the incorrect Niconico account/password prompt; public Niconico links are attempted without user credentials.
+- Add Seal-style automatic yt-dlp executable updates from the Nightly channel, independent of the pinned youtubedl-android wrapper dependency.
+- Check for extractor updates at app startup and then weekly; if the network is unavailable, keep using the bundled executable and retry after a six-hour cooldown.
+- Add unit tests for first-run, weekly update and failed-update retry scheduling.
+- Bump app version to 0.9.13 (versionCode 31).
+- Niconico public access still follows the service's current guest API and any genuine video visibility, membership, payment, region or DRM restrictions.
+
 ## 0.9.12
 
 - Add an optional Niconico account dialog without restoring WebView or in-app webpage navigation.
