@@ -38,7 +38,7 @@ class FileSniffingApplication : Application(), Configuration.Provider {
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
-            .setWorkerFactory(workerFactory)
+            .setWorkerFactory(DiagnosticWorkerFactory(workerFactory))
             .setMinimumLoggingLevel(android.util.Log.INFO)
             .build()
 }
