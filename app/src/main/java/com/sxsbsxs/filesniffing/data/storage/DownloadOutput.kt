@@ -66,5 +66,5 @@ object DownloadOutput {
 
     private fun isMediaStoreDownload(uri: Uri): Boolean =
         uri.scheme == "content" && uri.authority == "media" &&
-            uri.pathSegments.firstOrNull() == "downloads"
+            uri.pathSegments.contains("downloads")
 }
