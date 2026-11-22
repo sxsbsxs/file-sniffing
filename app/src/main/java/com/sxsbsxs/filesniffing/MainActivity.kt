@@ -940,6 +940,8 @@ private fun DownloadsScreen(
         mutableIntStateOf(tuning.speedLimitMegabytesPerSecond)
     }
     var kindFilter by rememberSaveable { mutableStateOf("全部") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var sortOrder by rememberSaveable { mutableStateOf("最近") }
     val activeCount = tasks.count { it.state == "downloading" || it.state == "queued" }
     val pausedCount = tasks.count { it.state == "paused" }
     val completedCount = tasks.count { it.state == "completed" }
@@ -960,6 +962,16 @@ private fun DownloadsScreen(
         statusFilteredTasks
     } else {
         statusFilteredTasks.filter { it.resourceKind == kindFilter }
+    }
+    val searchedTasks = filteredTasks.filter { task ->
+        searchQuery.isBlank() ||
+            task.fileName.contains(searchQuery, ignoreCase = true) ||
+            task.detail.contains(searchQuery, ignoreCase = true)
+    }
+    val displayedTasks = when (sortOrder) {
+        "名称" -> searchedTasks.sortedBy { it.fileName.lowercase(java.util.Locale.ROOT) }
+        "进度" -> searchedTasks.sortedByDescending { it.progress.coerceAtLeast(0) }
+        else -> searchedTasks
     }
 
     Column(
@@ -1072,6 +1084,81 @@ private fun DownloadsScreen(
             }
         }
 
+        if (tasks.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(11.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(9.dp))
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 13.sp
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { innerTextField ->
+                            Box {
+                                if (searchQuery.isBlank()) {
+                                    Text(
+                                        "搜索文件名或错误信息",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+                    if (searchQuery.isNotBlank()) {
+                        IconButton(
+                            onClick = { searchQuery = "" },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = "清除搜索",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf("最近", "名称", "进度").forEach { order ->
+                    FilterChip(
+                        selected = sortOrder == order,
+                        onClick = { sortOrder = order },
+                        label = { Text("按" + order, fontSize = 11.sp) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
+        }
+
         when {
             tasks.isEmpty() -> {
                 Column(
@@ -1114,7 +1201,7 @@ private fun DownloadsScreen(
                     }
                 }
             }
-            filteredTasks.isEmpty() -> {
+            displayedTasks.isEmpty() -> {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1123,7 +1210,7 @@ private fun DownloadsScreen(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        "没有符合条件的任务",
+                        if (searchQuery.isNotBlank()) "没有匹配的下载任务" else "没有符合条件的任务",
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
@@ -1132,6 +1219,7 @@ private fun DownloadsScreen(
                     TextButton(onClick = {
                         statusFilter = "全部"
                         kindFilter = "全部"
+                        searchQuery = ""
                     }) {
                         Text("清除筛选", color = MaterialTheme.colorScheme.primary)
                     }
@@ -1142,7 +1230,7 @@ private fun DownloadsScreen(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
-                    items(filteredTasks, key = { it.id }) { task ->
+                    items(displayedTasks, key = { it.id }) { task ->
                         DownloadTaskCard(
                             task = task,
                             onOpen = { onOpenTask(task) },
