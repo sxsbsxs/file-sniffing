@@ -41,6 +41,17 @@ class DownloadQueuePolicyTest {
     }
 
     @Test
+    fun allowsDifferentFormatsForTheSameVideo() {
+        assertFalse(
+            DownloadQueuePolicy.isAlreadyActive(
+                sourceUrl = "$url#720p-format",
+                activeSessionUrls = listOf("$url#1080p-format"),
+                persistedActiveUrls = emptyList()
+            )
+        )
+    }
+
+    @Test
     fun blankUrlDoesNotMatchEveryOtherBlankEntry() {
         assertFalse(
             DownloadQueuePolicy.isAlreadyActive(
