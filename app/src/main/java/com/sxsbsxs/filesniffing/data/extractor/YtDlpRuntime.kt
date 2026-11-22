@@ -154,8 +154,6 @@ class YtDlpRuntime @Inject constructor(
 
         return File(context.cacheDir, "yt-cookies-${UUID.randomUUID()}.txt").apply {
             writeText("# Netscape HTTP Cookie File\n" + rows.distinct().joinToString("\n") + "\n")
-            setReadable(false, false)
-            setWritable(true, true)
         }
     }
 
