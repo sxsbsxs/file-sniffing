@@ -2,7 +2,7 @@
 
 File Sniffing is an Android link resolver and download manager. It no longer contains an in-app browser or webpage-sniffing screen.
 
-Current app version: 0.9.15
+Current app version: 0.9.16
 
 ## How it works
 
@@ -36,7 +36,8 @@ The app does not open supplied URLs in a WebView, inject scripts into pages, sca
 - Niconico watch URLs through yt-dlp's Niconico extractor.
 - Bilibili and other URLs supported by the installed yt-dlp extractor set, subject to extractor version and site access rules.
 - Direct HTTP(S) file and media URLs recognized by the resource classifier.
-- Audio-only output through yt-dlp and FFmpeg.
+- Dynamic per-format download choices using only formats returned for that URL, including audio-only tracks; video-only streams are paired with an actual audio format from the same video.
+- Audio-only output through yt-dlp and FFmpeg; chosen format IDs are preserved when retrying a failed task.
 - Public Download folder by default on Android 10+; optional SAF destination override. Android 9 and earlier require a chosen SAF directory.
 - Persistent download queue, Worker-owned task history, direct-file pause/resume, retry with source metadata saved before enqueue and local file browsing.
 - Active URL deduplication prevents accidental double-tap enqueue of the same source.
