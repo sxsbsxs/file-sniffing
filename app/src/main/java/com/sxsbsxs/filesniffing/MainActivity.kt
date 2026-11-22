@@ -645,8 +645,16 @@ private fun HomeScreen(
             ) {
                 items(resourceGroups, key = { group -> group.first().url }) { group ->
                     val representative = group.first()
-                    val videoFormats = group.filter { it.kind == ResourceKind.VIDEO }
-                    val audioFormats = group.filter { it.kind == ResourceKind.AUDIO }
+                    val videoFormats = group.filter {
+                        it.kind == ResourceKind.VIDEO &&
+                            !it.videoFormatId.isNullOrBlank() &&
+                            !it.formatSelector.isNullOrBlank()
+                    }
+                    val audioFormats = group.filter {
+                        it.kind == ResourceKind.AUDIO &&
+                            (!it.audioFormatId.isNullOrBlank() || !it.formatSelector.isNullOrBlank())
+                    }
+                    val hasVideoResource = group.any { it.kind == ResourceKind.VIDEO }
                     val highestVideoHeight = videoFormats.mapNotNull { option ->
                         option.qualityLabel?.substringBefore('p')?.toIntOrNull()
                     }.maxOrNull()
@@ -657,7 +665,7 @@ private fun HomeScreen(
                         }
                         if (audioFormats.isNotEmpty()) add("音轨 " + audioFormats.size + " 种")
                         if (videoFormats.isEmpty() && audioFormats.isEmpty()) {
-                            add(representative.kind.label)
+                            add(representative.kind.label + " · 直链文件")
                         }
                     }.joinToString(" · ")
                     Surface(
