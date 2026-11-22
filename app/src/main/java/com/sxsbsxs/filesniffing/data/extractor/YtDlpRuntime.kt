@@ -149,12 +149,14 @@ class YtDlpRuntime @Inject constructor(
         val lastAttempt = preferences.getLong(KEY_LAST_ATTEMPT, 0L)
         val lastSuccess = preferences.getLong(KEY_LAST_SUCCESS, 0L)
         val installedVersion = YoutubeDL.getInstance().versionName(context)
-        val due = installedVersion.isNullOrBlank() ||
-            now - lastSuccess >= UPDATE_INTERVAL_MILLIS
-        val retryAllowed = lastAttempt == 0L ||
-            now - lastAttempt >= RETRY_COOLDOWN_MILLIS
 
-        if (!due || !retryAllowed) return
+        if (!YtDlpUpdatePolicy.shouldAttemptUpdate(
+                nowMillis = now,
+                lastAttemptMillis = lastAttempt,
+                lastSuccessMillis = lastSuccess,
+                hasInstalledVersion = !installedVersion.isNullOrBlank()
+            )
+        ) return
 
         // Record the attempt before network work so a failed/offline check cannot loop each parse.
         preferences.edit().putLong(KEY_LAST_ATTEMPT, now).apply()
@@ -199,7 +201,5 @@ class YtDlpRuntime @Inject constructor(
         const val KEY_LAST_ATTEMPT = "last_attempt_ms"
         const val KEY_LAST_SUCCESS = "last_success_ms"
         const val KEY_LAST_VERSION = "last_version"
-        const val UPDATE_INTERVAL_MILLIS = 7L * 24L * 60L * 60L * 1000L
-        const val RETRY_COOLDOWN_MILLIS = 6L * 60L * 60L * 1000L
     }
 }
