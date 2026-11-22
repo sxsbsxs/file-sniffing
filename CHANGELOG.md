@@ -7,6 +7,7 @@
 - Reuse a completed private yt-dlp output file when interruption happens during the final copy to Download/SAF; show 90–99% copy progress and remove temporary data only after publication succeeds.
 - Validate yt-dlp format selector syntax before invoking the extractor; accept only safe single IDs, one real video+audio pair and the app's fixed fallback selectors.
 - Validate direct HTTP and yt-dlp output before publishing: reject empty files, known-incomplete byte counts, HTML/JSON/XML error pages and plain-text payloads masquerading as media.
+- Extend the native C++ probe to identify JSON error bodies even when they arrive as application/octet-stream; trust a recognized MP4/WebM/audio signature over an incorrect text/plain MIME header.
 - Delete clearly invalid HTTP error payload files instead of offering them as resumable media.
 - Verify MediaStore pending-to-visible publication; report failure and clean up the output if the file cannot be published. Apply the same cleanup rule to Media3 exports.
 - Persist the latest transfer progress and byte counters in Room when a task pauses, rather than retaining only the last database snapshot.
