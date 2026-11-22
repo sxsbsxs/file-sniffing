@@ -81,6 +81,7 @@ class SniffingViewModel @Inject constructor(
                         throw IllegalStateException("yt-dlp 没有返回可下载的视频或音频格式")
                     }
 
+                    val isAudioOnly = videoFormats.isEmpty()
                     val safeTitle = FileNameSanitizer.sanitize(
                         info.title,
                         info.videoId.ifBlank { "video" }
