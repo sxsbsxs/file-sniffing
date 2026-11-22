@@ -1,5 +1,7 @@
 package com.sxsbsxs.filesniffing
 
+import com.sxsbsxs.filesniffing.presentation.downloads.DownloadTaskDetailPolicy
+
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -180,6 +182,16 @@ private fun FileSniffingApp(sharedLink: String) {
         .filterNot { storedTasksById[it.id]?.state == "superseded" }
         .map { task ->
         val stored = storedTasksById[task.id]
+        val detail = if (stored == null) {
+            task.detail
+        } else {
+            DownloadTaskDetailPolicy.choose(
+                previousState = stored.state,
+                previousDetail = stored.detail,
+                incomingState = task.state,
+                incomingDetail = task.detail
+            )
+        }
         when {
             stored?.state == "paused" -> task.copy(
                 state = "paused",
@@ -190,8 +202,10 @@ private fun FileSniffingApp(sharedLink: String) {
                 totalBytes = stored.totalBytes,
                 speedBytesPerSecond = stored.speedBytesPerSecond
             )
-            task.fileUri != null -> task
-            else -> task.copy(fileUri = stored?.destinationUri)
+            else -> task.copy(
+                detail = detail,
+                fileUri = task.fileUri ?: stored?.destinationUri
+            )
         }
     }
     val visibleDownloadTasks = (
