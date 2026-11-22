@@ -12,10 +12,14 @@ import com.sxsbsxs.filesniffing.data.repository.DownloadRepository
 import com.sxsbsxs.filesniffing.NiconicoUrlParser
 import com.sxsbsxs.filesniffing.data.extractor.NiconicoExtractor
 import com.sxsbsxs.filesniffing.data.network.OkDownloadTransferEngine
+import com.sxsbsxs.filesniffing.data.network.DownloadSpeedLimiter
+import com.sxsbsxs.filesniffing.data.network.DownloadConnectionPolicy
+import com.sxsbsxs.filesniffing.data.preferences.AppPreferences
+import com.sxsbsxs.filesniffing.data.storage.DownloadOutput
 import com.sxsbsxs.filesniffing.data.media.Media3AdaptiveProcessor
+import com.liulishuo.okdownload.core.dispatcher.DownloadDispatcher
 import android.net.Uri
 import android.os.Build
-import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -25,6 +29,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 
 @HiltWorker
 class PersistentDownloadWorker @AssistedInject constructor(
@@ -33,7 +38,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
     private val okDownloadTransferEngine: OkDownloadTransferEngine,
     private val media3AdaptiveProcessor: Media3AdaptiveProcessor,
     private val downloadRepository: DownloadRepository,
-    private val niconicoExtractor: NiconicoExtractor
+    private val niconicoExtractor: NiconicoExtractor,
+    private val appPreferences: AppPreferences,
+    private val downloadSpeedLimiter: DownloadSpeedLimiter
 ) : CoroutineWorker(appContext, parameters) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -54,7 +61,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
         }
 
         if ((requestedUrl.isBlank() && niconicoPageUrl == null) ||
-            treeValue.isBlank() || requestedFileName.isBlank()
+            requestedFileName.isBlank()
         ) {
             return@withContext Result.failure(workDataOf(KEY_ERROR to "下载任务参数不完整"))
         }
@@ -72,8 +79,12 @@ class PersistentDownloadWorker @AssistedInject constructor(
             sourcePage = referer
         )
         val recordSourceUrl = niconicoPageUrl ?: requestedUrl
-        val tree = Uri.parse(treeValue)
+        val tree = treeValue.takeIf { it.isNotBlank() }?.let(Uri::parse)
         val adaptiveVideoHeight = inputData.getInt(KEY_ADAPTIVE_VIDEO_HEIGHT, -1).takeIf { it > 0 }
+        val tuning = appPreferences.downloadTuning.first()
+        downloadSpeedLimiter.setLimitBytesPerSecond(tuning.speedLimitBytesPerSecond)
+        DownloadDispatcher.setMaxParallelRunningCount(tuning.parallelDownloads)
+        DownloadConnectionPolicy.setPreferredMaximumConnections(tuning.connectionsPerTask)
         var isAdaptiveManifest = kind == ResourceKind.PLAYLIST &&
             (fileName.endsWith(".m3u8", ignoreCase = true) ||
                 fileName.endsWith(".mpd", ignoreCase = true))
@@ -119,7 +130,8 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 val result = media3AdaptiveProcessor.exportAdaptiveStream(
                     resource = resource,
                     destinationTree = tree,
-                    maxVideoHeight = adaptiveVideoHeight
+                    maxVideoHeight = adaptiveVideoHeight,
+                    maxConcurrentConnections = tuning.connectionsPerTask
                 ) { progress, detail ->
                     publishProgressAsync(progress, detail, fileName)
                 }
@@ -147,10 +159,6 @@ class PersistentDownloadWorker @AssistedInject constructor(
             }
             val mimeType = mime ?: defaultMimeType(kind, fileName)
             var targetName = ensureExtension(fileName, mimeType, kind)
-            val parent = DocumentsContract.buildDocumentUriUsingTree(
-                tree,
-                DocumentsContract.getTreeDocumentId(tree)
-            )
             val reusableDocument = inputData.getString(KEY_PARTIAL_URI)
                 ?.let { rawUri ->
                     val candidate = Uri.parse(rawUri)
@@ -160,12 +168,12 @@ class PersistentDownloadWorker @AssistedInject constructor(
                         candidate
                     }.getOrNull()
                 }
-            var destinationDocument = reusableDocument ?: DocumentsContract.createDocument(
-                applicationContext.contentResolver,
-                parent,
-                mimeType,
-                targetName
-            ) ?: error("无法在所选文件夹创建文件")
+            var destinationDocument = reusableDocument ?: DownloadOutput.create(
+                context = applicationContext,
+                destinationTree = tree,
+                displayName = targetName,
+                mimeType = mimeType
+            )
             createdDocument = destinationDocument
             persistRecord(
                 fileName = targetName,
@@ -219,13 +227,11 @@ class PersistentDownloadWorker @AssistedInject constructor(
             if (!serverFileName.isNullOrBlank()) {
                 val finalName = ensureExtension(serverFileName, responseMime, kind)
                 if (finalName != targetName) {
-                    val renamed = runCatching {
-                        DocumentsContract.renameDocument(
-                            applicationContext.contentResolver,
-                            destinationDocument,
-                            finalName
-                        )
-                    }.getOrNull()
+                    val renamed = DownloadOutput.rename(
+                        context = applicationContext,
+                        documentUri = destinationDocument,
+                        displayName = finalName
+                    )
                     if (renamed != null) {
                         destinationDocument = renamed
                         createdDocument = renamed
@@ -245,8 +251,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
             check(detectedContainer != "html") {
                 "下载地址返回了 HTML 页面，而不是媒体文件；资源可能需要登录或有效的 Referer"
             }
+            DownloadOutput.markComplete(applicationContext, destinationDocument)
             val completedDetail = if (detectedContainer == "unknown") {
-                "已保存到所选文件夹"
+                if (tree == null) "已保存到 Download 文件夹" else "已保存到所选文件夹"
             } else {
                 "下载完成，检测格式：$detectedContainer"
             }
@@ -391,7 +398,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 createdAtMillis = previous?.createdAtMillis ?: now,
                 updatedAtMillis = now,
                 referer = inputData.getString(KEY_REFERER).orEmpty(),
-                destinationTreeUri = inputData.getString(KEY_TREE),
+                destinationTreeUri = inputData.getString(KEY_TREE)?.takeIf { it.isNotBlank() },
                 downloadedBytes = previous?.downloadedBytes ?: -1L,
                 totalBytes = previous?.totalBytes ?: -1L,
                 speedBytesPerSecond = previous?.speedBytesPerSecond ?: -1L,
