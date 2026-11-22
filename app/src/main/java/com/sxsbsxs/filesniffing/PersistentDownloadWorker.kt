@@ -66,8 +66,20 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 YouTubeUrlParser.extractVideoId(referer) != null -> referer
             else -> null
         }
-        // Both providers use the same upstream yt-dlp extraction path as Seal.
-        val ytDlpPageUrl = niconicoPageUrl ?: youtubePageUrl
+        val requestedExtension = requestedFileName.substringAfterLast('.', "").lowercase()
+        val directMediaExtensions = setOf(
+            "mp4", "m4v", "webm", "mov", "mkv", "avi", "3gp", "mpeg", "mpg",
+            "mp3", "m4a", "aac", "ogg", "oga", "wav", "flac", "opus", "wma"
+        )
+        // Provider watch pages (including Bilibili and other yt-dlp sites) are parsed
+        // directly by yt-dlp. Recognized direct media files still use the HTTP engine.
+        val genericYtDlpPageUrl = requestedUrl.takeIf {
+            requestedKind in setOf(ResourceKind.VIDEO, ResourceKind.AUDIO) &&
+                requestedUrl == referer &&
+                requestedExtension !in directMediaExtensions &&
+                (it.startsWith("https://") || it.startsWith("http://"))
+        }
+        val ytDlpPageUrl = niconicoPageUrl ?: youtubePageUrl ?: genericYtDlpPageUrl
 
         if ((requestedUrl.isBlank() && ytDlpPageUrl == null) ||
             requestedFileName.isBlank()
@@ -114,12 +126,17 @@ class PersistentDownloadWorker @AssistedInject constructor(
             )
 
             if (ytDlpPageUrl != null) {
-                val providerName = if (niconicoPageUrl != null) "N站" else "YouTube"
+                val providerName = when {
+                    niconicoPageUrl != null -> "N站"
+                    youtubePageUrl != null -> "YouTube"
+                    else -> "视频站"
+                }
                 publishProgressAsync(-1, "正在通过 yt-dlp 提取 $providerName 媒体流", fileName)
                 val tempDirectory = java.io.File(applicationContext.cacheDir, "yt-dlp-${id}")
                 val downloadedFile = ytDlpRuntime.download(
                     url = ytDlpPageUrl,
                     outputDirectory = tempDirectory,
+                    audioOnly = kind == ResourceKind.AUDIO,
                     processId = id.toString()
                 ) { progress, _, line ->
                     val percent = progress.takeIf { it.isFinite() && it >= 0f }
@@ -135,8 +152,15 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 val finalName = FileNameSanitizer.sanitize("$baseName.$extension", "youtube-video.$extension")
                 val outputMime = when (extension) {
                     "mp4", "m4v" -> "video/mp4"
-                    "webm" -> "video/webm"
+                    "webm" -> if (kind == ResourceKind.AUDIO) "audio/webm" else "video/webm"
                     "mkv" -> "video/x-matroska"
+                    "mp3" -> "audio/mpeg"
+                    "m4a" -> "audio/mp4"
+                    "aac" -> "audio/aac"
+                    "ogg", "oga" -> "audio/ogg"
+                    "flac" -> "audio/flac"
+                    "opus" -> "audio/opus"
+                    "wav" -> "audio/wav"
                     else -> "application/octet-stream"
                 }
                 val destination = DownloadOutput.create(
@@ -160,18 +184,18 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 persistRecord(
                     fileName = finalName,
                     sourceUrl = recordSourceUrl,
-                    kind = ResourceKind.VIDEO,
+                    kind = if (kind == ResourceKind.AUDIO) ResourceKind.AUDIO else ResourceKind.VIDEO,
                     mimeType = outputMime,
                     state = "completed",
                     progress = 100,
-                    detail = "yt-dlp 下载完成，FFmpeg 已处理音视频合并",
+                    detail = if (kind == ResourceKind.AUDIO) "yt-dlp 音频下载完成" else "yt-dlp 下载完成，FFmpeg 已处理音视频合并",
                     documentUri = destination.toString()
                 )
                 return@withContext Result.success(
                     workDataOf(
                         KEY_FILE_NAME to finalName,
                         KEY_FILE_URI to destination.toString(),
-                        KEY_DETAIL to "$providerName 下载完成"
+                        KEY_DETAIL to if (kind == ResourceKind.AUDIO) "$providerName 音频下载完成" else "$providerName 下载完成"
                     )
                 )
             }
