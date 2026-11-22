@@ -15,8 +15,8 @@ android {
         applicationId = "com.sxsbsxs.filesniffing"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "0.9.13"
+        versionCode = 32
+        versionName = "0.9.14"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
