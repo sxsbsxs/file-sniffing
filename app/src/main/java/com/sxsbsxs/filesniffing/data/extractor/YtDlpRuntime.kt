@@ -37,8 +37,8 @@ class YtDlpRuntime @Inject constructor(
         ensureInitialized()
     }
     suspend fun inspectPlaylist(url: String): YtDlpPlaylistInfo = withContext(Dispatchers.IO) {
-        require(YouTubeUrlParser.extractPlaylistId(url) != null) {
-            "请输入有效的 YouTube 播放列表链接"
+        require(url.startsWith("https://") || url.startsWith("http://")) {
+            "请输入有效的播放列表链接"
         }
         ensureInitialized()
         try {
