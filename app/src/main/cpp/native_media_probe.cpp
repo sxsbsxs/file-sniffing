@@ -85,6 +85,11 @@ std::string detect_container(const unsigned char* data, std::size_t size) {
         prefix.compare(first, 5, "<head") == 0 ||
         prefix.compare(first, 5, "<body") == 0) return "html";
 
+    // Many CDNs and site APIs return JSON error bodies with a generic
+    // application/octet-stream content type. Inspect the payload itself too.
+    if (first < prefix.size() &&
+        (prefix[first] == '{' || prefix[first] == '[')) return "json";
+
     return "unknown";
 }
 
