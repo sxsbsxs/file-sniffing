@@ -29,6 +29,7 @@ data class SniffedResource(
     val audioFormatId: String? = null,
     val hasEmbeddedAudio: Boolean = false,
     val audioQualityLabel: String? = null,
+    val audioLanguage: String? = null,
     val audioFileSizeBytes: Long? = null,
     val thumbnailUrl: String? = null,
     val durationSeconds: Double? = null,
