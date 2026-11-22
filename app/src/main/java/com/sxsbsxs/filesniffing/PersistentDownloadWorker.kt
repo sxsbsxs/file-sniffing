@@ -450,6 +450,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 val responseMimeBase = responseMime.substringBefore(';').trim().lowercase()
                 val invalidErrorPayload = transferResult.downloadedBytes <= 0L ||
                     detectedContainer.equals("html", ignoreCase = true) ||
+                    detectedContainer.equals("json", ignoreCase = true) ||
                     responseMimeBase in setOf(
                         "text/html",
                         "application/xhtml+xml",
@@ -460,6 +461,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                         "text/xml"
                     ) ||
                     (responseMimeBase == "text/plain" &&
+                        detectedContainer.equals("unknown", ignoreCase = true) &&
                         kind in setOf(ResourceKind.VIDEO, ResourceKind.AUDIO, ResourceKind.PLAYLIST, ResourceKind.SEGMENT))
                 if (invalidErrorPayload) {
                     DownloadOutput.delete(applicationContext, destinationDocument)
