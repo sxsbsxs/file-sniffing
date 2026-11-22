@@ -126,7 +126,6 @@ class PersistentDownloadWorker @AssistedInject constructor(
         // directly by yt-dlp. Recognized direct media files still use the HTTP engine.
         val genericYtDlpPageUrl = requestedUrl.takeIf {
             requestedKind in setOf(ResourceKind.VIDEO, ResourceKind.AUDIO) &&
-                requestedUrl == referer &&
                 requestedExtension !in directMediaExtensions &&
                 (it.startsWith("https://") || it.startsWith("http://"))
         }
