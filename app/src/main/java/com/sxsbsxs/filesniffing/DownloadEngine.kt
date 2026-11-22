@@ -23,6 +23,7 @@ object DownloadEngine {
         destinationTree: Uri?,
         resource: SniffedResource,
         adaptiveVideoHeight: Int? = null,
+        taskId: UUID = UUID.randomUUID(),
         onUpdate: (DownloadTaskUi) -> Unit
     ) {
         // Niconico HLS URLs are short-lived. Queue only the stable watch URL;
@@ -34,9 +35,10 @@ object DownloadEngine {
         val workerUrl = niconicoWatchUrl ?: resource.url
 
         val request = OneTimeWorkRequestBuilder<PersistentDownloadWorker>()
+            .setId(taskId)
             .setInputData(
                 androidx.work.workDataOf(
-                    PersistentDownloadWorker.KEY_TASK_ID to UUID.randomUUID().toString(),
+                    PersistentDownloadWorker.KEY_TASK_ID to taskId.toString(),
                     PersistentDownloadWorker.KEY_URL to workerUrl,
                     PersistentDownloadWorker.KEY_TREE to destinationTree?.toString(),
                     PersistentDownloadWorker.KEY_FILE_NAME to resource.fileName,
