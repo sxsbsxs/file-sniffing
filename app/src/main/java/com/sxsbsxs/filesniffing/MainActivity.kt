@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -83,6 +84,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -96,6 +98,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
 import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
 import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
 import java.util.UUID
@@ -667,19 +671,29 @@ private fun HomeScreen(
                             verticalArrangement = Arrangement.spacedBy(9.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                val thumbnailPainter = rememberAsyncImagePainter(representative.thumbnailUrl)
                                 Surface(
                                     color = MaterialTheme.colorScheme.surfaceVariant,
                                     shape = RoundedCornerShape(11.dp),
-                                    modifier = Modifier.size(48.dp)
+                                    modifier = Modifier.size(width = 80.dp, height = 54.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            if (videoFormats.isNotEmpty()) Icons.Rounded.VideoLibrary
-                                            else Icons.Rounded.Download,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(24.dp)
-                                        )
+                                        if (thumbnailPainter.state is AsyncImagePainter.State.Success) {
+                                            Image(
+                                                painter = thumbnailPainter,
+                                                contentDescription = "视频封面",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        } else {
+                                            Icon(
+                                                if (videoFormats.isNotEmpty()) Icons.Rounded.VideoLibrary
+                                                else Icons.Rounded.Download,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
                                     }
                                 }
                                 Spacer(Modifier.width(12.dp))
