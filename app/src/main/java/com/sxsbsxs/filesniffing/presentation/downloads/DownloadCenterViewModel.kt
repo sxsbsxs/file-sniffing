@@ -69,10 +69,13 @@ class DownloadCenterViewModel @Inject constructor(
     ) {
         val id = taskId.toString()
         val previous = repository.findById(id)
-        val sourceUrl = if (
-            resource.kind == ResourceKind.PLAYLIST &&
-            NiconicoUrlParser.extractVideoId(resource.sourcePage) != null
-        ) resource.sourcePage else resource.url
+        val sourceUrl = if (resource.kind == ResourceKind.PLAYLIST) {
+            NiconicoUrlParser.extractVideoId(resource.sourcePage)
+                ?.let(NiconicoUrlParser::canonicalWatchUrl)
+                ?: resource.url
+        } else {
+            resource.url
+        }
         val now = System.currentTimeMillis()
         repository.save(
             DownloadRecordEntity(
