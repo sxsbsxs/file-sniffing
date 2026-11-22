@@ -224,8 +224,7 @@ fun DownloadOptionsSheet(
                                     title = choice.qualityLabel ?: "音频格式",
                                     subtitle = buildFormatDetails(choice),
                                     onClick = {
-                                        selectedVideoUsesEmbeddedAudio = false
-                                        selectedAudioId = audioId
+                                                                                selectedAudioId = audioId
                                     }
                                 )
                             }
