@@ -84,35 +84,29 @@ fun DownloadOptionsSheet(
         mutableStateOf(videoChoices.firstOrNull()?.downloadKey.orEmpty())
     }
     var selectedAudioId by remember(resources) {
-        mutableStateOf(
-            videoChoices.firstOrNull()?.let {
-                if (it.hasEmbeddedAudio) "" else it.audioFormatId.orEmpty()
-            } ?: audioChoices.firstOrNull()?.audioFormatId.orEmpty()
-        )
-    }
-    var selectedVideoUsesEmbeddedAudio by remember(resources) {
-        mutableStateOf(videoChoices.firstOrNull()?.hasEmbeddedAudio == true)
+        mutableStateOf(videoChoices.firstOrNull()?.audioFormatId.orEmpty())
     }
 
     val selectedVideo = videoChoices.firstOrNull { it.downloadKey == selectedVideoKey }
         ?: videoChoices.firstOrNull()
     val selectedAudio = audioChoices.firstOrNull {
         (it.audioFormatId ?: it.formatSelector) == selectedAudioId
-    } ?: audioChoices.firstOrNull()
+    }
 
     LaunchedEffect(selectedVideoKey) {
         selectedVideo?.let { video ->
-            selectedVideoUsesEmbeddedAudio = video.hasEmbeddedAudio
             selectedAudioId = if (video.hasEmbeddedAudio) {
                 ""
             } else {
-                video.audioFormatId ?: audioChoices.firstOrNull()?.audioFormatId.orEmpty()
+                video.audioFormatId
+                    ?: audioChoices.firstOrNull()?.audioFormatId
+                    ?: audioChoices.firstOrNull()?.formatSelector.orEmpty()
             }
         }
     }
 
     LaunchedEffect(mode) {
-        if (mode == "audio" && selectedAudioId.isBlank()) {
+        if (mode == "audio" && selectedAudio == null) {
             selectedAudioId = audioChoices.firstOrNull()?.audioFormatId
                 ?: audioChoices.firstOrNull()?.formatSelector.orEmpty()
         }
@@ -120,33 +114,10 @@ fun DownloadOptionsSheet(
 
     val selectedResource = when (mode) {
         "video" -> selectedVideo?.let { video ->
-            val videoId = video.videoFormatId ?: video.formatSelector?.substringBefore('+')
-            val audioId = selectedAudioId.takeIf { it.isNotBlank() && !selectedVideoUsesEmbeddedAudio }
-            val selector = when {
-                selectedVideoUsesEmbeddedAudio && video.hasEmbeddedAudio -> videoId
-                !videoId.isNullOrBlank() && !audioId.isNullOrBlank() -> "$videoId+$audioId"
-                else -> null
-            }
-            val chosenAudio = if (audioId == null) null else selectedAudio
-            val audioLabel = if (audioId == null) "内嵌音轨" else chosenAudio?.qualityLabel
-            val estimatedSize = when {
-                chosenAudio == null -> video.fileSizeBytes
-                video.fileSizeBytes != null && chosenAudio.fileSizeBytes != null ->
-                    video.fileSizeBytes + chosenAudio.fileSizeBytes
-                else -> null
-            }
-            val baseName = video.fileName.substringBeforeLast('.', video.fileName)
-            val suffix = audioId?.let { "-audio-" + it }.orEmpty()
-            video.copy(
-                fileName = baseName + suffix + ".mp4",
-                formatSelector = selector,
-                qualityLabel = listOfNotNull(video.qualityLabel, audioLabel).joinToString(" + "),
-                fileSizeBytes = estimatedSize,
-                audioFormatId = audioId,
-                audioQualityLabel = audioLabel
-            )
+            val audio = if (video.hasEmbeddedAudio) null else selectedAudio
+            DownloadFormatComposer.video(video, audio)
         }
-        "audio" -> selectedAudio
+        "audio" -> DownloadFormatComposer.audio(selectedAudio)
         else -> directChoice
     }
 
@@ -240,19 +211,16 @@ fun DownloadOptionsSheet(
                         )
                         if (video.hasEmbeddedAudio) {
                             FormatChoiceRow(
-                                selected = selectedVideoUsesEmbeddedAudio && selectedAudioId.isBlank(),
+                                selected = true,
                                 title = "使用视频自带音轨",
                                 subtitle = video.codecLabel?.let { "内嵌 · " + it } ?: "此视频格式已包含音频",
-                                onClick = {
-                                    selectedVideoUsesEmbeddedAudio = true
-                                    selectedAudioId = ""
-                                }
+                                onClick = { selectedAudioId = "" }
                             )
                         } else {
                             audioChoices.forEach { choice ->
                                 val audioId = choice.audioFormatId ?: choice.formatSelector.orEmpty()
                                 FormatChoiceRow(
-                                    selected = !selectedVideoUsesEmbeddedAudio && selectedAudioId == audioId,
+                                    selected = selectedAudioId == audioId,
                                     title = choice.qualityLabel ?: "音频格式",
                                     subtitle = buildFormatDetails(choice),
                                     onClick = {
@@ -262,7 +230,7 @@ fun DownloadOptionsSheet(
                                 )
                             }
                         }
-                        if (!video.hasEmbeddedAudio && selectedAudioId.isBlank()) {
+                        if (!video.hasEmbeddedAudio && selectedAudio == null) {
                             Text(
                                 "此画质没有内嵌音轨，请选择一个可用音轨。",
                                 color = MaterialTheme.colorScheme.error,
