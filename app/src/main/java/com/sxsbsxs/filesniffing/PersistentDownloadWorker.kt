@@ -44,7 +44,57 @@ class PersistentDownloadWorker @AssistedInject constructor(
     private val downloadSpeedLimiter: DownloadSpeedLimiter
 ) : CoroutineWorker(appContext, parameters) {
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    override suspend fun doWork(): Result {
+        return try {
+            executeDownload()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            val detail = formatUnexpectedFailure(error)
+            // Persist the original URL and failure even when setup fails before the main try block.
+            runCatching {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    val sourceUrl = inputData.getString(KEY_URL).orEmpty()
+                    val fileName = inputData.getString(KEY_FILE_NAME).orEmpty()
+                    if (sourceUrl.isNotBlank() && fileName.isNotBlank()) {
+                        val kind = runCatching {
+                            ResourceKind.valueOf(inputData.getString(KEY_KIND).orEmpty())
+                        }.getOrDefault(ResourceKind.OTHER)
+                        persistRecord(
+                            fileName = fileName,
+                            sourceUrl = sourceUrl,
+                            kind = kind,
+                            mimeType = inputData.getString(KEY_MIME),
+                            state = "failed",
+                            progress = 0,
+                            detail = detail,
+                            documentUri = null
+                        )
+                    }
+                }
+            }
+            Result.failure(workDataOf(KEY_ERROR to detail))
+        }
+    }
+
+    private fun formatUnexpectedFailure(error: Exception): String {
+        var root: Throwable = error
+        while (root.cause != null && root.cause !== root) {
+            root = root.cause!!
+        }
+        val raw = root.message?.takeIf { it.isNotBlank() }
+            ?: error.message?.takeIf { it.isNotBlank() }
+            ?: "没有返回错误详情"
+        val safe = raw
+            .replace(Regex("(?i)(cookie|authorization|token)\\s*[:=]\\s*[^\\s]+")) {
+                it.groupValues[1] + "=[redacted]"
+            }
+            .replace(Regex("https?://[^\\s]+"), "[URL 已隐藏]")
+            .take(180)
+        return "下载任务启动失败（" + root.javaClass.simpleName + "）：" + safe
+    }
+
+    private suspend fun executeDownload(): Result = withContext(Dispatchers.IO) {
         val requestedUrl = inputData.getString(KEY_URL).orEmpty()
         val treeValue = inputData.getString(KEY_TREE).orEmpty()
         val requestedFileName = inputData.getString(KEY_FILE_NAME).orEmpty()
