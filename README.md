@@ -2,14 +2,14 @@
 
 An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.9.8
+**Current app version:** 0.9.9
 
 ## Technology architecture
 
 | Layer | Technology | Responsibility |
 |---|---|---|
 | UI | Kotlin, Jetpack Compose, Material 3 | Native home, resource list, download center |
-| Sniffing | WebView, shouldInterceptRequest, injected JavaScript, Niconico watch API | Observe generic page media and resolve Niconico DMS HLS manifests using the active WebView session |
+| Sniffing | WebView, shouldInterceptRequest, injected JavaScript, Niconico watch API, yt-dlp Android runtime | Observe generic page media, resolve Niconico DMS HLS manifests and inspect YouTube videos through yt-dlp |
 | HTTP | OkHttp 5 + OkDownload 1.0.7 | Shared HTTP stack, URL-scoped WebView session cookies, configurable multi-connection transfer, shared speed cap and breakpoint persistence |
 | Adaptive media | Media3 ExoPlayer, DownloadHelper, Transformer | Inspect HLS/DASH tracks, select supported high-bitrate tracks and export MP4 |
 | Architecture | MVVM, Kotlin Flow, Hilt | ViewModels, reactive state, dependency injection |
@@ -17,7 +17,7 @@ An Android-first webpage resource sniffer and general file download manager.
 | Background | WorkManager, foreground worker notification | Persistent download jobs, progress, cancel and retry |
 | Resource classification | Java | URL, extension, MIME and sanitized download-filename inference for media, documents, archives, apps, fonts, code and data files |
 | Filename policy | Java | Shared safe filename normalization for URL-derived and downloaded names |
-| YouTube request diagnostics | Java + Kotlin | Classify Player API and Google Video requests; show redacted request/error counters and distinguish a recognized video page from an actual media stream |
+| YouTube extraction | yt-dlp Android 0.17.3 + FFmpeg | Inspect actual format metadata and download/merge YouTube media in a persistent worker; current default download selects best available video/audio |
 | Native inspection | C++17 + JNI | Identify downloaded media signatures, fragmented MP4 segments and HTML error pages |
 | Developer validation | Python 3 | Run offline HLS/DASH fixture checks, compile and test Java resource classification and validate C++ media signatures |
 
@@ -27,7 +27,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 
 - [x] Compose + Material 3 app shell, minimal link-entry home, share-sheet URL receiving and external HTTP/HTTPS link opening.
 - [x] WebView inspection using `shouldInterceptRequest`, DOM scanning, Performance API and a MutationObserver, with main-frame errors separated from empty results and YouTube subresource request diagnostics shown without retaining URLs or credential values.
-- [x] Niconico video extraction for `nicovideo.jp/watch` and `nico.ms` links: request the current `v3` or `v3_guest` watch API, use only the logged-in WebView `user_session` when present, request the DMS HLS manifest with its short-lived access key, and expose the actual manifest to the existing Media3 quality/download pipeline.
+- [x] Niconico video extraction for `nicovideo.jp/watch` and `nico.ms` links: request the current `v3` or `v3_guest` watch API, explicitly forward the WebView session cookie to both API calls, request the DMS HLS manifest with its short-lived access key, and expose the actual manifest to the existing Media3 quality/download pipeline. Regional, member-only, PPV and Premium restrictions are reported, not bypassed.
 - [x] Refresh Niconico's short-lived HLS manifest inside the WorkManager worker on every start/retry; keep the stable watch URL in download history instead of persisting the expiring manifest URL.
 - [x] Expand/collapse the embedded page preview so users can interact with a site and sign in before downloading resources.
 - [x] Java resource classifier for media, documents, archives, apps/installers, fonts, code/data and generic files, including MIME-based extensionless URLs and sanitized HTML download-name hints.
