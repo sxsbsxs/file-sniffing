@@ -2,7 +2,6 @@ package com.sxsbsxs.filesniffing.data.extractor
 
 import android.content.Context
 import android.webkit.CookieManager
-import com.sxsbsxs.filesniffing.NiconicoUrlParser
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
@@ -40,7 +39,7 @@ internal object NiconicoCookiePolicy {
             ?: return null
 
         // A cookie value must never be allowed to create extra Netscape file columns/rows.
-        if (value.any { it == '\\t' || it == '\\r' || it == '\\n' }) return null
+        if (value.any { it == '\t' || it == '\r' || it == '\n' }) return null
         return value
     }
 
@@ -51,9 +50,9 @@ internal object NiconicoCookiePolicy {
         return buildString {
             append("# Netscape HTTP Cookie File\n")
             // The Niconico session is deliberately scoped to Niconico's own subdomains.
-            append(".nicovideo.jp\\tTRUE\\t/\\tTRUE\\t0\\tuser_session\\t")
+            append(".nicovideo.jp\tTRUE\t/\tTRUE\t0\tuser_session\t")
             append(session)
-            append('\\n')
+            append('\n')
         }
     }
 }

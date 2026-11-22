@@ -20,7 +20,7 @@ class NiconicoCookiePolicyTest {
             "user_session=session-token-123; unrelated=secret"
         )
         assertTrue(content.orEmpty().startsWith("# Netscape HTTP Cookie File\n"))
-        assertTrue(content.orEmpty().contains(".nicovideo.jp\\tTRUE\\t/\\tTRUE\\t0\\tuser_session\\tsession-token-123"))
+        assertTrue(content.orEmpty().contains(".nicovideo.jp\tTRUE\t/\tTRUE\t0\tuser_session\tsession-token-123"))
         assertFalse(content.orEmpty().contains("unrelated"))
     }
 
@@ -33,7 +33,7 @@ class NiconicoCookiePolicyTest {
 
     @Test
     fun rejectsControlCharactersInCookieValue() {
-        assertNull(NiconicoCookiePolicy.userSessionValue("user_session=bad\\nvalue"))
-        assertNull(NiconicoCookiePolicy.userSessionValue("user_session=bad\\tvalue"))
+        assertNull(NiconicoCookiePolicy.userSessionValue("user_session=bad\nvalue"))
+        assertNull(NiconicoCookiePolicy.userSessionValue("user_session=bad\tvalue"))
     }
 }

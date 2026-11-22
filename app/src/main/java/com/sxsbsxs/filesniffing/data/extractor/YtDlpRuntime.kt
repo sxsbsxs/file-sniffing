@@ -73,12 +73,12 @@ class YtDlpRuntime @Inject constructor(
             }
             val response = executeCancellable(request, UUID.randomUUID().toString())
             YtDlpInfoJsonParser.parsePlaylist(response.out)
-        } finally {
-            cookieFile?.delete()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
+        } finally {
+            cookieFile?.delete()
         }
     }
 
@@ -99,12 +99,12 @@ class YtDlpRuntime @Inject constructor(
             }
             val response = executeCancellable(request, UUID.randomUUID().toString())
             YtDlpInfoJsonParser.parse(response.out)
-        } finally {
-            cookieFile?.delete()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             throw IOException(sanitizeError(error.message), error)
+        } finally {
+            cookieFile?.delete()
         }
     }
 
