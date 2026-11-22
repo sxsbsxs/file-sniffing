@@ -74,24 +74,12 @@ class OkDownloadTransferEngine @Inject constructor(
         return suspendCancellableCoroutine { continuation ->
             val receivedBytes = AtomicLong(0L)
             val totalBytes = AtomicLong(-1L)
-            val lastReportedBytes = AtomicLong(0L)
-            val lastReportedAtNanos = AtomicLong(System.nanoTime())
-            val reportLock = Any()
+            val speedWindow = RollingDownloadSpeedWindow(windowMillis = 5_000L)
             val latestResponseHeaders = java.util.concurrent.atomic.AtomicReference<Map<String, List<String>>>(emptyMap())
 
             fun reportProgress(current: Long, total: Long, blockCount: Int) {
-                val now = System.nanoTime()
-                val speed = synchronized(reportLock) {
-                    val previousBytes = lastReportedBytes.get()
-                    val elapsedNanos = now - lastReportedAtNanos.get()
-                    if (current >= previousBytes && elapsedNanos > 0L) {
-                        lastReportedBytes.set(current)
-                        lastReportedAtNanos.set(now)
-                        ((current - previousBytes) * 1_000_000_000.0 / elapsedNanos).toLong()
-                    } else {
-                        -1L
-                    }
-                }
+                // A rolling window avoids turning one fast 500 ms callback into an exaggerated speed.
+                val speed = speedWindow.record(current)
                 val percent = if (total > 0L) {
                     ((current * 100.0) / total).toInt().coerceIn(0, 99)
                 } else {
@@ -156,12 +144,7 @@ class OkDownloadTransferEngine @Inject constructor(
                     val offset = info.totalOffset
                     if (total > 0L) totalBytes.set(total)
                     if (offset > 0L) receivedBytes.updateAndGet { maxOf(it, offset) }
-                    synchronized(reportLock) {
-                        if (offset > lastReportedBytes.get()) {
-                            lastReportedBytes.set(offset)
-                            lastReportedAtNanos.set(System.nanoTime())
-                        }
-                    }
+                    speedWindow.reset(offset)
                 }
 
                 override fun downloadFromBreakpoint(task: DownloadTask, info: BreakpointInfo) {
@@ -169,12 +152,7 @@ class OkDownloadTransferEngine @Inject constructor(
                     val offset = info.totalOffset
                     if (total > 0L) totalBytes.set(total)
                     if (offset > 0L) receivedBytes.updateAndGet { maxOf(it, offset) }
-                    synchronized(reportLock) {
-                        if (offset > lastReportedBytes.get()) {
-                            lastReportedBytes.set(offset)
-                            lastReportedAtNanos.set(System.nanoTime())
-                        }
-                    }
+                    speedWindow.reset(offset)
                 }
 
                 override fun connectStart(
