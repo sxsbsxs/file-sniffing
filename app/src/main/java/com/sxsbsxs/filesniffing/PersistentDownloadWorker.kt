@@ -373,6 +373,17 @@ class PersistentDownloadWorker @AssistedInject constructor(
             }
             throw cancelled
         } catch (error: Exception) {
+            val root = generateSequence(error) { it.cause }.last()
+            val rawDetail = root.message?.takeIf { it.isNotBlank() }
+                ?: error.message?.takeIf { it.isNotBlank() }
+                ?: "没有返回错误描述"
+            val safeDetail = rawDetail
+                .replace(Regex("(?i)(cookie|authorization|token)\\s*[:=]\\s*[^\\s]+")) {
+                    it.groupValues[1] + "=[redacted]"
+                }
+                .replace(Regex("https?://[^\\s]+"), "[URL 已隐藏]")
+                .take(220)
+            val detail = "下载失败（${root.javaClass.simpleName}）：$safeDetail"
             persistRecord(
                 fileName = fileName,
                 sourceUrl = recordSourceUrl,
@@ -380,10 +391,10 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 mimeType = mime,
                 state = "failed",
                 progress = 0,
-                detail = error.message ?: "下载失败，可重试",
+                detail = detail,
                 documentUri = createdDocument?.toString()
             )
-            Result.failure(workDataOf(KEY_ERROR to (error.message ?: "下载失败")))
+            Result.failure(workDataOf(KEY_ERROR to detail))
         }
     }
 
