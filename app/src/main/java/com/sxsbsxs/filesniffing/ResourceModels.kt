@@ -24,7 +24,17 @@ data class SniffedResource(
     /** Real yt-dlp format_id or video+audio format selector; never a signed media URL. */
     val formatSelector: String? = null,
     val qualityLabel: String? = null,
-    val fileSizeBytes: Long? = null
+    val fileSizeBytes: Long? = null,
+    val videoFormatId: String? = null,
+    val audioFormatId: String? = null,
+    val hasEmbeddedAudio: Boolean = false,
+    val audioQualityLabel: String? = null,
+    val audioFileSizeBytes: Long? = null,
+    val thumbnailUrl: String? = null,
+    val durationSeconds: Double? = null,
+    val uploader: String? = null,
+    val codecLabel: String? = null,
+    val frameRate: Double? = null
 ) {
     val downloadKey: String get() = "$url#${formatSelector ?: kind.name}"
     val id: String get() = downloadKey
