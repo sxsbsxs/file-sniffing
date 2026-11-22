@@ -2,7 +2,7 @@
 
 An Android-first webpage resource sniffer and general file download manager.
 
-**Current app version:** 0.9.6
+**Current app version:** 0.9.7
 
 ## Technology architecture
 
@@ -10,7 +10,7 @@ An Android-first webpage resource sniffer and general file download manager.
 |---|---|---|
 | UI | Kotlin, Jetpack Compose, Material 3 | Native home, resource list, download center |
 | Sniffing | WebView, shouldInterceptRequest, injected JavaScript, Niconico watch API | Observe generic page media and resolve Niconico DMS HLS manifests using the active WebView session |
-| HTTP | OkHttp 5 + OkDownload 1.0.7 | Shared HTTP stack, URL-scoped WebView session cookies, multi-connection transfer and breakpoint persistence |
+| HTTP | OkHttp 5 + OkDownload 1.0.7 | Shared HTTP stack, URL-scoped WebView session cookies, configurable multi-connection transfer, shared speed cap and breakpoint persistence |
 | Adaptive media | Media3 ExoPlayer, DownloadHelper, Transformer | Inspect HLS/DASH tracks, select supported high-bitrate tracks and export MP4 |
 | Architecture | MVVM, Kotlin Flow, Hilt | ViewModels, reactive state, dependency injection |
 | Local data | Room, DataStore | Sniff history, download history and selected output folder |
@@ -34,16 +34,16 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Page scanning for media DOM elements, recognized file URLs and explicit `<a download>` links, including dynamically added links; standalone HLS/DASH segments are hidden from the normal results list.
 - [x] Result filters appear only for categories actually discovered on the current page.
 - [x] Multi-select resources and batch enqueue.
-- [x] OkHttp shared client, OkDownload adapter and SAF `content://` output.
+- [x] OkHttp shared client, OkDownload adapter and public MediaStore `Download/` output by default, with optional user-selected SAF folders.
 - [x] Install the WebView cookie interceptor in the shared OkHttp network client used by OkDownload and Media3; CookieManager scopes cookies to each exact request URL and redirect exchange, and cookie values are never stored in Room or logged.
-- [x] Preserve the same SAF destination URI for interrupted direct transfers so OkDownload can resume saved byte ranges on retry.
+- [x] Preserve the same output URI for interrupted direct transfers so OkDownload can resume saved byte ranges on retry in either MediaStore Download or a SAF folder.
 - [x] Media3 `DownloadHelper` prepares adaptive streams and derives selected stream keys, preferring the highest supported bitrate by default.
 - [x] Read actual HLS/DASH video heights from Media3 track mapping, offer those options in the resource chooser, and carry the selected height through Worker, Room and retry.
-- [x] Media3 `Transformer` exports selected HLS/DASH streams to an MP4 file, then copies it into the chosen SAF folder.
+- [x] Media3 `Transformer` exports selected HLS/DASH streams to MP4 and publishes them into the public Download folder by default (or the chosen SAF folder).
 - [x] Hilt application and Hilt-aware WorkManager worker.
 - [x] MVVM + StateFlow for sniffing state and download-center preferences/history.
 - [x] Room database for captured resources and persistent download records.
-- [x] DataStore for the selected output folder.
+- [x] DataStore for the optional output folder and configurable download performance.
 - [x] WorkManager foreground download jobs with notifications, progress updates, cancellation and retry.
 - [x] Pause direct HTTP/HTTPS tasks and continue from the saved OkDownload breakpoint when the server supports byte ranges; persist and distinguish paused tasks from cancelled tasks after app restart.
 - [x] Download-center filters for task status and discovered resource kind.
@@ -51,7 +51,8 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Persist direct-transfer byte count, confirmed total size and speed in Room so transfer metrics survive app restarts.
 - [x] MIME-aware SAF file creation and output-name inference for common document, archive, application, font, image, audio and video formats.
 - [x] Restore task list from WorkManager and Room after reopening the app.
-- [x] Browse the selected SAF download directory in-app, including subfolders, filename search, MIME filters, file sizes, modification dates and opening files with Android.
+- [x] Browse the public Download folder in-app by default on Android 10+ or the selected SAF folder, including subfolders, filename search, MIME filters, file sizes, modification dates and opening files with Android.
+- [x] Let users configure per-task connection ceiling (1–16), concurrent download tasks (1–4) and a shared speed cap (unlimited, 1/2/5/10/20 MB/s).
 - [x] Persist the original URL, Referer and SAF destination tree in Room so failed/cancelled jobs can be retried without relying on WorkInfo input data.
 - [x] Restore task filenames from durable WorkManager tags instead of trying to read unavailable inputData from WorkInfo.
 - [x] Verify direct-download payload signatures through a C++17/JNI probe before reporting completion; HTML error pages are reported as failures.
@@ -66,9 +67,10 @@ See [the YouTube extraction research report](docs/YOUTUBE_EXTRACTION_RESEARCH.md
 - This is a generic webpage sniffer with a dedicated Niconico DMS adapter, not a universal extractor for every site. Generic-site results remain best-effort and depend on URLs exposed to WebView request callbacks, the DOM or the Performance API.
 - Blob-only URLs, service-worker-private responses, app-private media and sites that conceal media URLs may not be extractable as ordinary files.
 - Generic downloadable assets are best-effort: known file extensions and explicit HTML `download` links are captured, but WebView's request interception callback does not expose response headers such as `Content-Disposition`; opaque extensionless endpoints without a DOM filename or MIME hint may remain unidentified.
-- The local file browser currently reads the selected SAF download directory only; it is not a full-device filesystem explorer and does not bypass Android storage permissions.
+- The local file browser reads the public Download collection by default on Android 10+ or the user-selected SAF directory; it is not a full-device filesystem explorer and does not bypass Android storage permissions.
 - Media3 handles clear HLS/DASH streams that its supported extractors and muxer can decode. DRM/protected streams are not decrypted or bypassed. Some live, unusual, encrypted or malformed manifests may fail with a descriptive export error.
-- Adaptive exports use a temporary file in the app cache before copying to the SAF destination. Large exports therefore need sufficient temporary storage.
+- Adaptive exports use a temporary file in the app cache before publishing to Download or the selected SAF destination. Large exports therefore need sufficient temporary storage.
+- Android 10+ downloads use the public MediaStore Download collection; Android 9 and earlier require the user to grant a SAF folder. Transfer speed depends on network quality and server support for ranged requests; a higher connection limit cannot force a server to provide parallel ranges.
 - Niconico extraction uses the service's current watch API and HLS access-right endpoint. Guest access is used only when the WebView has no `user_session`; otherwise the current WebView session is reused. Premium-only, pay-per-view, channel-member and region-restricted responses remain unavailable unless the signed-in account already has the required access. Short-lived HLS manifest URLs are refreshed by the worker before download. The app does not create account credentials, bypass access restrictions, or add a custom DRM/key-decryption implementation.
 - YouTube URL recognition validates video IDs from watch, youtu.be, shorts, live and embed URLs. A pure parser can now consume a future yt-dlp `-J` result and expose only actual non-DRM format metadata; it deliberately drops signed media URLs and request headers. This parser is not yet connected to a yt-dlp runtime or the download UI. YouTube diagnostics still classify visible WebView request callbacks and Performance API entries; they do not decrypt signed media URLs. The app still does not resolve signature / n transforms, execute EJS as part of a downloader, or acquire PO Tokens, so recognizing a video page does not yet mean its stream formats are downloadable. WebView callback coverage is incomplete by platform design; a zero count is not proof that YouTube sent no such request.
 - Only cookies already present in WebView CookieManager for the exact target URL are reused by OkHttp, OkDownload and Media3. Cookies scoped to another host, rejected third-party cookies, app-only tokens and non-cookie authorization schemes are not synthesized; authenticated resources may still return HTTP 401/403.
