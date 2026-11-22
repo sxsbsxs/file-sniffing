@@ -21,16 +21,16 @@ There is no WebView screen, webpage navigation flow, DOM injection, browser requ
 - presentation.sniffing.DownloadFormatComposer: pure Kotlin validation for muxed/separate video+audio format selections, including source URL matching and safe format ID validation.
 - Resolver result cards use safe yt-dlp metadata (thumbnail, duration, uploader, codec, frame rate and file size) for preview; signed media URLs and authorization headers are never retained.
 - presentation.sniffing: direct URL resolution state; calls yt-dlp and does not observe webpage or WebView state.
-- presentation.downloads: DataStore output-folder/performance preferences and Room-backed download history; Download Center supports filename/error search and recent/name/progress sorting.
+- presentation.downloads: DataStore output-folder/performance preferences and Room-backed download history; Download Center supports filename/error search and recent/name/progress sorting. Room retry-row replacement is transactional; WorkManager terminal states repair history after process death.
 - Download source metadata is committed to Room before WorkManager enqueue; PersistentDownloadWorker owns subsequent durable state transitions. WorkManager UI observers only render live state. Legacy rows that already lost their source URL require re-parsing because WorkInfo does not expose inputData.
 - DownloadQueuePolicy: prevents duplicate active tasks for the same URL while allowing a later retry after the task finishes.
-- data.extractor.YtDlpRuntime: initializes the Android yt-dlp/FFmpeg runtime, refreshes the separate yt-dlp executable from the Nightly channel at startup and weekly thereafter, inspects metadata and downloads/merges media. Failed/offline update attempts leave the bundled executable intact and are retried after a six-hour cooldown.
+- data.extractor.YtDlpRuntime: initializes the Android yt-dlp/FFmpeg runtime, refreshes the separate yt-dlp executable from the Nightly channel at startup and weekly thereafter, inspects metadata and downloads/merges media. Parse and download commands share a cancellable process executor; pause/retry waits for the prior process to exit. Failed/offline update attempts leave the bundled executable intact and are retried after a six-hour cooldown.\n- YtDlpSessionKey: hashes the stable source, selected formats, output name and destination to isolate resumable private yt-dlp partial files without exposing signed stream URLs in filenames.\n- YtDlpFormatSelectorPolicy: whitelists yt-dlp format selector shapes accepted by the app.
 - data.extractor.YtDlpUpdatePolicy: pure scheduling rules for first-run, weekly refresh and failed-update retry.
 - data.extractor.YouTubeUrlParser, YtDlpPlaylistDetector and NiconicoUrlParser: validate known URL shapes before selecting site-specific handling. Generic playlist results are accepted only when yt-dlp supplies a real HTTP(S) item page URL. A video/audio page item is routed through yt-dlp even when its referer is the parent playlist URL; known direct media extensions remain on OkDownload.
 - data.extractor.YtDlpInfoJsonParser: parses safe metadata and actual format availability without retaining signed media URLs or authorization headers.
-- data.network: OkDownload adapter, size-aware byte-range strategy and shared speed limiter.
+- data.network: OkDownload adapter, size-aware byte-range strategy, shared speed limiter and DownloadIntegrityPolicy for empty/truncated/error payload rejection before publication.
 - data.media: Media3 DownloadHelper track selection, adaptive cache and Transformer export for direct HLS/DASH manifests.
-- data.storage.DownloadOutput: MediaStore Download publication on Android 10+ and optional SAF output.
+- data.storage.DownloadOutput: MediaStore Download publication on Android 10+ and optional SAF output; pending-to-visible publication is verified and failures are surfaced.
 - data.local: Room entities, DAOs and database.
 - data.preferences: DataStore-backed preferences.
 - data.repository: repository interfaces and implementations.
