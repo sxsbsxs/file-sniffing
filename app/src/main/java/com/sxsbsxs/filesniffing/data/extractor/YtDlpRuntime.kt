@@ -105,6 +105,11 @@ class YtDlpRuntime @Inject constructor(
             throw IOException("无法创建下载临时目录")
         }
         val outputPrefix = "ytdlp-$processId"
+        val reusableOutput = outputDirectory.listFiles()
+            ?.filter { it.isFile && it.name.startsWith("$outputPrefix.") &&
+                !it.name.endsWith(".part", ignoreCase = true) && it.length() > 0L }
+            ?.maxByOrNull { it.lastModified() }
+        if (reusableOutput != null) return@withContext reusableOutput
         try {
             val request = YoutubeDLRequest(url).apply {
                 addOption("--no-playlist")
