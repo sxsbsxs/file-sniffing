@@ -19,7 +19,7 @@ There is no WebView screen, webpage navigation flow, DOM injection, browser requ
 - MainActivity.kt: URL-first home, share-sheet URL intake, resolver results, download center and local files.
 - presentation.sniffing: direct URL resolution state; calls yt-dlp and does not observe webpage or WebView state.
 - presentation.downloads: DataStore output-folder/performance preferences and Room-backed download history.
-- data.extractor.YtDlpRuntime: initializes the upstream Android yt-dlp and FFmpeg runtime, inspects single videos/playlists and downloads/merges media.
+- data.extractor.YtDlpRuntime: initializes the upstream Android yt-dlp and FFmpeg runtime, inspects single videos/playlists and downloads/merges media. For validated Niconico watch URLs only, it writes a temporary owner-only netrc file from locally encrypted account credentials and deletes it after the call.\n- data.auth.NiconicoCredentialStore and presentation.auth.NiconicoAccountViewModel: encrypt Niconico account credentials with Android Keystore and expose the small optional account dialog.
 - data.extractor.YouTubeUrlParser and NiconicoUrlParser: validate known URL shapes before selecting site-specific handling.
 - data.extractor.YtDlpInfoJsonParser: parses safe metadata and actual format availability without retaining signed media URLs or authorization headers.
 - data.network: OkDownload adapter, size-aware byte-range strategy and shared speed limiter.
@@ -43,4 +43,4 @@ There is no WebView screen, webpage navigation flow, DOM injection, browser requ
 5. Android 10+ downloads are published to the public MediaStore Download collection by default; user-granted SAF is an optional override.
 6. Adaptive HLS/DASH manifests are exported through Media3 where supported; app code does not manually concatenate media segments.
 7. The app does not implement DRM decryption, login bypass, region bypass or account-entitlement bypass.
-8. Network access remains enabled because yt-dlp, OkHttp and Media3 request site APIs and media streams. This is separate from opening pages in an in-app browser.
+8. Niconico account credentials are encrypted at rest with Android Keystore, never stored in Room or WorkManager input data, and only materialized in an owner-only temporary netrc file for the Niconico extractor.\n9. Account login supplies only the user's own session; the site still enforces registration, membership, payment, region and DRM rules.\n10. Network access remains enabled because yt-dlp, OkHttp and Media3 request site APIs and media streams. This is separate from opening pages in an in-app browser.
