@@ -13,10 +13,11 @@ internal object DownloadTaskDetailPolicy {
         incomingState: String,
         incomingDetail: String
     ): String {
-        if (previousState != "failed" || incomingState != "failed") {
-            return incomingDetail
-        }
+        if (incomingState != "failed") return incomingDetail
 
+        // The Worker can persist a precise error before WorkManager publishes FAILED.
+        // A retry callback and the global WorkInfo observer may then race and write a
+        // generic fallback while the Room row still has an intermediate state.
         return if (isConcreteFailure(previousDetail) && !isConcreteFailure(incomingDetail)) {
             previousDetail
         } else {
