@@ -106,6 +106,44 @@ class DownloadCenterViewModel @Inject constructor(
         }
     }
 
+    /** Persist a new retry attempt before WorkManager is allowed to start it. */
+    suspend fun persistRetryTask(
+        taskId: UUID,
+        previous: DownloadRecordEntity,
+        partialUri: String?
+    ) {
+        val now = System.currentTimeMillis()
+        repository.save(
+            previous.copy(
+                id = taskId.toString(),
+                state = "queued",
+                progress = 0,
+                detail = "已重新加入后台下载队列",
+                destinationUri = partialUri?.takeIf { it.isNotBlank() } ?: previous.destinationUri,
+                createdAtMillis = now,
+                updatedAtMillis = now,
+                speedBytesPerSecond = -1L
+            )
+        )
+    }
+
+    suspend fun updateTaskState(
+        id: String,
+        state: String,
+        detail: String
+    ) {
+        val previous = repository.findById(id) ?: return
+        repository.save(
+            previous.copy(
+                state = state,
+                detail = detail,
+                progress = if (state == "cancelled") 0 else previous.progress,
+                speedBytesPerSecond = -1L,
+                updatedAtMillis = System.currentTimeMillis()
+            )
+        )
+    }
+
     fun deleteHistoryItem(id: String) {
         viewModelScope.launch { repository.delete(id) }
     }
