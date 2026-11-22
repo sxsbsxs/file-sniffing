@@ -143,9 +143,18 @@ class YtDlpRuntime @Inject constructor(
             val request = YoutubeDLRequest(url).apply {
                 addOption("--no-playlist")
                 addOption("--newline")
+                addOption("--progress-delta", "0.5")
+                addOption(
+                    "--progress-template",
+                    "download:FILE_SNIFFING_PROGRESS|%(info.format_id)s|%(progress)j"
+                )
+                addOption(
+                    "--progress-template",
+                    "postprocess:FILE_SNIFFING_POSTPROCESS|%(progress.status)s|%(progress.postprocessor)s"
+                )
                 addOption("--no-mtime")
                 addOption("--continue")
-                val connectionLimit = concurrentFragments.coerceIn(1, 32)
+                val connectionLimit = concurrentFragments.coerceIn(1, 16)
                 addOption("--concurrent-fragments", connectionLimit.toString())
 
                 if (aria2cAvailable) {

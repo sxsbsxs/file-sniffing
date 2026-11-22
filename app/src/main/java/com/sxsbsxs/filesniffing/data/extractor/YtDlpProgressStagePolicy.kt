@@ -23,6 +23,20 @@ internal object YtDlpProgressStagePolicy {
         return postProcessingMarkers.any(normalized::contains)
     }
 
+    fun detailForPostprocessor(postProcessor: String?, line: String): String {
+        val stage = postProcessor.orEmpty().lowercase()
+        val normalized = line.lowercase()
+        return when {
+            stage.contains("merger") || normalized.contains("[merger]") ||
+                normalized.contains("merging formats") -> "正在合并视频与音频流"
+            stage.contains("extractaudio") || normalized.contains("[extractaudio]") ||
+                normalized.contains("extracting audio") -> "正在提取音轨并转换音频"
+            stage.contains("remux") || normalized.contains("[videoremuxer]") ||
+                normalized.contains("remux") -> "正在封装媒体文件"
+            else -> "正在进行媒体后处理：${postProcessor ?: "FFmpeg"}"
+        }
+    }
+
     fun detail(line: String): String {
         val normalized = line.lowercase()
         return when {

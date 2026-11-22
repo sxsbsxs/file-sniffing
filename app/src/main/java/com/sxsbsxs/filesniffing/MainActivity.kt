@@ -1392,12 +1392,12 @@ private fun DownloadsScreen(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("连接并发上限：$connectionsDraft", fontWeight = FontWeight.Medium)
+                    Text("单个源站连接上限：$connectionsDraft", fontWeight = FontWeight.Medium)
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf(1, 2, 4, 8, 16, 32).forEach { count ->
+                        listOf(1, 2, 4, 8, 16).forEach { count ->
                             FilterChip(
                                 selected = connectionsDraft == count,
                                 onClick = { connectionsDraft = count },
@@ -1426,7 +1426,7 @@ private fun DownloadsScreen(
                         }
                     }
                     Text(
-                        "连接并发会应用于支持 Range 的直链分段，以及 HLS/DASH 分片（yt-dlp 和 Media3）。普通单文件视频没有分片时不能强行多线程；服务器关闭 Range 时直链会退回单连接。直链同时任务数只控制 OkDownload 直链引擎。限速会传入 yt-dlp，直链和 Media3 则共用限速器。",
+                        "单个源站最多 16 路，这是 aria2 的单服务器连接上限；视频和音频分开下载时，总连接数可能叠加。只有服务器支持 Range/分片时才能并发，服务端限流或只允许单连接时不会因调高数字变快。直链同时任务数只控制 OkDownload 直链引擎。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )

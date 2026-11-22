@@ -23,7 +23,7 @@ class DownloadConnectionPolicyTest {
     }
 
     @Test
-    fun configuredCeilingChangesTheActualBlockCount() {
+    fun configuredCeilingChangesTheActualBlockCountUpToSixteenPerServer() {
         try {
             DownloadConnectionPolicy.setPreferredMaximumConnections(8)
             assertEquals(8, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
@@ -32,7 +32,7 @@ class DownloadConnectionPolicyTest {
             assertEquals(16, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
 
             DownloadConnectionPolicy.setPreferredMaximumConnections(32)
-            assertEquals(32, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
+            assertEquals(16, DownloadConnectionPolicy.connectionsFor(400L * 1024L * 1024L))
         } finally {
             DownloadConnectionPolicy.setPreferredMaximumConnections(16)
         }
@@ -41,7 +41,7 @@ class DownloadConnectionPolicyTest {
     @Test
     fun connectionCeilingIsClampedToSupportedRange() {
         DownloadConnectionPolicy.setPreferredMaximumConnections(900)
-        assertEquals(32, DownloadConnectionPolicy.connectionsFor(5L * 1024L * 1024L * 1024L))
+        assertEquals(16, DownloadConnectionPolicy.connectionsFor(5L * 1024L * 1024L * 1024L))
         DownloadConnectionPolicy.setPreferredMaximumConnections(0)
         assertEquals(1, DownloadConnectionPolicy.connectionsFor(50L * 1024L * 1024L))
         DownloadConnectionPolicy.setPreferredMaximumConnections(16)
