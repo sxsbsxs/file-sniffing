@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.15
+
+- Replace the single universal debug APK with three ABI-specific APK artifacts: arm64-v8a, armeabi-v7a and x86_64.
+- Keep all three architectures supported while preventing each device from downloading the other two architectures' embedded Python and FFmpeg runtimes.
+- Add a CI size guard: the arm64-v8a debug APK must remain below 65 MiB.
+- Bump app version to 0.9.15 (versionCode 33).
+
 ## 0.9.14
 
 - Fix a Room persistence race where the global WorkManager observer could overwrite a newly queued task's source URL with an empty value.
