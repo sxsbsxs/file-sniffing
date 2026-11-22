@@ -9,6 +9,23 @@ import java.util.Locale
 internal object YouTubeUrlParser {
     private val videoIdPattern = Regex("^[A-Za-z0-9_-]{11}$")
 
+    fun extractPlaylistId(rawUrl: String): String? {
+        val uri = runCatching { URI(rawUrl.trim()) }.getOrNull() ?: return null
+        if (!uri.scheme.equals("https", true) && !uri.scheme.equals("http", true)) return null
+        val host = uri.host?.lowercase(Locale.ROOT) ?: return null
+        if (host != "youtube.com" && !host.endsWith(".youtube.com")) return null
+        if (!uri.path.equals("/playlist", true) && !uri.path.equals("/watch", true)) return null
+        val rawId = uri.rawQuery.orEmpty().split('&')
+            .firstOrNull { it.substringBefore('=') == "list" }
+            ?.substringAfter('=', "")
+            ?: return null
+        val id = runCatching { URLDecoder.decode(rawId, StandardCharsets.UTF_8.name()) }.getOrNull()
+            ?: return null
+        return id.takeIf { it.matches(Regex("^[A-Za-z0-9_-]{10,80}$")) }
+    }
+
+    fun isPlaylistUrl(rawUrl: String): Boolean = extractPlaylistId(rawUrl) != null
+
     fun extractVideoId(rawUrl: String): String? {
         val uri = runCatching { URI(rawUrl.trim()) }.getOrNull() ?: return null
         if (!uri.scheme.equals("https", true) && !uri.scheme.equals("http", true)) return null
