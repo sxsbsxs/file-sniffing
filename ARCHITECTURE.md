@@ -31,7 +31,7 @@ There is no WebView screen, webpage navigation flow, DOM injection, browser requ
 - data.network: OkDownload adapter, size-aware byte-range strategy, shared speed limiter and DownloadIntegrityPolicy for empty/truncated/error payload rejection before publication.
 - NativeMediaProbe (C++17/JNI): detects common media/container signatures plus HTML/JSON error payloads; a verified media signature is not rejected solely because a server sent the wrong text/plain MIME header.
 - data.media: Media3 DownloadHelper track selection, adaptive cache and Transformer export for direct HLS/DASH manifests.
-- data.storage.DownloadOutput: MediaStore Download publication on Android 10+ and optional SAF output; pending-to-visible publication is verified and failures are surfaced.
+- data.storage.DownloadOutput: MediaStore Download publication on Android 10+ and optional SAF output; pending-to-visible publication is verified and failures are surfaced. Worker final copies compare bytes written with source file length; Media3 verifies its exported MP4 signature before copying.
 - data.local: Room entities, DAOs and database.
 - data.preferences: DataStore-backed preferences.
 - data.repository: repository interfaces and implementations.
