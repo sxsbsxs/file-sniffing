@@ -32,6 +32,7 @@ OkDownload 1.0.7 is intentionally hidden behind `OkDownloadTransferEngine`: it i
 - [x] Expand/collapse the embedded page preview so users can interact with a site and sign in before downloading resources.
 - [x] Java resource classifier for media, documents, archives, apps/installers, fonts, code/data and generic files, including MIME-based extensionless URLs and sanitized HTML download-name hints.
 - [x] Page scanning for media DOM elements, recognized file URLs and explicit `<a download>` links, including dynamically added links; standalone HLS/DASH segments are hidden from the normal results list.
+- [x] Recognize the Niconico Japanese region restriction wording shown in the in-app browser and report that no playable stream is available, instead of presenting unrelated page assets as a successful video extraction.
 - [x] Result filters appear only for categories actually discovered on the current page.
 - [x] Multi-select resources and batch enqueue.
 - [x] OkHttp shared client, OkDownload adapter and public MediaStore `Download/` output by default, with optional user-selected SAF folders.
