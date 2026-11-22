@@ -29,6 +29,7 @@ There is no WebView screen, webpage navigation flow, DOM injection, browser requ
 - data.extractor.YouTubeUrlParser, YtDlpPlaylistDetector and NiconicoUrlParser: validate known URL shapes before selecting site-specific handling. Generic playlist results are accepted only when yt-dlp supplies a real HTTP(S) item page URL. A video/audio page item is routed through yt-dlp even when its referer is the parent playlist URL; known direct media extensions remain on OkDownload.
 - data.extractor.YtDlpInfoJsonParser: parses safe metadata and actual format availability without retaining signed media URLs or authorization headers.
 - data.network: OkDownload adapter, size-aware byte-range strategy, shared speed limiter and DownloadIntegrityPolicy for empty/truncated/error payload rejection before publication.
+- NativeMediaProbe (C++17/JNI): detects common media/container signatures plus HTML/JSON error payloads; a verified media signature is not rejected solely because a server sent the wrong text/plain MIME header.
 - data.media: Media3 DownloadHelper track selection, adaptive cache and Transformer export for direct HLS/DASH manifests.
 - data.storage.DownloadOutput: MediaStore Download publication on Android 10+ and optional SAF output; pending-to-visible publication is verified and failures are surfaced.
 - data.local: Room entities, DAOs and database.
