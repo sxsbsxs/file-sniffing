@@ -9,6 +9,7 @@ import com.sxsbsxs.filesniffing.SharedLinkNormalizer
 import com.sxsbsxs.filesniffing.SniffedResource
 import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpInfoJsonParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -80,23 +81,55 @@ class SniffingViewModel @Inject constructor(
                         throw IllegalStateException("yt-dlp 没有返回可下载的视频或音频格式")
                     }
 
-                    val isAudioOnly = videoFormats.isEmpty()
                     val safeTitle = FileNameSanitizer.sanitize(
                         info.title,
                         info.videoId.ifBlank { "video" }
                     )
-                    val kind = if (isAudioOnly) ResourceKind.AUDIO else ResourceKind.VIDEO
-                    val extension = if (isAudioOnly) "mp3" else "mp4"
-                    resources = listOf(
+                    val bestAudio = audioFormats.firstOrNull()
+                    val videoChoices = videoFormats.map { format ->
+                        val selector = if (format.hasAudio || bestAudio == null) {
+                            format.formatId
+                        } else {
+                            YtDlpInfoJsonParser.buildFormatSelector(format, bestAudio)
+                        }
+                        val suffix = format.qualityLabel.replace(Regex("[^A-Za-z0-9.-]"), "-")
                         SniffedResource(
                             url = normalizedUrl,
-                            kind = kind,
-                            fileName = "$safeTitle.$extension",
-                            mimeType = if (isAudioOnly) "audio/mpeg" else "video/mp4",
+                            kind = ResourceKind.VIDEO,
+                            fileName = FileNameSanitizer.sanitize(
+                                "$safeTitle-$suffix.mp4",
+                                "$safeTitle.mp4"
+                            ),
+                            mimeType = "video/mp4",
                             pageTitle = info.title,
-                            sourcePage = normalizedUrl
+                            sourcePage = normalizedUrl,
+                            formatSelector = selector,
+                            qualityLabel = format.qualityLabel,
+                            fileSizeBytes = format.fileSizeBytes
                         )
-                    )
+                    }
+                    val audioChoices = audioFormats.map { format ->
+                        val suffix = format.qualityLabel.replace(Regex("[^A-Za-z0-9.-]"), "-")
+                        SniffedResource(
+                            url = normalizedUrl,
+                            kind = ResourceKind.AUDIO,
+                            fileName = FileNameSanitizer.sanitize(
+                                "$safeTitle-audio-$suffix.mp3",
+                                "$safeTitle-audio.mp3"
+                            ),
+                            mimeType = "audio/mpeg",
+                            pageTitle = info.title,
+                            sourcePage = normalizedUrl,
+                            formatSelector = format.formatId,
+                            qualityLabel = format.qualityLabel,
+                            fileSizeBytes = format.fileSizeBytes
+                        )
+                    }
+                    resources = if (videoChoices.isNotEmpty()) {
+                        videoChoices + audioChoices
+                    } else {
+                        audioChoices
+                    }
 
                     val bestHeight = videoFormats.mapNotNull { it.height }.maxOrNull()
                     summary = buildString {
