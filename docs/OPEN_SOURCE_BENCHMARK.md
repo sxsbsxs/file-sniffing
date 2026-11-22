@@ -68,7 +68,7 @@ Inspected on `ui/consistency-redesign`:
 2. The previous per-format card stack has now been replaced on the branch with one media preview card per URL and a dedicated download-options sheet.
 3. Thumbnail, duration, uploader, codec, frame rate and estimated format sizes are now carried from yt-dlp into the preview/configuration flow; thumbnail loading is handled by Coil.
 4. The new configuration sheet allows video format choice, audio-only mode, an actual audio format for video-only streams, and a pre-enqueue output preview. It deliberately keeps a muxed format's embedded audio rather than attaching a second audio stream.
-5. Playlist expansion is still specialized to YouTube even though yt-dlp can return playlist metadata for other extractors.
+5. Common playlist URL shapes now dispatch to yt-dlp's generic flat-playlist path; the parser accepts generic entries only when yt-dlp supplies a real HTTP(S) page URL. This is heuristic coverage, not a universal playlist detector for every extractor.
 6. Download Center now has search by file/error text and sort by recent/name/progress; a focused task-detail/error view and bulk task actions remain future work.
 7. The new configuration sheet and preview flow still require CI and device-level interaction verification; source-code presence is not proof of a successful download.
 8. Existing worker, Room and transfer code should be strengthened and tested, not replaced wholesale.
@@ -104,7 +104,7 @@ Do not copy source code blindly. Check each project's license and dependency bou
 - Keep duplicate prevention scoped to URL + selected format.
 
 ### P1 — broaden reliable extractor behavior
-- Support generic yt-dlp playlists and item selection instead of hard-coding YouTube playlist recognition.
+- [Implemented on the current branch; awaiting CI/device verification] Support common non-YouTube yt-dlp playlist URL shapes and generic entries with real HTTP(S) page URLs. A universal per-extractor playlist catalogue and user item-selection screen remain future work.
 - Add offline tests for multi-format metadata, video/audio pair validation and task-state durability.
 - Improve extractor error messages without hiding the diagnostic cause.
 
