@@ -1,6 +1,7 @@
 package com.sxsbsxs.filesniffing
 
 import android.app.Application
+import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.yausername.youtubedl_android.YoutubeDL
@@ -25,7 +26,7 @@ class FileSniffingApplication : Application(), Configuration.Provider {
                 YoutubeDL.getInstance().init(this@FileSniffingApplication)
                 FFmpeg.getInstance().init(this@FileSniffingApplication)
             }.onFailure { error ->
-                CrashReporter.recordNonFatal(this@FileSniffingApplication, error)
+                Log.e("FileSniffing", "yt-dlp runtime initialization failed", error)
             }
         }
     }
