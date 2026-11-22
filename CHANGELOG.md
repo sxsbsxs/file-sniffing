@@ -12,6 +12,7 @@
 - Verify MediaStore pending-to-visible publication; report failure and clean up the output if the file cannot be published. Apply the same cleanup rule to Media3 exports.
 - Persist the latest transfer progress and byte counters in Room when a task pauses, rather than retaining only the last database snapshot.
 - Persist retry attempts before WorkManager enqueue and replace the old paused/failed row atomically; do not leave an old paused row blocking all future downloads.
+- Persist Worker input-validation failures instead of returning a failed WorkManager result while leaving the Room row queued. Observe the asynchronous WorkManager enqueue result; enqueue failures become failed task rows, and successful requests attach their LiveData observer on the main thread.
 - Confirm pause/cancel state from WorkManager's terminal state; reconcile Room history from WorkManager on app restart to repair state transitions interrupted by process death.
 - Use one canonical Niconico watch URL for task identity and deduplication even when CDN manifest URLs are refreshed.
 - Guard against starting two retries of the same URL and format at the same time.
