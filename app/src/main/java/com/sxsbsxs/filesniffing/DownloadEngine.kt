@@ -176,9 +176,10 @@ object DownloadEngine {
                 Handler(Looper.getMainLooper()).post {
                     onUpdate(queuedTask.copy(state = "failed", progress = 0, detail = detail))
                 }
+            } else {
+                observeRequest(context, manager, request.id, onUpdate)
             }
         }, Executor { command -> command.run() })
-        observeRequest(context, manager, request.id, onUpdate)
     }
 
     private fun fileNameTag(fileName: String): String =
