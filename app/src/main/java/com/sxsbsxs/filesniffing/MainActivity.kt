@@ -165,6 +165,8 @@ private fun FileSniffingApp(sharedLink: String) {
     }
 
     val downloadTasks = remember { mutableStateListOf<DownloadTaskUi>() }
+    // Prevent a fast double tap from creating duplicate WorkManager requests for one URL.
+    val activeDownloadUrls = remember { mutableMapOf<String, String>() }
     val storedTasksById = storedDownloadHistory.associateBy { it.id }
     val liveTasksWithStoredUri = downloadTasks.map { task ->
         val stored = storedTasksById[task.id]
@@ -206,7 +208,6 @@ private fun FileSniffingApp(sharedLink: String) {
             val index = downloadTasks.indexOfFirst { it.id == task.id }
             if (index < 0) downloadTasks.add(0, task)
             else downloadTasks[index] = task
-            downloadCenterViewModel.persistTask(task)
         }
         onDispose { removeObserver() }
     }
@@ -273,7 +274,15 @@ private fun FileSniffingApp(sharedLink: String) {
         )
     }
 
-    val enqueueDownload: (SniffedResource) -> Unit = { resource ->
+    val enqueueDownload: (SniffedResource) -> Unit = enqueue@{ resource ->
+        val alreadyActive = activeDownloadUrls.values.any { it == resource.url } ||
+            storedDownloadHistory.any {
+                it.sourceUrl == resource.url && it.state in setOf("queued", "downloading")
+            }
+        if (alreadyActive) {
+            coroutineScope.launch { snackbarHostState.showSnackbar("相同链接已在下载队列中") }
+            return@enqueue
+        }
         if (
             Build.VERSION.SDK_INT >= 33 &&
             !askedForNotificationPermission &&
@@ -299,7 +308,11 @@ private fun FileSniffingApp(sharedLink: String) {
                 val index = downloadTasks.indexOfFirst { it.id == task.id }
                 if (index < 0) downloadTasks.add(0, task)
                 else downloadTasks[index] = task
-                downloadCenterViewModel.persistTask(task, resource, folder)
+                if (task.state == "queued" || task.state == "downloading") {
+                    activeDownloadUrls[task.id] = resource.url
+                } else {
+                    activeDownloadUrls.remove(task.id)
+                }
                 if (task.state == "failed") {
                     coroutineScope.launch { snackbarHostState.showSnackbar(task.detail) }
                 }
