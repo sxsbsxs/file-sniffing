@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -99,6 +100,7 @@ import com.sxsbsxs.filesniffing.ui.theme.FileSniffingTheme
 import com.sxsbsxs.filesniffing.presentation.downloads.DownloadCenterViewModel
 import java.util.UUID
 import com.sxsbsxs.filesniffing.presentation.sniffing.SniffingViewModel
+import com.sxsbsxs.filesniffing.presentation.sniffing.DownloadOptionsSheet
 import com.sxsbsxs.filesniffing.data.preferences.DownloadTuning
 
 @AndroidEntryPoint
@@ -156,6 +158,7 @@ private fun FileSniffingApp(sharedLink: String) {
     ) { }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var pageUrl by rememberSaveable { mutableStateOf(sharedLink) }
+    var pendingDownloadOptions by remember { mutableStateOf<List<SniffedResource>?>(null) }
 
     LaunchedEffect(sharedLink) {
         if (sharedLink.isNotBlank()) {
@@ -415,7 +418,7 @@ private fun FileSniffingApp(sharedLink: String) {
                             }
                         }
                     },
-                    onDownload = enqueueDownload
+                    onConfigureDownload = { pendingDownloadOptions = it }
                 )
                 1 -> DownloadsScreen(
                     folderLabel = folderLabel,
@@ -464,6 +467,17 @@ private fun FileSniffingApp(sharedLink: String) {
                 )
             }
         }
+    }
+
+    pendingDownloadOptions?.let { options ->
+        DownloadOptionsSheet(
+            resources = options,
+            onDismiss = { pendingDownloadOptions = null },
+            onStartDownload = { resource ->
+                pendingDownloadOptions = null
+                enqueueDownload(resource)
+            }
+        )
     }
 }
 
@@ -531,8 +545,12 @@ private fun HomeScreen(
     resultSummary: String,
     errorMessage: String?,
     onResolve: () -> Unit,
-    onDownload: (SniffedResource) -> Unit
+    onConfigureDownload: (List<SniffedResource>) -> Unit
 ) {
+    val resourceGroups = remember(resources) {
+        resources.groupBy { it.url }.values.toList()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -619,67 +637,103 @@ private fun HomeScreen(
             Spacer(Modifier.height(8.dp))
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(resources, key = { it.id }) { resource ->
+                items(resourceGroups, key = { group -> group.first().url }) { group ->
+                    val representative = group.first()
+                    val videoFormats = group.filter { it.kind == ResourceKind.VIDEO }
+                    val audioFormats = group.filter { it.kind == ResourceKind.AUDIO }
+                    val highestVideoHeight = videoFormats.mapNotNull { option ->
+                        option.qualityLabel?.substringBefore('p')?.toIntOrNull()
+                    }.maxOrNull()
+                    val groupDetails = buildList {
+                        if (videoFormats.isNotEmpty()) {
+                            add("视频 " + videoFormats.size + " 种")
+                            highestVideoHeight?.let { add("最高 " + it + "p") }
+                        }
+                        if (audioFormats.isNotEmpty()) add("音轨 " + audioFormats.size + " 种")
+                        if (videoFormats.isEmpty() && audioFormats.isEmpty()) {
+                            add(representative.kind.label)
+                        }
+                    }.joinToString(" · ")
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Column(
-                            modifier = Modifier.padding(13.dp),
-                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                            modifier = Modifier.padding(15.dp),
+                            verticalArrangement = Arrangement.spacedBy(9.dp)
                         ) {
-                            Text(
-                                resource.pageTitle.ifBlank { resource.fileName },
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            val optionDetails = buildString {
-                                append(resource.kind.label)
-                                resource.qualityLabel?.takeIf { it.isNotBlank() }?.let {
-                                    append(" · ").append(it)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(11.dp),
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            if (videoFormats.isNotEmpty()) Icons.Rounded.VideoLibrary
+                                            else Icons.Rounded.Download,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
                                 }
-                                resource.fileSizeBytes?.takeIf { it > 0L }?.let {
-                                    append(" · ").append(formatResourceBytes(it))
+                                Spacer(Modifier.width(12.dp))
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Text(
+                                        representative.pageTitle.ifBlank { representative.fileName },
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val metadata = buildList {
+                                        representative.uploader?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                        representative.durationSeconds?.let { add(formatResourceDuration(it)) }
+                                    }
+                                    Text(
+                                        metadata.ifEmpty { listOf(groupDetails) }.joinToString(" · "),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
-                                append(" · ").append(resource.fileName)
                             }
                             Text(
-                                optionDetails,
+                                groupDetails,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                                fontSize = 12.sp
                             )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
+                            Button(
+                                onClick = { onConfigureDownload(group) },
+                                modifier = Modifier.fillMaxWidth().height(46.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                             ) {
-                                Button(
-                                    onClick = { onDownload(resource) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                        horizontal = 18.dp,
-                                        vertical = 7.dp
-                                    )
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.Download,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        resource.qualityLabel?.let { "下载 $it" } ?: "下载",
-                                        fontSize = 12.sp
-                                    )
-                                }
+                                Icon(
+                                    Icons.Rounded.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    when {
+                                        videoFormats.isNotEmpty() -> "选择画质与音轨"
+                                        audioFormats.isNotEmpty() -> "选择音质"
+                                        else -> "下载文件"
+                                    },
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }
@@ -769,6 +823,18 @@ private fun UrlInputCard(
                 )
             }
         }
+    }
+}
+
+private fun formatResourceDuration(seconds: Double): String {
+    val total = seconds.toLong().coerceAtLeast(0L)
+    val hours = total / 3600L
+    val minutes = (total % 3600L) / 60L
+    val remaining = total % 60L
+    return if (hours > 0L) {
+        String.format(java.util.Locale.ROOT, "%d:%02d:%02d", hours, minutes, remaining)
+    } else {
+        String.format(java.util.Locale.ROOT, "%d:%02d", minutes, remaining)
     }
 }
 
