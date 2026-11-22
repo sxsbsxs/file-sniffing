@@ -2,7 +2,7 @@
 
 File Sniffing is an Android link resolver and download manager. It no longer contains an in-app browser or webpage-sniffing screen.
 
-Current app version: 0.9.16
+Current app version: 0.9.17
 
 ## How it works
 
@@ -36,11 +36,11 @@ The app does not open supplied URLs in a WebView, inject scripts into pages, sca
 - Niconico watch URLs through yt-dlp's Niconico extractor.
 - Bilibili and other URLs supported by the installed yt-dlp extractor set, subject to extractor version and site access rules.
 - Direct HTTP(S) file and media URLs recognized by the resource classifier.
-- Dynamic per-format download choices using only formats returned for that URL, including audio-only tracks; video-only streams are paired with an actual audio format from the same video.
+- A single media preview per resolved URL, with thumbnail, uploader, duration and actual format counts.\n- A download configuration sheet for video quality, audio-only mode and compatible audio selection; formats are limited to actual yt-dlp format IDs returned for the URL.\n- Direct media/file URLs are identified separately and go straight to download rather than showing a fake quality picker.
 - Audio-only output through yt-dlp and FFmpeg; chosen format IDs are preserved when retrying a failed task.
 - Public Download folder by default on Android 10+; optional SAF destination override. Android 9 and earlier require a chosen SAF directory.
 - Persistent download queue, Worker-owned task history, direct-file pause/resume, retry with source metadata saved before enqueue and local file browsing.
-- Active URL deduplication prevents accidental double-tap enqueue of the same source.
+- Active URL + format deduplication prevents accidental double-tap enqueue of the same selection while allowing different qualities of the same video.\n- Download Center supports search and sorting by recent, filename and progress.
 
 ## Important limits
 
@@ -54,8 +54,7 @@ The app does not open supplied URLs in a WebView, inject scripts into pages, sca
 - HLS/DASH export depends on Media3 support for the manifest and codecs. Encrypted/DRM streams are not decrypted.
 - Temporary yt-dlp output uses app-private storage and is removed after the operation; signed media URLs are not written to Room or app logs.
 
-## Build
-
+## Reference review\n\nA repository-specific review of 26 high-star open-source downloaders, yt-dlp frontends and media-stream tools is maintained in [docs/OPEN_SOURCE_BENCHMARK.md](docs/OPEN_SOURCE_BENCHMARK.md). It explains which patterns were adopted and what remains on the roadmap.\n\n## Build\n
 Open the project in Android Studio with JDK 17 and Android SDK 36, or run:
 
     python3 tools/validate_media_fixtures.py
