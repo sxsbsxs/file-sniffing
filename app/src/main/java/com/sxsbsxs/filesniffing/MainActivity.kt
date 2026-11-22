@@ -640,8 +640,18 @@ private fun HomeScreen(
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
+                            val optionDetails = buildString {
+                                append(resource.kind.label)
+                                resource.qualityLabel?.takeIf { it.isNotBlank() }?.let {
+                                    append(" · ").append(it)
+                                }
+                                resource.fileSizeBytes?.takeIf { it > 0L }?.let {
+                                    append(" · ").append(formatResourceBytes(it))
+                                }
+                                append(" · ").append(resource.fileName)
+                            }
                             Text(
-                                "${resource.kind.label} · ${resource.fileName}",
+                                optionDetails,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp,
                                 maxLines = 2,
@@ -665,7 +675,10 @@ private fun HomeScreen(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(Modifier.width(6.dp))
-                                    Text("下载", fontSize = 12.sp)
+                                    Text(
+                                        resource.qualityLabel?.let { "下载 $it" } ?: "下载",
+                                        fontSize = 12.sp
+                                    )
                                 }
                             }
                         }
@@ -757,6 +770,13 @@ private fun UrlInputCard(
             }
         }
     }
+}
+
+private fun formatResourceBytes(value: Long): String = when {
+    value >= 1024L * 1024L * 1024L -> String.format("%.2f GB", value / (1024.0 * 1024.0 * 1024.0))
+    value >= 1024L * 1024L -> String.format("%.1f MB", value / (1024.0 * 1024.0))
+    value >= 1024L -> String.format("%.1f KB", value / 1024.0)
+    else -> "$value B"
 }
 
 @Composable
