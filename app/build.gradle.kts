@@ -15,8 +15,8 @@ android {
         applicationId = "com.sxsbsxs.filesniffing"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "0.9.8"
+        versionCode = 27
+        versionName = "0.9.9"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
@@ -54,6 +54,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += setOf(
                 "META-INF/DEPENDENCIES",
@@ -94,8 +97,6 @@ dependencies {
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     implementation("com.google.dagger:hilt-android:2.58")
     ksp("com.google.dagger:hilt-compiler:2.58")
-    // Hilt 2.58 bundles metadata reader 2.3.0; Kotlin 2.4 emits metadata 2.4.0.
-    // Put the matching reader on KSP's processor classpath to avoid Hilt metadata failures.
     ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0")
 
     // Local persistence: Room + Preferences DataStore.
@@ -104,12 +105,16 @@ dependencies {
     ksp("androidx.room:room-compiler:2.8.5")
     implementation("androidx.datastore:datastore-preferences:1.3.0")
 
-    // HTTP stack. OkDownload is isolated behind an adapter because upstream 1.0.7 is old.
+    // HTTP stack.
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
     implementation("com.google.code.gson:gson:2.13.2")
     implementation("com.liulishuo.okdownload:okdownload:1.0.7")
     implementation("com.liulishuo.okdownload:sqlite:1.0.7")
     implementation("com.liulishuo.okdownload:okhttp:1.0.7")
+
+    // Seal's proven yt-dlp Android runtime and FFmpeg merger, kept as libraries rather than copied app code.
+    implementation("io.github.junkfood02.youtubedl-android:library:0.17.3")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.17.3")
 
     // Adaptive media inspection, offline download and remux/export.
     val media3Version = "1.11.1"
@@ -126,6 +131,5 @@ dependencies {
     ksp("androidx.hilt:hilt-compiler:1.4.0")
 
     testImplementation("junit:junit:4.13.2")
-
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
