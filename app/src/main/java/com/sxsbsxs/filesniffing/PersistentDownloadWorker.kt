@@ -12,6 +12,8 @@ import com.sxsbsxs.filesniffing.data.repository.DownloadRepository
 import com.sxsbsxs.filesniffing.NiconicoUrlParser
 import com.sxsbsxs.filesniffing.data.extractor.YouTubeUrlParser
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpProgressLineParser
+import com.sxsbsxs.filesniffing.data.extractor.YtDlpProgressStagePolicy
 import com.sxsbsxs.filesniffing.data.network.OkDownloadTransferEngine
 import com.sxsbsxs.filesniffing.data.network.DownloadSpeedLimiter
 import com.sxsbsxs.filesniffing.data.network.DownloadConnectionPolicy
@@ -220,6 +222,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 }
                 publishProgressAsync(-1, "正在通过 yt-dlp 提取 $providerName 媒体流", fileName)
                 val tempDirectory = requireNotNull(ytDlpTempDirectory)
+                var ytDlpPostProcessing = false
                 val downloadedFile = ytDlpRuntime.download(
                     url = ytDlpPageUrl,
                     outputDirectory = tempDirectory,
@@ -229,15 +232,32 @@ class PersistentDownloadWorker @AssistedInject constructor(
                     concurrentFragments = tuning.connectionsPerTask,
                     speedLimitBytesPerSecond = tuning.speedLimitBytesPerSecond
                 ) { progress, _, line ->
-                    val percent = progress.takeIf { it.isFinite() && it >= 0f }
-                        ?.let { (it * 0.89f).toInt().coerceIn(0, 89) } ?: -1
-                    publishProgressAsync(
-                        percent,
-                        line.ifBlank {
-                            "yt-dlp 正在下载（HLS/DASH 分片并发上限：${tuning.connectionsPerTask}）"
-                        },
-                        fileName
-                    )
+                    if (YtDlpProgressStagePolicy.isPostProcessing(progress, line)) {
+                        ytDlpPostProcessing = true
+                    }
+                    val metrics = YtDlpProgressLineParser.parse(line)
+                    if (ytDlpPostProcessing) {
+                        publishProgressAsync(
+                            progress = -1,
+                            detail = YtDlpProgressStagePolicy.detail(line),
+                            fileName = fileName,
+                            speedBytesPerSecond = 0L
+                        )
+                    } else {
+                        val percent = progress.takeIf { it.isFinite() && it >= 0f }
+                            ?.let { (it * 0.89f).toInt().coerceIn(0, 89) } ?: -1
+                        val detail = if (metrics.activeConnections > 0) {
+                            "aria2c 分段下载 · ${metrics.activeConnections} 路连接"
+                        } else {
+                            "yt-dlp 正在下载"
+                        }
+                        publishProgressAsync(
+                            progress = percent,
+                            detail = detail,
+                            fileName = fileName,
+                            speedBytesPerSecond = metrics.speedBytesPerSecond
+                        )
+                    }
                 }
                 val extension = downloadedFile.extension.lowercase().ifBlank { "mp4" }
                 val baseName = fileName.substringBeforeLast('.', fileName)
@@ -601,8 +621,9 @@ class PersistentDownloadWorker @AssistedInject constructor(
             if (totalBytes >= 0L) latestTotalBytes = totalBytes
             if (speedBytesPerSecond >= 0L) latestSpeedBytesPerSecond = speedBytesPerSecond
 
+            val visibleProgress = DownloadProgressPolicy.visible(latestProgress, progress)
             val data = androidx.work.Data.Builder()
-                .putInt(KEY_PROGRESS, latestProgress)
+                .putInt(KEY_PROGRESS, visibleProgress)
                 .putString(KEY_DETAIL, detail)
                 .putString(KEY_FILE_NAME, fileName)
                 .apply {
@@ -618,7 +639,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
                 .build()
             // Keep WorkManager writes ordered: OkDownload callbacks can arrive on several threads.
             setProgressAsync(data)
-            setForegroundAsync(createForegroundInfo(fileName, latestProgress, detail))
+            setForegroundAsync(createForegroundInfo(fileName, visibleProgress, detail))
         }
     }
 

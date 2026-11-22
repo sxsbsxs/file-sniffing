@@ -1533,6 +1533,15 @@ private fun DownloadTaskCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (task.state == "downloading" && task.detail.isNotBlank()) {
+                    Text(
+                        task.detail,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             if (task.state == "downloading" && task.speedBytesPerSecond > 0L) {
                 Text(

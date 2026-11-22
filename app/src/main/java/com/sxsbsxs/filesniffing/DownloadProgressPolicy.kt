@@ -11,4 +11,8 @@ internal object DownloadProgressPolicy {
         previous < 0 -> incoming.coerceIn(0, 99)
         else -> maxOf(previous, incoming).coerceIn(0, 99)
     }
+
+    /** A phase with no honest percentage is shown as indeterminate without losing the high-water mark. */
+    fun visible(previousHighWater: Int, incoming: Int): Int =
+        if (incoming < 0) -1 else monotonic(previousHighWater, incoming)
 }

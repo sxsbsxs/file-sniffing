@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import com.yausername.aria2c.Aria2c
 import com.sxsbsxs.filesniffing.NiconicoUrlParser
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -38,6 +39,7 @@ class YtDlpRuntime @Inject constructor(
     private val initializationMutex = Mutex()
     private val executableLock = ReentrantReadWriteLock()
     @Volatile private var initialized = false
+    @Volatile private var aria2cAvailable = false
 
     /**
      * Initialize yt-dlp and perform the normal weekly extractor refresh before the first
@@ -143,8 +145,24 @@ class YtDlpRuntime @Inject constructor(
                 addOption("--newline")
                 addOption("--no-mtime")
                 addOption("--continue")
-                addOption("--concurrent-fragments", concurrentFragments.coerceIn(1, 32).toString())
+                val connectionLimit = concurrentFragments.coerceIn(1, 32)
+                addOption("--concurrent-fragments", connectionLimit.toString())
+
+                if (aria2cAvailable) {
+                    // Gopeed-style segmented HTTP transfer: aria2c handles ordinary HTTP/HTTPS
+                    // files, while yt-dlp retains its native HLS/DASH fragment downloader.
+                    addOption("--downloader", "libaria2c.so")
+                    addOption("--downloader", "dash,m3u8:native")
+                    val aria2Arguments = buildString {
+                        append("-x$connectionLimit -s$connectionLimit -k1M -c --file-allocation=none")
+                        if (speedLimitBytesPerSecond > 0L) {
+                            append(" --max-download-limit=$speedLimitBytesPerSecond")
+                        }
+                    }
+                    addOption("--downloader-args", "aria2c:$aria2Arguments")
+                }
                 if (speedLimitBytesPerSecond > 0L) {
+                    // Keep the yt-dlp-native fragment path rate-limited too.
                     addOption("--limit-rate", speedLimitBytesPerSecond.toString())
                 }
                 val effectiveFormat = if (
@@ -233,6 +251,20 @@ class YtDlpRuntime @Inject constructor(
             if (!initialized) {
                 YoutubeDL.getInstance().init(context)
                 com.yausername.ffmpeg.FFmpeg.getInstance().init(context)
+
+                // The optional native archive is packaged per ABI by the matching 0.17.3 AAR.
+                // If it is absent or fails to unpack, keep the yt-dlp native downloader as fallback.
+                val aria2Archive = File(context.applicationInfo.nativeLibraryDir, "libaria2c.zip.so")
+                aria2cAvailable = if (aria2Archive.isFile && aria2Archive.length() > 0L) {
+                    runCatching {
+                        Aria2c.getInstance().init(context)
+                        true
+                    }.onFailure { error ->
+                        Log.w(TAG, "aria2c initialization failed; using yt-dlp native downloader", error)
+                    }.getOrDefault(false)
+                } else {
+                    false
+                }
                 initialized = true
                 updateYtDlpIfDue()
             }

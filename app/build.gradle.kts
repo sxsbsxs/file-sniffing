@@ -15,8 +15,8 @@ android {
         applicationId = "com.sxsbsxs.filesniffing"
         minSdk = 26
         targetSdk = 35
-        versionCode = 41
-        versionName = "0.9.23"
+        versionCode = 42
+        versionName = "0.9.24"
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
@@ -120,6 +120,7 @@ dependencies {
 
     implementation("io.github.junkfood02.youtubedl-android:library:0.17.3")
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.17.3")
+    implementation("io.github.junkfood02.youtubedl-android:aria2c:0.17.3")
 
     val media3Version = "1.11.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")

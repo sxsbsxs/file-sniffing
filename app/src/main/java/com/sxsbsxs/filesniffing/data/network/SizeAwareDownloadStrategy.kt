@@ -7,12 +7,12 @@ import com.liulishuo.okdownload.core.download.DownloadStrategy
  * Chooses a byte-range block count after OkDownload has inspected the response.
  *
  * Multi-block still requires server Range support and a seekable output stream.
- * For compatible servers, a 4 MiB target block means normal video-sized files
+ * For compatible servers, a 1 MiB target block means normal video-sized files
  * can use the configured ceiling instead of being stuck at 2/4/8 connections.
  */
 internal object DownloadConnectionPolicy {
     private const val MIB = 1024L * 1024L
-    private const val TARGET_BLOCK_BYTES = 4L * MIB
+    private const val TARGET_BLOCK_BYTES = 1L * MIB
     private const val MAX_CONNECTIONS = 32
 
     @Volatile
