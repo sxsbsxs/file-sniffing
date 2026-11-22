@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.liulishuo.okdownload.OkDownload
 import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -20,6 +21,9 @@ class FileSniffingApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         CrashReporter.install(this)
+        // Force the configured OkDownload singleton to be created at application startup,
+        // before any screen, WorkManager Worker, or DownloadTask can trigger OkDownload.with().
+        Log.i("FileSniffing", "OkDownload initialized: ${okDownloadInstance.javaClass.simpleName}")
         runtimeScope.launch {
             runCatching {
                 // Update the embedded yt-dlp program before the first user parse when possible.
@@ -35,6 +39,9 @@ class FileSniffingApplication : Application(), Configuration.Provider {
 
     @Inject
     lateinit var ytDlpRuntime: YtDlpRuntime
+
+    @Inject
+    lateinit var okDownloadInstance: OkDownload
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
