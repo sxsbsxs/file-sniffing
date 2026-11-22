@@ -357,7 +357,7 @@ private fun FileSniffingApp(sharedLink: String) {
                                 // as WebView-discovered resources; a toast alone makes it invisible.
                                 sniffingViewModel.addResource(resource)
                                 coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("N站视频流已解析，可选择画质并下载")
+                                    snackbarHostState.showSnackbar("N站解析成功，可下载（当前自动选择最佳格式）")
                                 }
                             } else if (!error.isNullOrBlank()) {
                                 coroutineScope.launch {
