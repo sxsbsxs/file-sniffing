@@ -20,7 +20,7 @@ object DownloadEngine {
 
     fun start(
         context: Context,
-        destinationTree: Uri,
+        destinationTree: Uri?,
         resource: SniffedResource,
         adaptiveVideoHeight: Int? = null,
         onUpdate: (DownloadTaskUi) -> Unit
@@ -38,7 +38,7 @@ object DownloadEngine {
                 androidx.work.workDataOf(
                     PersistentDownloadWorker.KEY_TASK_ID to UUID.randomUUID().toString(),
                     PersistentDownloadWorker.KEY_URL to workerUrl,
-                    PersistentDownloadWorker.KEY_TREE to destinationTree.toString(),
+                    PersistentDownloadWorker.KEY_TREE to destinationTree?.toString(),
                     PersistentDownloadWorker.KEY_FILE_NAME to resource.fileName,
                     PersistentDownloadWorker.KEY_KIND to resource.kind.name,
                     PersistentDownloadWorker.KEY_MIME to resource.mimeType,
@@ -78,7 +78,7 @@ object DownloadEngine {
         onUpdate: (DownloadTaskUi) -> Unit
     ) {
         val destinationTree = record.destinationTreeUri
-        if (record.sourceUrl.isBlank() || destinationTree.isNullOrBlank()) {
+        if (record.sourceUrl.isBlank()) {
             onUpdate(
                 DownloadTaskUi(
                     id = record.id,

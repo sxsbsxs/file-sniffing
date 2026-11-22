@@ -7,6 +7,7 @@ import com.sxsbsxs.filesniffing.NiconicoUrlParser
 import com.sxsbsxs.filesniffing.SniffedResource
 import com.sxsbsxs.filesniffing.data.local.DownloadRecordEntity
 import com.sxsbsxs.filesniffing.data.preferences.AppPreferences
+import com.sxsbsxs.filesniffing.data.preferences.DownloadTuning
 import com.sxsbsxs.filesniffing.data.repository.DownloadRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -34,6 +35,13 @@ class DownloadCenterViewModel @Inject constructor(
             null
         )
 
+    val downloadTuning: StateFlow<DownloadTuning> =
+        preferences.downloadTuning.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            DownloadTuning()
+        )
+
     val downloadHistory: StateFlow<List<DownloadRecordEntity>> =
         repository.observeAll().stateIn(
             viewModelScope,
@@ -43,6 +51,10 @@ class DownloadCenterViewModel @Inject constructor(
 
     fun setDownloadFolder(uri: String) {
         viewModelScope.launch { preferences.setSelectedDownloadFolder(uri) }
+    }
+
+    fun updateDownloadTuning(tuning: DownloadTuning) {
+        viewModelScope.launch { preferences.updateDownloadTuning(tuning) }
     }
 
     fun persistTask(

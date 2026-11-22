@@ -6,6 +6,7 @@ import com.liulishuo.okdownload.core.dispatcher.DownloadDispatcher
 import com.liulishuo.okdownload.core.connection.DownloadOkHttp3Connection
 import com.sxsbsxs.filesniffing.data.network.SizeAwareDownloadStrategy
 import com.sxsbsxs.filesniffing.data.network.WebViewCookieInterceptor
+import com.sxsbsxs.filesniffing.data.network.DownloadSpeedLimiter
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -21,7 +22,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient =
+    fun provideOkHttpClient(downloadSpeedLimiter: DownloadSpeedLimiter): OkHttpClient =
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
@@ -32,6 +33,7 @@ object NetworkModule {
             .retryOnConnectionFailure(true)
             // Apply the WebView session to every HTTP exchange, including redirects.
             .addNetworkInterceptor(WebViewCookieInterceptor())
+            .addNetworkInterceptor(downloadSpeedLimiter)
             .build()
 
     @Provides

@@ -4,6 +4,9 @@ import android.net.Uri
 import com.liulishuo.okdownload.DownloadListener
 import com.liulishuo.okdownload.DownloadTask
 import com.liulishuo.okdownload.OkDownload
+import com.liulishuo.okdownload.core.dispatcher.DownloadDispatcher
+import com.sxsbsxs.filesniffing.data.preferences.AppPreferences
+import kotlinx.coroutines.flow.first
 import com.liulishuo.okdownload.core.breakpoint.BreakpointInfo
 import com.liulishuo.okdownload.core.cause.EndCause
 import com.liulishuo.okdownload.core.cause.ResumeFailedCause
@@ -54,7 +57,8 @@ private fun updateTotalFromHeaders(
 
 @Singleton
 class OkDownloadTransferEngine @Inject constructor(
-    private val initializedEngine: OkDownload
+    private val initializedEngine: OkDownload,
+    private val appPreferences: AppPreferences
 ) {
 
     suspend fun downloadToDocument(
@@ -63,6 +67,9 @@ class OkDownloadTransferEngine @Inject constructor(
         headers: Map<String, List<String>>,
         onProgress: (DownloadTransferProgress) -> Unit
     ): DownloadTransferResult {
+        val tuning = appPreferences.downloadTuning.first()
+        DownloadDispatcher.setMaxParallelRunningCount(tuning.parallelDownloads)
+        DownloadConnectionPolicy.setPreferredMaximumConnections(tuning.connectionsPerTask)
         return suspendCancellableCoroutine { continuation ->
             val receivedBytes = AtomicLong(0L)
             val totalBytes = AtomicLong(-1L)
