@@ -1,6 +1,10 @@
 package com.sxsbsxs.filesniffing
 
 import android.net.Uri
+import android.content.ContentUris
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.DocumentsContract
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -70,7 +74,8 @@ private data class LocalDocumentEntry(
     val mimeType: String,
     val size: Long,
     val lastModified: Long,
-    val isDirectory: Boolean
+    val isDirectory: Boolean,
+    val contentUri: Uri? = null
 )
 
 private data class LocalDirectoryCrumb(
@@ -106,7 +111,7 @@ fun LocalFilesScreen(
 
     LaunchedEffect(treeUri, currentDocumentId, refreshKey) {
         val sourceTree = treeUri
-        if (sourceTree == null || currentDocumentId.isBlank()) {
+        if (sourceTree != null && currentDocumentId.isBlank()) {
             documents = emptyList()
             return@LaunchedEffect
         }
@@ -114,39 +119,84 @@ fun LocalFilesScreen(
         errorMessage = null
         val result = withContext(Dispatchers.IO) {
             runCatching {
-                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(sourceTree, currentDocumentId)
-                val projection = arrayOf(
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE,
-                    DocumentsContract.Document.COLUMN_SIZE,
-                    DocumentsContract.Document.COLUMN_LAST_MODIFIED
-                )
-                val cursor = context.contentResolver.query(childrenUri, projection, null, null, null)
-                    ?: error("系统没有返回文件列表")
-                val rows = mutableListOf<LocalDocumentEntry>()
-                cursor.use {
-                    val idColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                    val nameColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                    val mimeColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
-                    val sizeColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
-                    val dateColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
-                    require(idColumn >= 0 && nameColumn >= 0 && mimeColumn >= 0) {
-                        "文件提供程序未提供必要的文件信息"
+                if (sourceTree == null) {
+                    check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        "Android 9 及以下请先选择一个保存文件夹"
                     }
-                    while (it.moveToNext()) {
-                        val mime = it.getString(mimeColumn).orEmpty()
-                        rows += LocalDocumentEntry(
-                            documentId = it.getString(idColumn),
-                            name = it.getString(nameColumn).orEmpty().ifBlank { "未命名文件" },
-                            mimeType = mime,
-                            size = if (sizeColumn >= 0 && !it.isNull(sizeColumn)) it.getLong(sizeColumn) else -1L,
-                            lastModified = if (dateColumn >= 0 && !it.isNull(dateColumn)) it.getLong(dateColumn) else 0L,
-                            isDirectory = mime == DocumentsContract.Document.MIME_TYPE_DIR
-                        )
+                    val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                    val projection = arrayOf(
+                        MediaStore.MediaColumns._ID,
+                        MediaStore.MediaColumns.DISPLAY_NAME,
+                        MediaStore.MediaColumns.MIME_TYPE,
+                        MediaStore.MediaColumns.SIZE,
+                        MediaStore.MediaColumns.DATE_MODIFIED
+                    )
+                    val cursor = context.contentResolver.query(
+                        collection,
+                        projection,
+                        "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+                        arrayOf("${Environment.DIRECTORY_DOWNLOADS}/"),
+                        "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+                    ) ?: error("系统没有返回 Download 文件列表")
+                    val rows = mutableListOf<LocalDocumentEntry>()
+                    cursor.use {
+                        val idColumn = it.getColumnIndex(MediaStore.MediaColumns._ID)
+                        val nameColumn = it.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                        val mimeColumn = it.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
+                        val sizeColumn = it.getColumnIndex(MediaStore.MediaColumns.SIZE)
+                        val dateColumn = it.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
+                        require(idColumn >= 0 && nameColumn >= 0 && mimeColumn >= 0) {
+                            "MediaStore 未返回必要的文件信息"
+                        }
+                        while (it.moveToNext()) {
+                            val id = it.getLong(idColumn)
+                            rows += LocalDocumentEntry(
+                                documentId = id.toString(),
+                                name = it.getString(nameColumn).orEmpty().ifBlank { "未命名文件" },
+                                mimeType = it.getString(mimeColumn).orEmpty(),
+                                size = if (sizeColumn >= 0 && !it.isNull(sizeColumn)) it.getLong(sizeColumn) else -1L,
+                                lastModified = if (dateColumn >= 0 && !it.isNull(dateColumn)) it.getLong(dateColumn) * 1000L else 0L,
+                                isDirectory = false,
+                                contentUri = ContentUris.withAppendedId(collection, id)
+                            )
+                        }
                     }
+                    rows
+                } else {
+                    val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(sourceTree, currentDocumentId)
+                    val projection = arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE,
+                        DocumentsContract.Document.COLUMN_SIZE,
+                        DocumentsContract.Document.COLUMN_LAST_MODIFIED
+                    )
+                    val cursor = context.contentResolver.query(childrenUri, projection, null, null, null)
+                        ?: error("系统没有返回文件列表")
+                    val rows = mutableListOf<LocalDocumentEntry>()
+                    cursor.use {
+                        val idColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                        val nameColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                        val mimeColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                        val sizeColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+                        val dateColumn = it.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+                        require(idColumn >= 0 && nameColumn >= 0 && mimeColumn >= 0) {
+                            "文件提供程序未提供必要的文件信息"
+                        }
+                        while (it.moveToNext()) {
+                            val mime = it.getString(mimeColumn).orEmpty()
+                            rows += LocalDocumentEntry(
+                                documentId = it.getString(idColumn),
+                                name = it.getString(nameColumn).orEmpty().ifBlank { "未命名文件" },
+                                mimeType = mime,
+                                size = if (sizeColumn >= 0 && !it.isNull(sizeColumn)) it.getLong(sizeColumn) else -1L,
+                                lastModified = if (dateColumn >= 0 && !it.isNull(dateColumn)) it.getLong(dateColumn) else 0L,
+                                isDirectory = mime == DocumentsContract.Document.MIME_TYPE_DIR
+                            )
+                        }
+                    }
+                    rows.sortedWith(compareBy<LocalDocumentEntry>({ !it.isDirectory }, { it.name.lowercase(Locale.ROOT) }))
                 }
-                rows.sortedWith(compareBy<LocalDocumentEntry>({ !it.isDirectory }, { it.name.lowercase(Locale.ROOT) }))
             }
         }
         result.onSuccess { documents = it }.onFailure {
@@ -209,12 +259,12 @@ fun LocalFilesScreen(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            IconButton(onClick = { refreshKey++ }, enabled = treeUri != null && !isLoading) {
+            IconButton(onClick = { refreshKey++ }, enabled = !isLoading) {
                 Icon(Icons.Rounded.Refresh, contentDescription = "刷新文件列表")
             }
         }
 
-        if (treeUri == null) {
+        if (treeUri == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             Spacer(Modifier.height(18.dp))
             Text(
                 "还没有选择下载目录",
@@ -308,7 +358,7 @@ fun LocalFilesScreen(
                 }
                 else -> {
                     LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                        items(visibleDocuments, key = { it.documentId }) { item ->
+                        items(visibleDocuments, key = { it.contentUri?.toString() ?: it.documentId }) { item ->
                             LocalDocumentRow(item) {
                                 if (item.isDirectory) {
                                     directoryStack.add(LocalDirectoryCrumb(item.documentId, item.name))
@@ -316,7 +366,10 @@ fun LocalFilesScreen(
                                     searchText = ""
                                     activeFilter = "全部"
                                 } else {
-                                    val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, item.documentId)
+                                    val documentUri = item.contentUri ?: DocumentsContract.buildDocumentUriUsingTree(
+                                        requireNotNull(treeUri),
+                                        item.documentId
+                                    )
                                     onOpenFile(documentUri, item.mimeType.takeIf { it.isNotBlank() })
                                 }
                             }
