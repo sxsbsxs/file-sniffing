@@ -16,7 +16,7 @@ class DownloadConnectionPolicyTest {
     @Test
     fun typicalVideoFilesCanUseTheConfiguredConnections() {
         DownloadConnectionPolicy.setPreferredMaximumConnections(16)
-        assertEquals(1, DownloadConnectionPolicy.connectionsFor(2L * 1024L * 1024L))
+        assertEquals(2, DownloadConnectionPolicy.connectionsFor(2L * 1024L * 1024L))
         assertEquals(7, DownloadConnectionPolicy.connectionsFor(7L * 1024L * 1024L))
         assertEquals(16, DownloadConnectionPolicy.connectionsFor(32L * 1024L * 1024L))
         assertEquals(16, DownloadConnectionPolicy.connectionsFor(128L * 1024L * 1024L))
