@@ -192,7 +192,8 @@ fun SniffingResultScreen(
         )
         diagnosticHandler.post { pageAccessDiagnostic = result }
     }
-    val isRecognizedYouTubeVideo = YouTubeUrlParser.extractVideoId(pageUrl) != null
+    val isRecognizedYouTubeVideo = YouTubeUrlParser.extractVideoId(pageUrl) != null ||
+        YouTubeUrlParser.isPlaylistUrl(pageUrl)
     // Media segments are implementation details of adaptive streams, not standalone files.
     val visibleResources = resources.filter { it.kind != ResourceKind.SEGMENT }
     val availableFilters = listOf("全部") + RESOURCE_FILTER_GROUPS
@@ -419,7 +420,9 @@ fun SniffingResultScreen(
                                             if (NiconicoUrlParser.extractVideoId(finishedUrl) != null) {
                                                 onNiconicoPageReady(finishedUrl)
                                             }
-                                            if (YouTubeUrlParser.extractVideoId(finishedUrl) != null) {
+                                            if (YouTubeUrlParser.extractVideoId(finishedUrl) != null ||
+                                                YouTubeUrlParser.isPlaylistUrl(finishedUrl)
+                                            ) {
                                                 onYouTubePageReady(finishedUrl)
                                             }
                                             runCatching {
@@ -432,7 +435,9 @@ fun SniffingResultScreen(
                                             }
                                             val isYouTubeWatchPage =
                                                 YouTubeUrlParser.extractVideoId(url.orEmpty()) != null ||
-                                                    YouTubeUrlParser.extractVideoId(pageUrl) != null
+                                                    YouTubeUrlParser.extractVideoId(pageUrl) != null ||
+                                                    YouTubeUrlParser.isPlaylistUrl(url.orEmpty()) ||
+                                                    YouTubeUrlParser.isPlaylistUrl(pageUrl)
                                             if (isYouTubeWatchPage) {
                                                 runCatching {
                                                     view?.evaluateJavascript(YOUTUBE_PLAYER_RESPONSE_SUMMARY_SCRIPT) { encoded ->
