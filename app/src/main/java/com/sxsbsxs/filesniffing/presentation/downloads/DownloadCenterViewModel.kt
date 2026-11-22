@@ -149,6 +149,26 @@ class DownloadCenterViewModel @Inject constructor(
         )
     }
 
+    suspend fun reconcileWorkManagerTask(task: com.sxsbsxs.filesniffing.DownloadTaskUi) {
+        val previous = repository.findById(task.id) ?: return
+        val isTerminal = task.state in setOf("paused", "cancelled", "completed", "failed")
+        val staleDownloadingRow = task.state == "queued" && previous.state == "downloading"
+        if (!isTerminal && !staleDownloadingRow) return
+
+        val reconciled = previous.copy(
+            fileName = task.fileName,
+            state = task.state,
+            progress = task.progress.takeIf { it >= 0 } ?: previous.progress,
+            detail = task.detail,
+            destinationUri = task.fileUri ?: previous.destinationUri,
+            downloadedBytes = task.downloadedBytes.takeIf { it >= 0L } ?: previous.downloadedBytes,
+            totalBytes = task.totalBytes.takeIf { it >= 0L } ?: previous.totalBytes,
+            speedBytesPerSecond = -1L,
+            updatedAtMillis = System.currentTimeMillis()
+        )
+        if (reconciled != previous) repository.save(reconciled)
+    }
+
     fun deleteHistoryItem(id: String) {
         viewModelScope.launch { repository.delete(id) }
     }
