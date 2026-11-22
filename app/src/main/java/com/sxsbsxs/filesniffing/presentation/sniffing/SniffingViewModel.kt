@@ -93,7 +93,8 @@ class SniffingViewModel @Inject constructor(
                         } else {
                             YtDlpInfoJsonParser.buildFormatSelector(format, bestAudio)
                         }
-                        val suffix = format.qualityLabel.replace(Regex("[^A-Za-z0-9.-]"), "-")
+                        val suffix = (format.qualityLabel + "-" + format.formatId)
+                            .replace(Regex("[^A-Za-z0-9.-]"), "-")
                         SniffedResource(
                             url = normalizedUrl,
                             kind = ResourceKind.VIDEO,
@@ -110,7 +111,8 @@ class SniffingViewModel @Inject constructor(
                         )
                     }
                     val audioChoices = audioFormats.map { format ->
-                        val suffix = format.qualityLabel.replace(Regex("[^A-Za-z0-9.-]"), "-")
+                        val suffix = (format.qualityLabel + "-" + format.formatId)
+                            .replace(Regex("[^A-Za-z0-9.-]"), "-")
                         SniffedResource(
                             url = normalizedUrl,
                             kind = ResourceKind.AUDIO,
