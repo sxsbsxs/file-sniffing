@@ -10,7 +10,6 @@ Current app version: 0.9.13
 2. Supported site URLs are sent directly to the bundled yt-dlp runtime for metadata and format inspection.
 3. Direct media/file URLs go to the HTTP download engine.
 4. Choose Download. WorkManager runs the task and shows progress in Download Center.
-5. For Niconico videos that require registration, optionally save a Niconico account from the account icon on the resolver screen.
 
 The app does not open supplied URLs in a WebView, inject scripts into pages, scan DOM content or intercept browser page requests.
 
@@ -44,11 +43,11 @@ The app does not open supplied URLs in a WebView, inject scripts into pages, sca
 ## Important limits
 
 - The app no longer provides a browser. Users paste or share a link; the app does not navigate to a login page or scrape visible page content.
-- The yt-dlp executable is checked against the Nightly channel at app startup and then weekly, matching Seal's updater strategy. When offline or an update fails, the bundled executable remains available and the updater retries after a six-hour cooldown.\n- Site extraction still depends on each site's current APIs and access rules. Extractor errors are reported rather than replaced with guessed formats.
+- The yt-dlp executable is checked against the Nightly channel at app startup and then weekly, matching Seal's updater strategy. When offline or an update fails, the bundled executable remains available and the updater retries after a six-hour cooldown.
+- Site extraction still depends on each site's current APIs and access rules. Extractor errors are reported rather than replaced with guessed formats.
 - Some YouTube videos require newer JavaScript challenge support, EJS components or PO Tokens; those runtime integrations are not currently bundled.
 - Private, Premium-only, PPV, member-only, region-restricted, DRM-protected or otherwise unauthorized media is not unlocked by the app.
-- Niconico supports optional account/password sign-in through yt-dlp. Credentials are encrypted with Android Keystore; each Niconico operation creates a temporary owner-only netrc file and deletes it afterward. No WebView or in-app page navigation is involved.
-- Niconico authentication only supplies the user's own account session. Premium-only, channel-member-only, PPV, DRM or other entitlement restrictions still apply. The current UI does not collect a one-time 2FA code.
+- Public Niconico watch links are attempted through yt-dlp's guest route; the app does not request an account or password. The service's genuine video-visibility, Premium, channel membership, PPV, region and DRM rules still apply.
 - Direct-file multi-connection downloads depend on server Range support. A higher connection ceiling cannot force a server to accept parallel requests.
 - HLS/DASH export depends on Media3 support for the manifest and codecs. Encrypted/DRM streams are not decrypted.
 - Temporary yt-dlp output uses app-private storage and is removed after the operation; signed media URLs are not written to Room or app logs.
