@@ -2,7 +2,7 @@
 
 **Research snapshot:** 2026-11-22. GitHub star counts are approximate repository metadata snapshots; stars measure attention, not software quality. Projects are grouped by relevance, not ranked as implementation dependencies.
 
-## 1. Reference projects (25)
+## 1. Reference projects (26)
 
 ### Android video/audio frontends
 
@@ -40,6 +40,8 @@
 | [youtubedl-android](https://github.com/yausername/youtubedl-android) | 1.4k | Android wrapper for yt-dlp/Python, optional FFmpeg/aria2 and ABI packaging guidance | Treat wrapper, executable, FFmpeg and optional tools as separate size/update decisions |
 | [JeffMony/VideoDownloader](https://github.com/JeffMony/VideoDownloader) | 517 | Android MP4/HLS queue, database, merge and customizable title/cover | A smaller Android-specific reference for queue persistence and HLS output |
 | [Tyrrrz/YoutubeDownloader](https://github.com/Tyrrrz/YoutubeDownloader) | 16.8k | Clear source-driven quality and playlist download workflows | Keep quality choices tied to the source's returned formats |
+| [Ghost Downloader 3](https://github.com/XiaoYouChR/Ghost-Downloader-3) | 14.6k | Broad protocol coverage and an extensible general downloader | Separate site extraction from transfer engines; make advanced features optional |
+| [Parabolic](https://github.com/NickvisionApps/Parabolic) | 7.8k | Simple yt-dlp GUI for video/audio downloads | Keep the default path approachable while offering a deliberate media choice step |
 
 ### Historical-only references
 
@@ -62,13 +64,14 @@ Inspected on `ui/consistency-redesign`:
 
 ### Main product gaps found
 
-1. `MainActivity.kt` owns the root app and most screen UI in one large file. The UI is difficult to test and change independently.
-2. The resolver currently renders one separate card per returned format. It exposes format data, but it does not behave like a deliberate download configuration flow.
-3. The parser already extracts thumbnail URL, duration, uploader, codecs, language and file-size metadata; the visible result discards most of this context.
-4. The selected video format is paired automatically with the best audio format, but there is no user-facing audio-track selector or clear preview of the combination.
-5. Playlist expansion is specialized to YouTube even though yt-dlp can return playlist metadata for other extractors.
-6. The download center has status/type filters and transfer progress, but lacks a search field, sort controls and a focused task-detail/error view.
-7. Existing worker, Room and transfer code should be strengthened and tested, not replaced wholesale.
+1. `MainActivity.kt` still owns the root app and most screen UI in one large file; future changes should split Home, Downloads and Local Files into focused presentation files.
+2. The previous per-format card stack has now been replaced on the branch with one media preview card per URL and a dedicated download-options sheet.
+3. Thumbnail, duration, uploader, codec, frame rate and estimated format sizes are now carried from yt-dlp into the preview/configuration flow; thumbnail loading is handled by Coil.
+4. The new configuration sheet allows video format choice, audio-only mode, an actual audio format for video-only streams, and a pre-enqueue output preview. It deliberately keeps a muxed format's embedded audio rather than attaching a second audio stream.
+5. Playlist expansion is still specialized to YouTube even though yt-dlp can return playlist metadata for other extractors.
+6. Download Center now has search by file/error text and sort by recent/name/progress; a focused task-detail/error view and bulk task actions remain future work.
+7. The new configuration sheet and preview flow still require CI and device-level interaction verification; source-code presence is not proof of a successful download.
+8. Existing worker, Room and transfer code should be strengthened and tested, not replaced wholesale.
 
 ## 3. Design decisions for this repository
 
@@ -89,13 +92,13 @@ Do not copy source code blindly. Check each project's license and dependency bou
 ## 4. Implementation plan
 
 ### P0 — make the core flow understandable
-- Replace the long per-format card list with one media preview card per resolved item.
-- Show available video formats and audio tracks inside a bottom-sheet configuration flow.
-- Allow Video / Audio-only mode, select a real source format, select a compatible audio track where needed, and preview the output name/size before enqueue.
-- Keep the selected format selector attached to the task and Room retry record.
+- [Implemented on the current branch; awaiting CI/device verification] Replace the long per-format card list with one media preview card per resolved item.
+- [Implemented on the current branch; awaiting CI/device verification] Show available video formats and audio tracks inside a bottom-sheet configuration flow.
+- [Implemented on the current branch; awaiting CI/device verification] Allow Video / Audio-only mode, select a real source format, select a compatible audio track where needed, and preview the output name/size before enqueue.
+- [Already present and extended] Keep the selected format selector attached to the task and Room retry record.
 
 ### P0 — make downloads manageable
-- Add search and sorting to Download Center.
+- [Implemented on the current branch; awaiting CI/device verification] Add search and sorting to Download Center.
 - Make active/queued/paused/completed/failed states visually distinct.
 - Show speed, bytes, ETA and concise failure summary; reveal full sanitized error details on demand.
 - Keep duplicate prevention scoped to URL + selected format.
