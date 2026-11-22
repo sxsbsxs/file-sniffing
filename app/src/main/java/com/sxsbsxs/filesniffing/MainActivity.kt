@@ -405,7 +405,7 @@ private fun FileSniffingApp(sharedLink: String) {
             } else if (selectedTab == 1) {
                 DownloadsScreen(
                     folderLabel = folderLabel,
-                    hasFolder = selectedFolderUri != null,
+                    hasFolder = hasOutputFolder,
                     tasks = visibleDownloadTasks,
                     tuning = downloadTuning,
                     onUpdateTuning = downloadCenterViewModel::updateDownloadTuning,
