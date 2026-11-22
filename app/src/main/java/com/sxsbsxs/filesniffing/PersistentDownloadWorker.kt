@@ -15,6 +15,7 @@ import com.sxsbsxs.filesniffing.data.extractor.YtDlpRuntime
 import com.sxsbsxs.filesniffing.data.network.OkDownloadTransferEngine
 import com.sxsbsxs.filesniffing.data.network.DownloadSpeedLimiter
 import com.sxsbsxs.filesniffing.data.network.DownloadConnectionPolicy
+import com.sxsbsxs.filesniffing.data.network.DownloadIntegrityPolicy
 import com.sxsbsxs.filesniffing.data.preferences.AppPreferences
 import com.sxsbsxs.filesniffing.data.storage.DownloadOutput
 import com.sxsbsxs.filesniffing.data.media.Media3AdaptiveProcessor
