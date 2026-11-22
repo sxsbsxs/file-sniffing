@@ -262,7 +262,7 @@ class PersistentDownloadWorker @AssistedInject constructor(
             )
 
             val headers = buildMap<String, List<String>> {
-                put("User-Agent", listOf(android.webkit.WebSettings.getDefaultUserAgent(applicationContext)))
+                put("User-Agent", listOf("FileSniffing/0.9.11 (Android)"))
                 put("Accept", listOf("*/*"))
                 if (referer.isNotBlank()) put("Referer", listOf(referer))
             }
