@@ -26,7 +26,8 @@ data class SniffedResource(
     val qualityLabel: String? = null,
     val fileSizeBytes: Long? = null
 ) {
-    val id: String get() = "$url#${formatSelector ?: kind.name}"
+    val downloadKey: String get() = "$url#${formatSelector ?: kind.name}"
+    val id: String get() = downloadKey
 }
 
 object ResourceSniffer {
