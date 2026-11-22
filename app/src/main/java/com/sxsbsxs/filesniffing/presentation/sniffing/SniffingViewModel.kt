@@ -107,7 +107,17 @@ class SniffingViewModel @Inject constructor(
                             sourcePage = normalizedUrl,
                             formatSelector = selector,
                             qualityLabel = format.qualityLabel,
-                            fileSizeBytes = format.fileSizeBytes
+                            fileSizeBytes = format.fileSizeBytes,
+                            videoFormatId = format.formatId,
+                            audioFormatId = if (format.hasAudio) null else bestAudio?.formatId,
+                            hasEmbeddedAudio = format.hasAudio,
+                            audioQualityLabel = if (format.hasAudio) "内嵌音轨" else bestAudio?.qualityLabel,
+                            audioFileSizeBytes = if (format.hasAudio) null else bestAudio?.fileSizeBytes,
+                            thumbnailUrl = info.thumbnailUrl,
+                            durationSeconds = info.durationSeconds,
+                            uploader = info.uploader,
+                            codecLabel = format.videoCodec?.takeUnless { it.equals("none", true) },
+                            frameRate = format.framesPerSecond
                         )
                     }
                     val audioChoices = audioFormats.map { format ->
@@ -125,7 +135,13 @@ class SniffingViewModel @Inject constructor(
                             sourcePage = normalizedUrl,
                             formatSelector = format.formatId,
                             qualityLabel = format.qualityLabel,
-                            fileSizeBytes = format.fileSizeBytes
+                            fileSizeBytes = format.fileSizeBytes,
+                            audioFormatId = format.formatId,
+                            hasEmbeddedAudio = true,
+                            thumbnailUrl = info.thumbnailUrl,
+                            durationSeconds = info.durationSeconds,
+                            uploader = info.uploader,
+                            codecLabel = format.audioCodec
                         )
                     }
                     resources = if (videoChoices.isNotEmpty()) {
