@@ -287,7 +287,7 @@ private fun FileSniffingApp(sharedLink: String) {
             sourceUrl = resource.downloadKey,
             activeSessionUrls = activeDownloadUrls.values,
             persistedActiveUrls = storedDownloadHistory
-                .filter { it.state == "queued" || it.state == "downloading" }
+                .filter { it.state == "queued" || it.state == "downloading" || it.state == "paused" }
                 .map { "${it.sourceUrl}#${it.formatSelector ?: it.resourceKind}" }
         )
         if (alreadyActive) {
@@ -439,23 +439,52 @@ private fun FileSniffingApp(sharedLink: String) {
                                     snackbarHostState.showSnackbar("任务缺少原始参数，请重新粘贴链接后下载")
                                 }
                             } else {
-                                DownloadEngine.retry(
-                                    context.applicationContext,
-                                    record,
-                                    partialUri = task.fileUri
-                                ) { updated ->
-                                    val index = downloadTasks.indexOfFirst { it.id == updated.id }
-                                    if (index < 0) downloadTasks.add(0, updated)
-                                    else downloadTasks[index] = updated
+                                val retryTaskId = UUID.randomUUID()
+                                coroutineScope.launch {
+                                    try {
+                                        downloadCenterViewModel.persistRetryTask(
+                                            taskId = retryTaskId,
+                                            previous = record,
+                                            partialUri = task.fileUri
+                                        )
+                                        DownloadEngine.retry(
+                                            context = context.applicationContext,
+                                            record = record,
+                                            partialUri = task.fileUri,
+                                            taskId = retryTaskId
+                                        ) { updated ->
+                                            val index = downloadTasks.indexOfFirst { it.id == updated.id }
+                                            if (index < 0) downloadTasks.add(0, updated)
+                                            else downloadTasks[index] = updated
+                                        }
+                                    } catch (error: Exception) {
+                                        snackbarHostState.showSnackbar(
+                                            "无法重新加入下载队列：" + (error.message ?: "请重试")
+                                        )
+                                    }
                                 }
                             }
                         }
                     },
                     onPauseTask = { task ->
-                        DownloadEngine.pause(context.applicationContext, task.id)
+                        coroutineScope.launch {
+                            downloadCenterViewModel.updateTaskState(
+                                task.id,
+                                state = "paused",
+                                detail = "已暂停，继续时将尝试从断点恢复"
+                            )
+                            DownloadEngine.pause(context.applicationContext, task.id)
+                        }
                     },
                     onCancelTask = { task ->
-                        DownloadEngine.cancel(context.applicationContext, task.id)
+                        coroutineScope.launch {
+                            downloadCenterViewModel.updateTaskState(
+                                task.id,
+                                state = "cancelled",
+                                detail = "下载已取消，可重新下载"
+                            )
+                            DownloadEngine.cancel(context.applicationContext, task.id)
+                        }
                     },
                     onOpenTask = { task ->
                         task.fileUri?.let(Uri::parse)?.let { openLocalDocument(context, it) }
