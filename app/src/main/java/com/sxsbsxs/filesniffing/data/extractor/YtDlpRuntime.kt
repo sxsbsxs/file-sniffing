@@ -199,8 +199,10 @@ class YtDlpRuntime @Inject constructor(
                     } catch (error: Exception) {
                         if (continuation.isActive) {
                             runCatching {
+                                // Preserve the upstream extractor text here. The Niconico
+                                // recovery policy needs the original marker before UI sanitizing.
                                 continuation.resumeWithException(
-                                    IOException(sanitizeError(error.message), error)
+                                    IOException(error.message ?: "yt-dlp command failed", error)
                                 )
                             }
                         }
