@@ -275,10 +275,13 @@ private fun FileSniffingApp(sharedLink: String) {
     }
 
     val enqueueDownload: (SniffedResource) -> Unit = enqueue@{ resource ->
-        val alreadyActive = activeDownloadUrls.values.any { it == resource.url } ||
-            storedDownloadHistory.any {
-                it.sourceUrl == resource.url && it.state in setOf("queued", "downloading")
-            }
+        val alreadyActive = DownloadQueuePolicy.isAlreadyActive(
+            sourceUrl = resource.url,
+            activeSessionUrls = activeDownloadUrls.values,
+            persistedActiveUrls = storedDownloadHistory
+                .filter { it.state == "queued" || it.state == "downloading" }
+                .map { it.sourceUrl }
+        )
         if (alreadyActive) {
             coroutineScope.launch { snackbarHostState.showSnackbar("相同链接已在下载队列中") }
             return@enqueue
